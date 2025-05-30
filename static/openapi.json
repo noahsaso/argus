@@ -13226,31 +13226,6 @@
         }
       }
     },
-    "/{chainId}/generic/_/communityPool/balances": {
-      "get": {
-        "tags": [
-          "generic"
-        ],
-        "summary": "retrieves the current balances of the community pool",
-        "operationId": "communityPool_balances_389d52b",
-        "parameters": [
-          {
-            "name": "chainId",
-            "in": "path",
-            "description": "chain ID",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "success"
-          }
-        }
-      }
-    },
     "/{chainId}/generic/_/featuredDaos": {
       "get": {
         "tags": [
