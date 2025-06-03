@@ -39,9 +39,9 @@ export const loadComputer = async () => {
 
   let state = _state
 
-  // Update state every 500ms if not in test mode.
+  // Update state every second if not in test mode.
   if (!IS_TEST) {
-    setInterval(async () => {
+    const updateState = async () => {
       try {
         const newState = await State.getSingleton()
         if (newState) {
@@ -53,8 +53,13 @@ export const loadComputer = async () => {
         }
       } catch (err) {
         console.error('[computer] Unexpected error updating state cache', err)
+      } finally {
+        setTimeout(updateState, 1000)
       }
-    }, 500)
+    }
+
+    console.log('Updating state for computer...')
+    await updateState()
   }
 
   // Create Redis connection if available.
