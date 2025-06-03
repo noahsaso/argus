@@ -54,11 +54,11 @@ export const loadComputer = async () => {
       } catch (err) {
         console.error('[computer] Unexpected error updating state cache', err)
       } finally {
-        setTimeout(updateState, 1000)
+        setTimeout(updateState, 1_000)
       }
     }
 
-    console.log('Updating state for computer...')
+    console.log('Starting computer state updater...')
     await updateState()
   }
 
