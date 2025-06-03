@@ -801,7 +801,13 @@ export const loadComputer = async () => {
 
         // Handle computation result.
         if (computationResult.status === 'rejected') {
-          console.error(computationResult.reason)
+          if (process.env.NODE_ENV === 'development') {
+            console.error(
+              `Error computing formula ${typedFormula.name} for address ${address}`,
+              computationResult.reason
+            )
+          }
+
           ctx.status = 400
           ctx.body =
             computationResult.reason instanceof Error
