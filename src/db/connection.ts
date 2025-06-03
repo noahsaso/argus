@@ -94,6 +94,15 @@ export const loadDb = async ({
     // User config.
     ...dbConfig,
 
+    // Pool options.
+    pool: {
+      // 1 or 2 when using PgBouncer in DigitalOcean to manage pooling.
+      max: 2,
+      min: 0,
+      acquire: 30_000,
+      idle: 10_000,
+    },
+
     // Allow options to override logging, but default to false.
     logging: dbConfig.logging ?? logging ? console.log : false,
     benchmark: dbConfig.logging ?? logging ? true : false,
