@@ -4,6 +4,7 @@ import cors from '@koa/cors'
 import * as Sentry from '@sentry/node'
 import { Command } from 'commander'
 import Koa from 'koa'
+import { Pool } from 'sequelize-pool'
 
 import { ConfigManager } from '@/config'
 import { closeDb, loadDb } from '@/db'
@@ -70,18 +71,19 @@ app.use(async (ctx, next) => {
 })
 
 let wasmCodeService: WasmCodeService | null = null
+let connectionPoolMonitorInterval: NodeJS.Timeout | null = null
 
 // Start.
 const main = async () => {
   // All servers need to connect to the accounts DB.
-  await loadDb({
+  let sequelize = await loadDb({
     type: DbType.Accounts,
   })
 
   // Only connect to data if we're not serving the accounts API (i.e. we're
   // serving indexer data).
   if (!accounts) {
-    await loadDb({
+    sequelize = await loadDb({
       type: DbType.Data,
     })
 
@@ -94,6 +96,22 @@ const main = async () => {
   if (!options.port || isNaN(options.port)) {
     throw new Error('Port must be a number')
   }
+
+  // Monitor DB connection pool.
+  connectionPoolMonitorInterval = setInterval(async () => {
+    const pool = (sequelize.connectionManager as any).pool as Pool<any>
+
+    console.log('DATABASE CONNECTION POOL:', {
+      total: pool.size,
+      active: pool.using,
+      idle: pool.available,
+      waiting: pool.waiting,
+    })
+
+    if (pool.waiting > 0) {
+      console.log(`${pool.waiting} connections waiting for pool...`)
+    }
+  }, 5_000)
 
   // Set up routes.
   await setUpRouter(app, {
@@ -113,6 +131,11 @@ const main = async () => {
 
 // On exit, stop services and close DB connection.
 const cleanUp = async () => {
+  if (connectionPoolMonitorInterval !== null) {
+    clearInterval(connectionPoolMonitorInterval)
+    connectionPoolMonitorInterval = null
+  }
+
   if (wasmCodeService) {
     wasmCodeService.stopUpdater()
   }

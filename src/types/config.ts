@@ -17,6 +17,7 @@ type DB = { uri?: string } & Pick<
   | 'pool'
   | 'schema'
   | 'logging'
+  | 'retry'
 >
 
 export type Config = {

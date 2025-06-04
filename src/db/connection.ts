@@ -96,11 +96,34 @@ export const loadDb = async ({
 
     // Pool options.
     pool: {
-      // 1 or 2 when using PgBouncer in DigitalOcean to manage pooling.
-      max: 2,
-      min: 0,
+      max: 10,
+      // Maintain warm connections.
+      min: 3,
       acquire: 30_000,
-      idle: 10_000,
+      // Allow long idle times.
+      idle: 30_000,
+      // Regular health checks.
+      evict: 5_000,
+
+      // Override with config.
+      ...dbConfig.pool,
+    },
+
+    // Retry
+    retry: {
+      max: 5,
+      backoffBase: 1_000,
+      backoffExponent: 1.5,
+      match: [
+        /Deadlock/i,
+        /ConnectionError/i,
+        /ConnectionRefusedError/i,
+        /ConnectionTimedOutError/i,
+        /TimeoutError/i,
+      ],
+
+      // Override with config.
+      ...dbConfig.retry,
     },
 
     // Allow options to override logging, but default to false.
