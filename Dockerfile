@@ -10,7 +10,7 @@ RUN npm ci
 COPY . .
 
 # Build the application
-RUN npm run build
+RUN npm run build:only
 
 # Expose the API port
 EXPOSE 3420
