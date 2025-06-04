@@ -1,7 +1,7 @@
 import { Options as PusherOptions } from 'pusher'
 import { SequelizeOptions } from 'sequelize-typescript'
 
-type DB = { uri?: string } & Pick<
+export type DB = { uri?: string } & Pick<
   SequelizeOptions,
   | 'dialect'
   | 'dialectModulePath'

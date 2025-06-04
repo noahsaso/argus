@@ -78,6 +78,12 @@ const main = async () => {
 
   const dataSequelize = await loadDb({
     type: DbType.Data,
+    configOverride: {
+      pool: {
+        min: 2,
+        max: 5,
+      },
+    },
   })
 
   // Set up wasm code service.

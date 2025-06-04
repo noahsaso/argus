@@ -4,7 +4,7 @@ import path from 'path'
 import { Sequelize, SequelizeOptions } from 'sequelize-typescript'
 
 import { ConfigManager } from '@/config'
-import { DbType } from '@/types'
+import { DB, DbType } from '@/types'
 import { objectMatchesStructure } from '@/utils'
 
 import {
@@ -38,6 +38,7 @@ const sequelizeInstances: Partial<Record<DbType, Sequelize>> = {}
 type LoadDbOptions = {
   type?: DbType
   logging?: boolean
+  configOverride?: DB
 }
 
 // List of models included in the database per type. Load in function to avoid
@@ -78,6 +79,7 @@ const getModelsForType = (type: DbType): SequelizeOptions['models'] =>
 export const loadDb = async ({
   logging = false,
   type = DbType.Data,
+  configOverride,
 }: LoadDbOptions = {}) => {
   if (sequelizeInstances[type]) {
     return sequelizeInstances[type]!
@@ -94,6 +96,9 @@ export const loadDb = async ({
     // User config.
     ...dbConfig,
 
+    // Overrides.
+    ...configOverride,
+
     // Pool options.
     pool: {
       max: 10,
@@ -107,6 +112,9 @@ export const loadDb = async ({
 
       // Override with config.
       ...dbConfig.pool,
+
+      // Overrides.
+      ...configOverride?.pool,
     },
 
     // Retry
@@ -124,6 +132,9 @@ export const loadDb = async ({
 
       // Override with config.
       ...dbConfig.retry,
+
+      // Overrides.
+      ...configOverride?.retry,
     },
 
     // Allow options to override logging, but default to false.
