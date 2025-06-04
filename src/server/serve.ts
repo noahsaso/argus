@@ -111,7 +111,7 @@ const main = async () => {
     if (pool.waiting > 0) {
       console.log(`${pool.waiting} connections waiting for pool...`)
     }
-  }, 5_000)
+  }, 30_000)
 
   // Set up routes.
   await setUpRouter(app, {
