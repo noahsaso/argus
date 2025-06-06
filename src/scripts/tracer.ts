@@ -121,7 +121,7 @@ const main = async () => {
     )
   )
 
-  console.log(`\n[${new Date().toISOString()}] Exporting from trace...`)
+  console.log(`\n[${new Date().toISOString()}] Starting tracer...`)
 
   const webSocketListener = new ChainWebSocketListener()
   const blockTimeFetcher = new BlockTimeFetcher(
@@ -146,11 +146,6 @@ const main = async () => {
 
   const exporter = new BatchedTraceExporter()
   const manager = new TracerManager(handlers, blockTimeFetcher, exporter)
-
-  // Tell pm2 we're ready right before we start reading.
-  if (process.send) {
-    process.send('ready')
-  }
 
   const { promise: tracer, close: closeTracer } = setUpFifoJsonTracer({
     file: traceFile,
@@ -200,7 +195,7 @@ const main = async () => {
   // If WebSocket enabled, connect to it before queueing.
   if (webSocketEnabled) {
     console.log(`[${new Date().toISOString()}] Connecting to WebSocket...`)
-    await webSocketListener.connect()
+    webSocketListener.connect()
   }
 
   // Add shutdown signal handler.
@@ -225,6 +220,13 @@ const main = async () => {
       ].join('\n')
     )
   })
+
+  // Tell pm2 we're ready right before we start reading.
+  if (process.send) {
+    process.send('ready')
+  }
+
+  console.log(`[${new Date().toISOString()}] Tracer ready.`)
 
   // Wait for tracer to close. Happens on FIFO closure or if `closeTracer` is
   // manually called, such as in the SIGINT handler above.

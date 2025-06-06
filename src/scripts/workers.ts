@@ -84,6 +84,7 @@ const main = async () => {
       })
     }
   })
+
   // Tell pm2 we're ready.
   if (process.send) {
     process.send('ready')
