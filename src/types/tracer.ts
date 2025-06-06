@@ -74,6 +74,9 @@ export type WasmExportData =
       data: {
         address: string
         codeId: number
+        admin: string
+        creator: string
+        label: string
         blockHeight: string
         blockTimeUnixMs: string
       }

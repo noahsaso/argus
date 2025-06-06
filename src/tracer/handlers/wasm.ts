@@ -218,6 +218,9 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
         data: {
           address: contractAddress,
           codeId: Number(contractInfo.codeId),
+          admin: contractInfo.admin,
+          creator: contractInfo.creator,
+          label: contractInfo.label,
           blockHeight,
           blockTimeUnixMs,
         },
@@ -271,16 +274,27 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
     if (contractEvents.length > 0) {
       await Contract.bulkCreate(
         contractEvents.map(
-          ({ address, codeId, blockHeight, blockTimeUnixMs }) => ({
+          ({
             address,
             codeId,
+            admin,
+            creator,
+            label,
+            blockHeight,
+            blockTimeUnixMs,
+          }) => ({
+            address,
+            codeId,
+            admin,
+            creator,
+            label,
             instantiatedAtBlockHeight: blockHeight,
             instantiatedAtBlockTimeUnixMs: blockTimeUnixMs,
             instantiatedAtBlockTimestamp: new Date(Number(blockTimeUnixMs)),
           })
         ),
         {
-          updateOnDuplicate: ['codeId'],
+          updateOnDuplicate: ['codeId', 'admin', 'creator', 'label'],
         }
       )
     }

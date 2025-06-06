@@ -20,6 +20,23 @@ export const info: ContractFormula<ContractInfo> = {
   },
 }
 
+/**
+ * Retrieves the wasm-level contract admin. If data not yet indexed, returns
+ * undefined. A no-admin setting is serialized as an empty string.
+ */
+export const contractAdmin: ContractFormula<string | undefined> = {
+  docs: {
+    description: 'retrieves the wasm-level contract admin',
+  },
+  compute: async ({ contractAddress, getContract }) => {
+    const contract = await getContract(contractAddress)
+    if (!contract) {
+      throw new Error('contract not yet indexed')
+    }
+    return contract.admin ?? undefined
+  },
+}
+
 // cw-ownable
 export const ownership = makeSimpleContractFormula({
   docs: {

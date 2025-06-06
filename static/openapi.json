@@ -500,6 +500,40 @@
         }
       }
     },
+    "/{chainId}/contract/{contractAddress}/contractAdmin": {
+      "get": {
+        "tags": [
+          "contract"
+        ],
+        "summary": "retrieves the wasm-level contract admin",
+        "operationId": "contractAdmin_816abab",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "contractAddress",
+            "in": "path",
+            "description": "contract address",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          }
+        }
+      }
+    },
     "/{chainId}/contract/{contractAddress}/cw1Whitelist/adminList": {
       "get": {
         "tags": [

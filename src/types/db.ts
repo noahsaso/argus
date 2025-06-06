@@ -57,6 +57,9 @@ export abstract class DependableEventModel extends Model {
 export type ContractJson = {
   address: string
   codeId: number
+  admin?: string | null
+  creator?: string | null
+  label?: string | null
   instantiatedAt: {
     block: Block
     timestamp: Date

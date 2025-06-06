@@ -20,7 +20,7 @@ import {
   typeIsFormulaTypeOrWallet,
 } from '@/formulas'
 import { WasmCodeService } from '@/services/wasm-codes'
-import { Block, FormulaType, FormulaTypeValues } from '@/types'
+import { Block, Cache, FormulaType, FormulaTypeValues } from '@/types'
 import { validateBlockString } from '@/utils'
 
 import { captureSentryException } from '../../sentry'
@@ -367,6 +367,10 @@ export const loadComputer = async () => {
       return
     }
 
+    let cache: Partial<Cache> = {
+      contracts: {},
+    }
+
     try {
       // If type is "contract"...
       if (typedFormula.type === FormulaType.Contract) {
@@ -378,6 +382,8 @@ export const loadComputer = async () => {
           ctx.body = 'contract not found'
           return
         }
+
+        cache.contracts![address] = contract
 
         // ...validate that filter is satisfied.
         if (typedFormula.formula.filter) {
@@ -788,6 +794,7 @@ export const loadComputer = async () => {
             targetAddress: address,
             args,
             block: block || state.latestBlock,
+            cache,
           }),
         ])
 

@@ -1,7 +1,7 @@
 import { ContractFormula } from '@/types'
 
 import { ContractInfo } from '../../types'
-import { info, instantiatedAt, item } from '../common'
+import { contractAdmin, info, instantiatedAt, item } from '../common'
 import {
   Config,
   ProposalModuleWithInfo,
@@ -30,6 +30,7 @@ export type DumpState = {
   total_proposal_module_count: number
   initial_actions?: any[]
   // Extra.
+  contractAdmin?: string
   votingModuleInfo?: ContractInfo
   createdAt?: string
   createdAtEpoch?: number
@@ -63,11 +64,13 @@ export const dumpState: ContractFormula<DumpState> = {
       { address: voting_module, info: votingModuleInfo },
       activeProposalModuleCount,
       totalProposalModuleCount,
+      contractAdminResponse,
       createdAt,
       proposalCountResponse,
       polytoneProxiesResponse,
       hideFromSearchValue,
     ] = await Promise.all([
+      // DAO-level admin.
       admin.compute(env),
       config.compute(env),
       info.compute(env),
@@ -107,6 +110,7 @@ export const dumpState: ContractFormula<DumpState> = {
             env.get<number>(env.contractAddress, 'total_proposal_module_count')
         ),
       // Extra.
+      contractAdmin.compute(env),
       instantiatedAt.compute(env),
       proposalCount.compute(env),
       polytoneProxies.compute(env),
@@ -177,6 +181,7 @@ export const dumpState: ContractFormula<DumpState> = {
       total_proposal_module_count:
         totalProposalModuleCount ?? proposal_modules?.length ?? 0,
       // Extra.
+      contractAdmin: contractAdminResponse,
       votingModuleInfo,
       createdAt,
       createdAtEpoch: createdAt ? new Date(createdAt).getTime() : undefined,

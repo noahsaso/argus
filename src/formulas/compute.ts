@@ -21,6 +21,7 @@ export const compute = async ({
   targetAddress,
   args,
   block,
+  cache,
   ...options
 }: ComputeOptions): Promise<ComputationOutput> => {
   // Store the latest block that we've seen for all keys accessed. This is when
@@ -55,6 +56,7 @@ export const compute = async ({
     args,
     dependentKeys,
     onFetch,
+    cache,
   })
   const value =
     options.type === FormulaType.Contract

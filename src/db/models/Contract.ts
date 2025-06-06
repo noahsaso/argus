@@ -23,6 +23,18 @@ export class Contract extends Model {
   declare codeId: number
 
   @AllowNull
+  @Column(DataType.TEXT)
+  declare admin: string | null
+
+  @AllowNull
+  @Column(DataType.TEXT)
+  declare creator: string | null
+
+  @AllowNull
+  @Column(DataType.TEXT)
+  declare label: string | null
+
+  @AllowNull
   @Column(DataType.BIGINT)
   declare instantiatedAtBlockHeight: string
 
@@ -38,6 +50,9 @@ export class Contract extends Model {
     return {
       address: this.address,
       codeId: this.codeId,
+      admin: this.admin,
+      creator: this.creator,
+      label: this.label,
       instantiatedAt: {
         block: {
           height: BigInt(this.instantiatedAtBlockHeight),

@@ -425,6 +425,7 @@ export type ComputeOptions = {
   targetAddress: string
   args: Record<string, any>
   block: Block
+  cache?: Partial<Cache>
 } & TypedFormula
 
 export type ComputeRangeOptions = {
