@@ -5,14 +5,14 @@ module.exports = {
       script: 'npm',
       args: ['run', 'with-infisical', '--', 'npm', 'run', 'tracer'],
       wait_ready: true,
-      listen_timeout: 30000,
+      listen_timeout: 5000,
     },
     {
       name: 'workers',
       script: 'npm',
       args: ['run', 'with-infisical', '--', 'npm', 'run', 'workers'],
       wait_ready: true,
-      listen_timeout: 30000,
+      listen_timeout: 5000,
     },
     {
       name: 'account-webhooks',

@@ -122,10 +122,10 @@ export const setUpFifoJsonTracer = ({
     }
   }
 
-  // Start reading from the FIFO.
-  fifoRs.on('data', dataListener)
+  let opened = false
 
   // Wait for FIFO to error or end.
+  let resolveDelayed: () => void = () => {}
   const promise = new Promise<void>((_resolve, reject) => {
     let done = false
     const resolve = () => {
@@ -134,7 +134,7 @@ export const setUpFifoJsonTracer = ({
         _resolve()
       }
     }
-    const resolveDelayed = () => setTimeout(resolve, 5000)
+    resolveDelayed = () => setTimeout(resolve, 5_000)
 
     fifoRs.on('error', (error) => {
       fifoRs.off('end', resolve)
@@ -161,6 +161,11 @@ export const setUpFifoJsonTracer = ({
       }
     })
 
+    fifoRs.on('open', () => {
+      console.log(`[${new Date().toISOString()}] FIFO opened.`)
+      opened = true
+    })
+
     // Once data ends, resolve.
     fifoRs.on('end', resolve)
 
@@ -168,8 +173,17 @@ export const setUpFifoJsonTracer = ({
     fifoRs.on('close', resolveDelayed)
   })
 
+  // Start reading from the FIFO.
+  fifoRs.on('data', dataListener)
+
   return {
     promise,
-    close: () => fifoRs.destroy(),
+    close: () => {
+      fifoRs.destroy()
+      // If the FIFO was not opened, resolve the promise in 5 seconds.
+      if (!opened) {
+        resolveDelayed()
+      }
+    },
   }
 }
