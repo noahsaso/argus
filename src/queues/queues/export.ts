@@ -35,7 +35,15 @@ export class ExportQueue extends BaseQueue<ExportQueuePayload> {
   private handlers: NamedHandler[] = []
 
   async init(): Promise<void> {
-    const cosmWasmClient = await getCosmWasmClient(this.options.config.rpc)
+    const cosmWasmClient = await getCosmWasmClient(
+      this.options.config.rpc
+    ).catch((err) =>
+      Promise.reject(
+        new Error(
+          `Failed to create CosmWasm client for RPC ${this.options.config.rpc}: ${err.message}`
+        )
+      )
+    )
 
     // Set up handlers.
     const handlers = await Promise.all(

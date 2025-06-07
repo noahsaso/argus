@@ -105,7 +105,13 @@ const main = async () => {
     : null
 
   // Create CosmWasm client that batches requests.
-  const cosmWasmClient = await getCosmWasmClient(config.rpc)
+  const cosmWasmClient = await getCosmWasmClient(config.rpc).catch((err) =>
+    Promise.reject(
+      new Error(
+        `Failed to create CosmWasm client for RPC ${config.rpc}: ${err.message}`
+      )
+    )
+  )
 
   // Set up handlers.
   const handlers = await Promise.all(
