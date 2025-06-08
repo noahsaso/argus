@@ -65,8 +65,8 @@ export const getBullWorker = <T extends unknown>(
   new Worker<T>(name, processor, {
     connection: getRedisConfig(),
     removeOnComplete: {
-      // Keep last 100,000 successful jobs.
-      count: 100_000,
+      // Keep last 10,000 successful jobs.
+      count: 10_000,
     },
     // Keep last 30 days of failed jobs.
     removeOnFail: {
