@@ -60,9 +60,15 @@ const CONTRACT_STATE_EVENT_KEY_ALLOWLIST: Partial<
 export const wasm: HandlerMaker<WasmExportData> = async ({
   config: { bech32Prefix },
   sendWebhooks,
-  cosmWasmClient,
+  autoCosmWasmClient,
 }) => {
-  const chainId = await cosmWasmClient.getChainId()
+  const chainId =
+    autoCosmWasmClient.chainId || (await State.getSingleton())?.chainId
+  if (!chainId) {
+    throw new Error(
+      'Chain ID needed for wasm export, failed to load from RPC or State model in DB.'
+    )
+  }
 
   const isTerraClassic = chainId === 'columbus-5'
 
@@ -91,8 +97,15 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
     const loadIntoCache = async () => {
       let codeId = 0
       try {
-        const contract = await cosmWasmClient.getContract(contractAddress)
-        codeId = contract.codeId
+        if (autoCosmWasmClient.client) {
+          codeId = (
+            await autoCosmWasmClient.client.getContract(contractAddress)
+          ).codeId
+        } else {
+          throw new Error(
+            `CosmWasm client not connected, cannot get code ID for ${contractAddress}.`
+          )
+        }
       } catch (err) {
         // If contract not found, ignore, leaving as 0. Otherwise, throw err.
         if (

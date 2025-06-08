@@ -1,4 +1,4 @@
-import { CosmWasmClient } from '@cosmjs/cosmwasm-stargate'
+import { AutoCosmWasmClient } from '@/utils'
 
 import { Config } from './config'
 import { DependableEventModel } from './db'
@@ -24,7 +24,7 @@ export type Handler<Data extends unknown = unknown> = {
 export type HandlerMakerOptions = {
   config: Config
   sendWebhooks: boolean
-  cosmWasmClient: CosmWasmClient
+  autoCosmWasmClient: AutoCosmWasmClient
 }
 
 export type HandlerMaker<Data extends unknown = unknown> = (

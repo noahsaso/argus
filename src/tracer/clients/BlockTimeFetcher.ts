@@ -1,10 +1,9 @@
-import { CosmWasmClient } from '@cosmjs/cosmwasm-stargate'
 import * as Sentry from '@sentry/node'
 import { LRUCache } from 'lru-cache'
 
 import { State } from '@/db'
 import { TracedEvent } from '@/types'
-import { retry } from '@/utils'
+import { AutoCosmWasmClient, retry } from '@/utils'
 
 import { ChainWebSocketListener } from './ChainWebSocketListener'
 
@@ -25,7 +24,7 @@ export class BlockTimeFetcher {
     /**
      * The CosmWasm client for querying the chain.
      */
-    private readonly cosmWasmClient: CosmWasmClient,
+    private readonly autoCosmWasmClient: AutoCosmWasmClient,
     /**
      * The WebSocket listener.
      */
@@ -98,10 +97,16 @@ export class BlockTimeFetcher {
     // anymore (i.e. if it's too old and the RPC pruned it).
     const loadIntoCache = async () => {
       try {
-        const {
-          header: { time },
-        } = await this.cosmWasmClient.getBlock(blockHeight)
-        this.cache.set(blockHeight, Date.parse(time))
+        if (this.autoCosmWasmClient.client) {
+          const {
+            header: { time },
+          } = await this.autoCosmWasmClient.client.getBlock(blockHeight)
+          this.cache.set(blockHeight, Date.parse(time))
+        } else {
+          throw new Error(
+            `CosmWasm client not connected, cannot get block time for ${blockHeight.toLocaleString()}.`
+          )
+        }
       } catch (err) {
         // If the block is not available because it's too low, do nothing so we
         // don't retry.

@@ -4,7 +4,7 @@ import { Job, Queue } from 'bullmq'
 import { queueMeilisearchIndexUpdates } from '@/search'
 import { handlerMakers } from '@/tracer'
 import { NamedHandler } from '@/types'
-import { getCosmWasmClient } from '@/utils'
+import { AutoCosmWasmClient } from '@/utils'
 import { queueWebhooks } from '@/webhooks'
 
 import { BaseQueue } from '../base'
@@ -35,15 +35,8 @@ export class ExportQueue extends BaseQueue<ExportQueuePayload> {
   private handlers: NamedHandler[] = []
 
   async init(): Promise<void> {
-    const cosmWasmClient = await getCosmWasmClient(
-      this.options.config.rpc
-    ).catch((err) =>
-      Promise.reject(
-        new Error(
-          `Failed to create CosmWasm client for RPC ${this.options.config.rpc}: ${err.message}`
-        )
-      )
-    )
+    const autoCosmWasmClient = new AutoCosmWasmClient(this.options.config.rpc)
+    await autoCosmWasmClient.update()
 
     // Set up handlers.
     const handlers = await Promise.all(
@@ -51,7 +44,7 @@ export class ExportQueue extends BaseQueue<ExportQueuePayload> {
         name,
         handler: await handlerMaker({
           ...this.options,
-          cosmWasmClient,
+          autoCosmWasmClient,
         }),
       }))
     )

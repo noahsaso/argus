@@ -18,7 +18,7 @@ import {
   setUpFifoJsonTracer,
 } from '@/tracer'
 import { DbType, NamedHandler, TracedEvent } from '@/types'
-import { getCosmWasmClient, objectMatchesStructure } from '@/utils'
+import { AutoCosmWasmClient, objectMatchesStructure } from '@/utils'
 
 // Parse arguments.
 const program = new Command()
@@ -105,13 +105,8 @@ const main = async () => {
     : null
 
   // Create CosmWasm client that batches requests.
-  const cosmWasmClient = await getCosmWasmClient(config.rpc).catch((err) =>
-    Promise.reject(
-      new Error(
-        `Failed to create CosmWasm client for RPC ${config.rpc}: ${err.message}`
-      )
-    )
-  )
+  const autoCosmWasmClient = new AutoCosmWasmClient(config.rpc)
+  await autoCosmWasmClient.update()
 
   // Set up handlers.
   const handlers = await Promise.all(
@@ -120,7 +115,7 @@ const main = async () => {
         name,
         handler: await handlerMaker({
           config,
-          cosmWasmClient,
+          autoCosmWasmClient,
           sendWebhooks: false,
         }),
       })
@@ -131,7 +126,7 @@ const main = async () => {
 
   const webSocketListener = new ChainWebSocketListener()
   const blockTimeFetcher = new BlockTimeFetcher(
-    cosmWasmClient,
+    autoCosmWasmClient,
     webSocketListener
   )
 
