@@ -10,35 +10,41 @@ import {
 
 import { ConfigManager } from '@/config'
 
-let stargateClient: StargateClient | undefined
-let lastRpc: string | undefined
+let stargateClient: Partial<Record<'remote' | 'local', StargateClient>> = {}
+let lastRpc: Partial<Record<'remote' | 'local', string | undefined>> = {}
 
-export const getStargateClient = async () => {
-  if (!stargateClient) {
-    lastRpc = ConfigManager.load().rpc
-    if (!lastRpc) {
+export const getStargateClient = async (
+  type: 'remote' | 'local'
+): Promise<StargateClient> => {
+  if (!stargateClient[type]) {
+    const config = ConfigManager.load()
+
+    const rpc = type === 'remote' ? config.remoteRpc : config.localRpc
+    if (!rpc) {
       throw new Error('RPC not configured')
     }
 
-    stargateClient = await StargateClient.connect(lastRpc)
+    stargateClient[type] = await StargateClient.connect(rpc)
+    lastRpc[type] = rpc
 
     // Update the stargate client when the config changes.
     ConfigManager.instance.onChange(async (config) => {
-      if (config.rpc !== lastRpc) {
+      const newRpc = type === 'remote' ? config.remoteRpc : config.localRpc
+      if (newRpc !== lastRpc[type]) {
         // Reset the stargate client if the RPC changes.
-        lastRpc = config.rpc
-        stargateClient = undefined
+        lastRpc[type] = newRpc
+        stargateClient[type] = undefined
 
         // Attempt to reconnect if the RPC is still configured. If this fails,
         // it should remain unset since it is no longer configured.
-        if (config.rpc) {
-          stargateClient = await StargateClient.connect(config.rpc)
+        if (newRpc) {
+          stargateClient[type] = await StargateClient.connect(newRpc)
         }
       }
     })
   }
 
-  return stargateClient
+  return stargateClient[type]!
 }
 
 // Create CosmWasm client that batches requests.

@@ -105,7 +105,7 @@ const main = async () => {
     : null
 
   // Create CosmWasm client that batches requests.
-  const autoCosmWasmClient = new AutoCosmWasmClient(config.rpc)
+  const autoCosmWasmClient = new AutoCosmWasmClient(config.remoteRpc)
   await autoCosmWasmClient.update()
 
   // Set up handlers.
@@ -137,11 +137,9 @@ const main = async () => {
     // Cache block time for block height in cache used by state.
     blockTimeFetcher.cache.set(latestBlockHeight, latestBlockTimeUnixMs)
 
-    // Update state singleton with chain ID and latest block.
+    // Update state singleton with chain ID.
     await State.updateSingleton({
       chainId: chain_id,
-      latestBlockHeight: BigInt(latestBlockHeight).toString(),
-      latestBlockTimeUnixMs: BigInt(latestBlockTimeUnixMs).toString(),
     })
   })
 

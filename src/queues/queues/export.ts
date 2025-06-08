@@ -35,7 +35,9 @@ export class ExportQueue extends BaseQueue<ExportQueuePayload> {
   private handlers: NamedHandler[] = []
 
   async init(): Promise<void> {
-    const autoCosmWasmClient = new AutoCosmWasmClient(this.options.config.rpc)
+    const autoCosmWasmClient = new AutoCosmWasmClient(
+      this.options.config.remoteRpc
+    )
     await autoCosmWasmClient.update()
 
     // Set up handlers.
