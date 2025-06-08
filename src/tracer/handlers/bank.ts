@@ -115,11 +115,11 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
   }
 
   const process: Handler<ParsedBankStateEvent>['process'] = async (events) => {
-    const exportEvents = async () => {
-      if (events.length === 0) {
-        return []
-      }
+    if (events.length === 0) {
+      return []
+    }
 
+    const exportEvents = async () => {
       // Get unique addresses with balance updates.
       const uniqueAddresses = [...new Set(events.map((event) => event.address))]
 
@@ -237,12 +237,15 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
       interval: 100,
     })
 
-    // Store last block height exported, and update latest block
-    // height/time if the last export is newer.
-    const lastBlockHeightExported =
-      exportedEvents[exportedEvents.length - 1].blockHeight
-    const lastBlockTimeUnixMsExported =
-      exportedEvents[exportedEvents.length - 1].blockTimeUnixMs
+    // Store last block height exported, and update latest block height/time if
+    // the last export is newer. Don't use exportedEvents because it may include
+    // events with block heights in the future that were pulled from existing
+    // records if we are behind/reindexing past data.
+    const lastEvent = events.sort(
+      (a, b) => Number(a.blockHeight) - Number(b.blockHeight)
+    )[events.length - 1]
+    const lastBlockHeightExported = lastEvent.blockHeight
+    const lastBlockTimeUnixMsExported = lastEvent.blockTimeUnixMs
     await State.updateSingleton({
       lastBankBlockHeightExported: Sequelize.fn(
         'GREATEST',
