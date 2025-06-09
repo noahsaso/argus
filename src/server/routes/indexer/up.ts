@@ -17,6 +17,11 @@ type UpResponse =
       nodeBlock: UpBlock
       exportedBlock: UpBlock
       caughtUp: boolean
+      timing: {
+        state: number
+        localChainBlock: number
+        remoteChainBlock: number
+      }
     }
   | {
       error: string
@@ -27,9 +32,20 @@ export const up: Router.Middleware<
   DefaultContext,
   UpResponse
 > = async (ctx) => {
-  let state, localChainBlock, remoteChainBlock
+  const start = Date.now()
+
+  let state,
+    stateDuration,
+    localChainBlock,
+    localChainBlockDuration,
+    remoteChainBlock,
+    remoteChainBlockDuration
   try {
-    ;[state, localChainBlock, remoteChainBlock] = await Promise.all([
+    ;[
+      { state, duration: stateDuration },
+      { block: localChainBlock, duration: localChainBlockDuration },
+      { block: remoteChainBlock, duration: remoteChainBlockDuration },
+    ] = await Promise.all([
       State.getSingleton()
         .catch((err) =>
           Promise.reject(
@@ -38,7 +54,14 @@ export const up: Router.Middleware<
             }`
           )
         )
-        .then((state) => state ?? Promise.reject('State not found.')),
+        .then(
+          (state) =>
+            (state && {
+              state,
+              duration: Date.now() - start,
+            }) ??
+            Promise.reject('State not found.')
+        ),
       getStargateClient('local')
         .catch((err) =>
           Promise.reject(
@@ -50,6 +73,10 @@ export const up: Router.Middleware<
         .then((client) =>
           client
             .getBlock()
+            .then((block) => ({
+              block,
+              duration: Date.now() - start,
+            }))
             .catch((err) =>
               Promise.reject(
                 `Failed to get local chain block: ${
@@ -69,6 +96,10 @@ export const up: Router.Middleware<
         .then((client) =>
           client
             .getBlock()
+            .then((block) => ({
+              block,
+              duration: Date.now() - start,
+            }))
             .catch((err) =>
               Promise.reject(
                 `Failed to get remote chain block: ${
@@ -112,5 +143,10 @@ export const up: Router.Middleware<
     nodeBlock,
     exportedBlock,
     caughtUp,
+    timing: {
+      state: stateDuration,
+      localChainBlock: localChainBlockDuration,
+      remoteChainBlock: remoteChainBlockDuration,
+    },
   }
 }
