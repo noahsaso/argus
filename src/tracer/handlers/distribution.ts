@@ -92,10 +92,11 @@ export const distribution: HandlerMaker<
 
       // Store last block height exported, and update latest block
       // height/time if the last export is newer.
-      const lastBlockHeightExported =
-        exportedEvents[exportedEvents.length - 1].blockHeight
-      const lastBlockTimeUnixMsExported =
-        exportedEvents[exportedEvents.length - 1].blockTimeUnixMs
+      const lastEvent = events.sort(
+        (a, b) => Number(a.blockHeight) - Number(b.blockHeight)
+      )[events.length - 1]
+      const lastBlockHeightExported = lastEvent.blockHeight
+      const lastBlockTimeUnixMsExported = lastEvent.blockTimeUnixMs
       await State.updateSingleton({
         lastDistributionBlockHeightExported: Sequelize.fn(
           'GREATEST',

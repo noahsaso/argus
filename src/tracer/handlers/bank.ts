@@ -115,10 +115,6 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
   }
 
   const process: Handler<ParsedBankStateEvent>['process'] = async (events) => {
-    if (events.length === 0) {
-      return []
-    }
-
     const exportEvents = async () => {
       // Get unique addresses with balance updates.
       const uniqueAddresses = [...new Set(events.map((event) => event.address))]
