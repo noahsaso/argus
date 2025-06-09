@@ -31,9 +31,12 @@ const main = async () => {
   )
   program.option(
     '-k, --code-ids-keys <keys>',
-    'comma separated list of code IDs keys from the config to transform'
+    'comma separated list of code IDs keys from the config to transform, or ALL to transform all specified code IDs'
   )
-  program.option('-f, --force-all', 'force transform all events')
+  program.option(
+    '-f, --force-all',
+    'force transform all events (pass ALL to -k to transform just the specified code IDs)'
+  )
   program.parse()
   const {
     config: _config,
@@ -51,7 +54,7 @@ const main = async () => {
   const sequelize = await loadDb()
 
   // Set up wasm code service.
-  await WasmCodeService.setUpInstance()
+  const wasmCodeService = await WasmCodeService.setUpInstance()
 
   const job = await TransformationsQueue.add(
     `script_${Date.now()}`,
@@ -59,7 +62,10 @@ const main = async () => {
       minBlockHeight: initial,
       batchSize: batch,
       addresses,
-      codeIdsKeys: WasmCodeService.extractWasmCodeKeys(codeIdsKeys),
+      codeIdsKeys:
+        codeIdsKeys === 'ALL'
+          ? wasmCodeService.getWasmCodes().map((wasmCode) => wasmCode.codeKey)
+          : WasmCodeService.extractWasmCodeKeys(codeIdsKeys),
       forceAll,
     },
     {
