@@ -63,6 +63,11 @@ import { Contract } from './Contract'
       concurrently: true,
       using: 'gin',
     },
+    // Speeds up transform script queries iterating over all events in order of
+    // block height.
+    {
+      fields: ['blockHeight'],
+    },
   ],
 })
 export class WasmStateEvent extends DependableEventModel {
