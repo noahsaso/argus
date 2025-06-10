@@ -43,6 +43,11 @@ const main = async () => {
   } finally {
     await sequelize.close()
   }
+
+  process.exit(0)
 }
 
-main()
+main().catch((err) => {
+  console.error(err)
+  process.exit(1)
+})
