@@ -1,7 +1,8 @@
+import { MeiliSearchCommunicationError } from 'meilisearch'
+
 import { ConfigManager } from '@/config'
 import { State } from '@/db'
 import { compute, getTypedFormula } from '@/formulas'
-import { retry } from '@/utils'
 
 import { loadMeilisearch } from './client'
 import { meilisearchIndexers } from './indexers'
@@ -101,10 +102,54 @@ export const updateIndexes = async ({
           ).toLocaleString()}/${updates.length.toLocaleString()} updates...`
         )
 
-        await retry(5, () => index.addDocuments(documents), 1_000)
+        let documentAddBatchSize = batchSize
+        let badGatewayRetries = 100
+        while (true) {
+          try {
+            while (documents.length > 0) {
+              const batch = documents.slice(0, documentAddBatchSize)
+              await index.addDocuments(batch)
+              // If successful, remove the batch from the documents array.
+              documents.splice(0, batch.length)
+              exported += batch.length
+            }
+            // If no documents left, break.
+            break
+          } catch (err) {
+            if (
+              err instanceof MeiliSearchCommunicationError &&
+              err.message.includes('Payload Too Large')
+            ) {
+              if (documentAddBatchSize === 1) {
+                throw err
+              }
 
-        exported += documents.length
+              const newBatchSize = Math.floor(documentAddBatchSize / 2)
+              console.log(
+                `[${indexId}] Document add payload too large (${documentAddBatchSize}), retrying with fewer documents at a time (${newBatchSize})...`
+              )
+              documentAddBatchSize = newBatchSize
+            } else if (
+              err instanceof MeiliSearchCommunicationError &&
+              err.message.includes('Bad Gateway')
+            ) {
+              if (badGatewayRetries > 0) {
+                badGatewayRetries--
+                console.log(`[${indexId}] Bad gateway, retrying in 3s...`)
+                await new Promise((resolve) => setTimeout(resolve, 3_000))
+              } else {
+                throw err
+              }
+            } else {
+              throw err
+            }
+          }
+        }
       }
+
+      console.log(
+        `[${indexId}] Finished exporting ${updates.length.toLocaleString()} updates...`
+      )
     } catch (err) {
       console.error(`Error updating index ${indexId}:`, err)
     }
