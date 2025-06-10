@@ -11,10 +11,15 @@ type UpdateIndexesOptions = {
    * Filter by index ID.
    */
   index?: string
+  /**
+   * Batch size for updating indexes. Defaults to 100.
+   */
+  batchSize?: number
 }
 
 export const updateIndexes = async ({
   index: filterIndex,
+  batchSize = 100,
 }: UpdateIndexesOptions = {}): Promise<number> => {
   const config = ConfigManager.load()
 
@@ -57,48 +62,47 @@ export const updateIndexes = async ({
     )
 
     try {
-      let documents = []
-      // Compute updates in batches of 100.
-      for (let i = 0; i < updates.length; i += 100) {
-        documents.push(
-          ...(await Promise.all(
-            updates
-              .slice(i, i + 100)
-              .map(
-                async ({
-                  id,
-                  formula: { type, name, targetAddress, args = {} },
-                }) => {
-                  const typedFormula = getTypedFormula(type, name)
-                  const { block, value } = await compute({
-                    chainId: state.chainId,
-                    targetAddress,
-                    args,
-                    block: state.latestBlock,
-                    ...typedFormula,
-                  })
+      // Compute updates in batches.
+      for (let i = 0; i < updates.length; i += batchSize) {
+        const documents = await Promise.all(
+          updates
+            .slice(i, i + batchSize)
+            .map(
+              async ({
+                id,
+                formula: { type, name, targetAddress, args = {} },
+              }) => {
+                const typedFormula = getTypedFormula(type, name)
+                const { block, value } = await compute({
+                  chainId: state.chainId,
+                  targetAddress,
+                  args,
+                  block: state.latestBlock,
+                  ...typedFormula,
+                })
 
-                  return {
-                    id,
-                    block: block && {
-                      height: Number(block.height),
-                      timeUnixMs: Number(block.timeUnixMs),
-                    },
-                    value,
-                  }
+                return {
+                  id,
+                  block: block && {
+                    height: Number(block.height),
+                    timeUnixMs: Number(block.timeUnixMs),
+                  },
+                  value,
                 }
-              )
-          ))
+              }
+            )
         )
 
         console.log(
-          `[${indexId}] Finished computing ${documents.length.toLocaleString()}/${updates.length.toLocaleString()} updates...`
+          `[${indexId}] Finished computing ${Math.min(
+            i + batchSize,
+            updates.length
+          ).toLocaleString()}/${updates.length.toLocaleString()} updates...`
         )
+
+        await index.addDocuments(documents)
+        exported += documents.length
       }
-
-      await index.addDocuments(documents)
-
-      exported += documents.length
     } catch (err) {
       console.error(`Error updating index ${indexId}:`, err)
     }

@@ -16,6 +16,11 @@ const main = async () => {
     '-i, --index <index>',
     'only update the specified index, falling back to all indexes'
   )
+  program.option(
+    '-b, --batch-size <size>',
+    'batch size for updating indexes',
+    '100'
+  )
   program.parse()
   const options = program.opts()
 
@@ -35,6 +40,7 @@ const main = async () => {
     // Update.
     const updated = await updateIndexes({
       index: options.index,
+      batchSize: options.batchSize ? parseInt(options.batchSize) : undefined,
     })
 
     console.log(`Updated ${updated} documents.`)
