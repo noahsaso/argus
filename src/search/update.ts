@@ -1,6 +1,7 @@
 import { ConfigManager } from '@/config'
 import { State } from '@/db'
 import { compute, getTypedFormula } from '@/formulas'
+import { retry } from '@/utils'
 
 import { loadMeilisearch } from './client'
 import { meilisearchIndexers } from './indexers'
@@ -100,7 +101,8 @@ export const updateIndexes = async ({
           ).toLocaleString()}/${updates.length.toLocaleString()} updates...`
         )
 
-        await index.addDocuments(documents)
+        await retry(5, () => index.addDocuments(documents), 1_000)
+
         exported += documents.length
       }
     } catch (err) {
