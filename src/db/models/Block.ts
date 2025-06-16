@@ -27,12 +27,10 @@ export class Block extends Model {
   @Column(DataType.BIGINT)
   declare height: string
 
-  @PrimaryKey
   @AllowNull(false)
   @Column(DataType.BIGINT)
   declare timeUnixMs: string
 
-  @PrimaryKey
   @AllowNull(false)
   @Column(DataType.DATE)
   declare timestamp: Date
