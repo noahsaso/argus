@@ -11,8 +11,10 @@ program.option(
   'path to config file, falling back to config.json'
 )
 program.option('-b, --batch <size>', 'batch size', '10000')
+program.option('-r, --range <size>', 'range size', '50000')
+program.option('-i, --initial <height>', 'initial height')
 program.parse()
-const { config: _config, batch } = program.opts()
+const { config: _config, batch, range, initial } = program.opts()
 
 // Load config with config option.
 ConfigManager.load(_config)
@@ -96,7 +98,9 @@ class ProgressDisplay {
       avgSpeedBlocks > 0 ? Number(totalRange - processed) / avgSpeedBlocks : 0
     const eta =
       etaSeconds > 0
-        ? new Date(Date.now() + etaSeconds * 1000).toLocaleString()
+        ? new Date(Date.now() + etaSeconds * 1000).toLocaleString(undefined, {
+            timeZoneName: 'short',
+          })
         : '-'
 
     const lines = [
@@ -140,7 +144,12 @@ ${'—'.repeat(longestLineLength + 6)}
  * Efficiently populate the Block table with unique blocks from all state event tables.
  * Optimized for tens of millions of blocks by processing in height ranges.
  */
-const populateBlocks = async (sequelize: any, batchSize: number = 10_000) => {
+const populateBlocks = async (
+  sequelize: any,
+  batchSize: number = 10_000,
+  rangeSize: bigint = 50_000n,
+  initialHeight?: bigint
+) => {
   const populateStart = Date.now()
   console.log(`\n[${new Date().toISOString()}] populating blocks table...`)
 
@@ -196,13 +205,14 @@ const populateBlocks = async (sequelize: any, batchSize: number = 10_000) => {
     null as bigint | null
   )!
 
-  const totalRange = globalMaxHeight - globalMinHeight + 1n
+  const effectiveStartHeight = initialHeight ?? globalMinHeight
+  const totalRange = globalMaxHeight - effectiveStartHeight + 1n
 
   console.log(
-    `processing blocks from height ${globalMinHeight.toLocaleString()} to ${globalMaxHeight.toLocaleString()} (${totalRange.toLocaleString()} blocks)`
+    `processing blocks from height ${effectiveStartHeight.toLocaleString()} to ${globalMaxHeight.toLocaleString()} (${totalRange.toLocaleString()} blocks)`
   )
 
-  if (globalMinHeight > globalMaxHeight) {
+  if (effectiveStartHeight > globalMaxHeight) {
     console.log('no new blocks to process')
     return
   }
@@ -210,9 +220,8 @@ const populateBlocks = async (sequelize: any, batchSize: number = 10_000) => {
   // Initialize progress display
   const progressDisplay = new ProgressDisplay()
 
-  // Process in height ranges of 100k blocks for efficiency
-  const rangeSize = 100_000n
-  let currentHeight = globalMinHeight
+  // Process in height ranges for efficiency
+  let currentHeight = effectiveStartHeight
   let totalProcessed = 0n
 
   while (currentHeight <= globalMaxHeight) {
@@ -226,7 +235,7 @@ const populateBlocks = async (sequelize: any, batchSize: number = 10_000) => {
     // Process each table separately to avoid complex UNIONs
     const uniqueBlocksInRange = new Map<
       string,
-      { height: string; timeUnixMs: string; timestamp: Date }
+      { height: string; timeUnixMs: string }
     >()
 
     const tableQueries = [
@@ -242,8 +251,7 @@ const populateBlocks = async (sequelize: any, batchSize: number = 10_000) => {
           `
           SELECT DISTINCT 
             "blockHeight" as height,
-            "blockTimeUnixMs" as "timeUnixMs",
-            "blockTimestamp" as timestamp
+            "blockTimeUnixMs" as "timeUnixMs"
           FROM "${table}"
           WHERE "blockHeight"::bigint >= ${currentHeight} 
             AND "blockHeight"::bigint <= ${rangeEnd}
@@ -253,7 +261,6 @@ const populateBlocks = async (sequelize: any, batchSize: number = 10_000) => {
         )) as unknown as {
           height: string
           timeUnixMs: string
-          timestamp: Date
         }[]
 
         for (const block of blocks) {
@@ -292,10 +299,10 @@ const populateBlocks = async (sequelize: any, batchSize: number = 10_000) => {
 
     // Update progress display
     progressDisplay.update(
-      currentHeight + rangeSize,
+      currentHeight,
       rangeEnd,
       totalRange,
-      globalMinHeight,
+      effectiveStartHeight,
       uniqueBlocks.length,
       totalProcessed,
       rangeDuration
@@ -316,17 +323,12 @@ const main = async () => {
     type: DbType.Data,
   })
 
-  const startTime = Date.now()
-  console.log(`\n[${new Date().toISOString()}] STARTING...\n`)
-
   // Populate blocks table from all state event tables
-  await populateBlocks(sequelize, Number(batch))
-
-  console.log(
-    `\n[${new Date().toISOString()}] FINISHED in ${(
-      (Date.now() - startTime) /
-      1000
-    ).toLocaleString()} seconds`
+  await populateBlocks(
+    sequelize,
+    Number(batch),
+    BigInt(range),
+    initial && BigInt(initial)
   )
 
   // Close DB connections.
