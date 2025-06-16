@@ -28,7 +28,6 @@
     "tracer": "node dist/scripts/tracer.js",
     "workers": "node dist/scripts/workers.js",
     "workers:export": "node dist/scripts/worker-export.js",
-    "load-blocks": "node dist/scripts/load-blocks.js",
     "update-tracked-wasm-codes": "node dist/scripts/update-tracked-wasm-codes.js",
     "export:prod": "npm install && npm run build; pm2 delete all; npm run with-infisical -- npm run db:migrate:data && pm2 start ecosystem.config.js --only tracer,workers && pm2 save",
     "account-webhooks": "node dist/scripts/accountWebhooks.js",
