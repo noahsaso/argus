@@ -4,7 +4,7 @@ import { FeePool } from '@dao-dao/types/protobuf/codegen/cosmos/distribution/v1b
 import retry from 'async-await-retry'
 import { Sequelize } from 'sequelize'
 
-import { DistributionCommunityPoolStateEvent, State } from '@/db'
+import { Block, DistributionCommunityPoolStateEvent, State } from '@/db'
 import {
   Handler,
   HandlerMaker,
@@ -73,6 +73,15 @@ export const distribution: HandlerMaker<
 
   const process: Handler<ParsedDistributionCommunityPoolStateEvent>['process'] =
     async (events) => {
+      // Save blocks from events.
+      await Block.createMany(
+        [...new Set(events.map((e) => e.blockHeight))].map((height) => ({
+          height,
+          timeUnixMs: events.find((e) => e.blockHeight === height)!
+            .blockTimeUnixMs,
+        }))
+      )
+
       const exportEvents = async () =>
         // Unique index on [blockHeight] ensures that we don't insert duplicate
         // events. If we encounter a duplicate, we update the `balances` field

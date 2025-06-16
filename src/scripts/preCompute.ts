@@ -1,18 +1,10 @@
 import { Command } from 'commander'
 
 import { ConfigManager } from '@/config'
-import {
-  Computation,
-  Contract,
-  State,
-  getBlockForHeight,
-  getBlockForTime,
-  getFirstBlock,
-  loadDb,
-} from '@/db'
+import { Block, Computation, Contract, State, loadDb } from '@/db'
 import { computeRange, getTypedFormula } from '@/formulas'
 import { WasmCodeService } from '@/services/wasm-codes'
-import { Block } from '@/types'
+import { Block as BlockType } from '@/types'
 import { bigIntMin, validateBlockString } from '@/utils'
 
 export const main = async () => {
@@ -118,24 +110,26 @@ export const main = async () => {
     throw new Error('No addresses found.')
   }
 
-  const blockStart: Block | undefined =
+  const blockStart: BlockType | undefined =
     (options.start
       ? validateBlockString(options.start, 'start')
       : options.startTime
-      ? await getBlockForTime(
-          // Relative if negative.
-          options.startTime < 0n
-            ? BigInt(Date.now()) + options.startTime
-            : options.startTime
-        )
-      : undefined) || (await getFirstBlock())
+      ? (
+          await Block.getForTime(
+            // Relative if negative.
+            options.startTime < 0n
+              ? BigInt(Date.now()) + options.startTime
+              : options.startTime
+          )
+        )?.block
+      : undefined) || (await Block.getFirst())?.block
 
   // If blockStart undefined, no events found.
   if (!blockStart) {
     throw new Error('No start block because no events found.')
   }
 
-  const blockEnd: Block | undefined = options.end
+  const blockEnd: BlockType | undefined = options.end
     ? validateBlockString(options.end, 'end')
     : state?.latestBlock
 
@@ -176,7 +170,7 @@ export const main = async () => {
         block.height + BigInt(options.batch),
         blockEnd.height + 1n
       )
-      const endBlock = await getBlockForHeight(endBlockHeight, block.height)
+      const endBlock = await Block.getForHeight(endBlockHeight, block.height)
 
       // If no event before end block, we're done.
       if (!endBlock) {
@@ -189,7 +183,7 @@ export const main = async () => {
         targetAddress,
         args,
         blockStart: block,
-        blockEnd: endBlock,
+        blockEnd: endBlock.block,
       })
       count += outputs.length
 
@@ -209,7 +203,7 @@ export const main = async () => {
         }): ${outputs.length.toLocaleString()}`
       )
 
-      block = endBlock
+      block = endBlock.block
       i++
     }
 

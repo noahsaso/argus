@@ -7,6 +7,7 @@ import { Sequelize } from 'sequelize'
 
 import {
   AccountWebhook,
+  Block,
   Contract,
   State,
   WasmStateEvent,
@@ -280,6 +281,15 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
   }
 
   const process: Handler<WasmExportData>['process'] = async (events) => {
+    // Save blocks from events.
+    await Block.createMany(
+      [...new Set(events.map((e) => e.data.blockHeight))].map((height) => ({
+        height,
+        timeUnixMs: events.find((e) => e.data.blockHeight === height)!.data
+          .blockTimeUnixMs,
+      }))
+    )
+
     // Export contracts.
     const contractEvents = events.flatMap((event) =>
       event.type === 'contract' ? event.data : []

@@ -13260,31 +13260,6 @@
         }
       }
     },
-    "/{chainId}/generic/_/featuredDaos": {
-      "get": {
-        "tags": [
-          "generic"
-        ],
-        "summary": "retrieves a list of featured DAOs for the current chain, with the order number from the entire featured list",
-        "operationId": "featuredDaos_2e024c5",
-        "parameters": [
-          {
-            "name": "chainId",
-            "in": "path",
-            "description": "chain ID",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "success"
-          }
-        }
-      }
-    },
     "/{chainId}/generic/_/gov/decodedProposal": {
       "get": {
         "tags": [

@@ -6,12 +6,11 @@ import { ConfigManager, getRedis, testRedisConnection } from '@/config'
 import {
   AccountKey,
   AccountKeyCredit,
+  Block,
   Computation,
   Contract,
   State,
   Validator,
-  getBlockForTime,
-  getFirstBlock,
 } from '@/db'
 import {
   compute,
@@ -20,7 +19,12 @@ import {
   typeIsFormulaTypeOrWallet,
 } from '@/formulas'
 import { WasmCodeService } from '@/services/wasm-codes'
-import { Block, Cache, FormulaType, FormulaTypeValues } from '@/types'
+import {
+  Block as BlockType,
+  Cache,
+  FormulaType,
+  FormulaTypeValues,
+} from '@/types'
 import { validateBlockString } from '@/utils'
 
 import { captureSentryException } from '../../sentry'
@@ -235,7 +239,7 @@ export const loadComputer = async () => {
     }
 
     // If block passed, validate.
-    let block: Block | undefined
+    let block: BlockType | undefined
     if (_block && typeof _block === 'string') {
       try {
         block = validateBlockString(_block, 'block')
@@ -247,7 +251,7 @@ export const loadComputer = async () => {
     }
 
     // If blocks passed, validate that it's a range of two blocks.
-    let blocks: [Block, Block] | undefined
+    let blocks: [BlockType, BlockType] | undefined
     let blockStep: bigint | undefined
     if (_blocks && typeof _blocks === 'string') {
       const [startBlock, endBlock] = _blocks.split('..')
@@ -442,7 +446,7 @@ export const loadComputer = async () => {
           time += BigInt(currentTime)
         }
 
-        block = await getBlockForTime(time)
+        block = (await Block.getForTime(time))?.block
       }
 
       // If times passed, compute blocks that correlate with those times.
@@ -456,12 +460,12 @@ export const loadComputer = async () => {
         }
 
         const startBlock =
-          (await getBlockForTime(times[0])) ??
+          (await Block.getForTime(times[0]))?.block ??
           // Use first block if no event exists before start time.
-          (await getFirstBlock())
+          (await Block.getFirst())?.block
         // Use latest block if no end time exists.
         const endBlock = times[1]
-          ? await getBlockForTime(times[1])
+          ? (await Block.getForTime(times[1]))?.block
           : state.latestBlock
 
         if (startBlock && endBlock) {

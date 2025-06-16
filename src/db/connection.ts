@@ -18,6 +18,7 @@ import {
   AccountWebhookEventAttempt,
   BankBalance,
   BankStateEvent,
+  Block,
   Computation,
   ComputationDependency,
   Contract,
@@ -48,6 +49,7 @@ const getModelsForType = (type: DbType): SequelizeOptions['models'] =>
     ? [
         BankBalance,
         BankStateEvent,
+        Block,
         Computation,
         ComputationDependency,
         Contract,

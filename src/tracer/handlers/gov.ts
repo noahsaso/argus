@@ -2,7 +2,7 @@ import { fromBase64, toBech32 } from '@cosmjs/encoding'
 import retry from 'async-await-retry'
 import { Sequelize } from 'sequelize'
 
-import { GovProposal, GovProposalVote, State } from '@/db'
+import { Block, GovProposal, GovProposalVote, State } from '@/db'
 import { Handler, HandlerMaker, ParsedGovStateEvent } from '@/types'
 
 const STORE_NAME = 'gov'
@@ -105,6 +105,15 @@ export const gov: HandlerMaker<ParsedGovStateEvent> = async ({
   }
 
   const process: Handler<ParsedGovStateEvent>['process'] = async (events) => {
+    // Save blocks from events.
+    await Block.createMany(
+      [...new Set(events.map((e) => e.data.blockHeight))].map((height) => ({
+        height,
+        timeUnixMs: events.find((e) => e.data.blockHeight === height)!.data
+          .blockTimeUnixMs,
+      }))
+    )
+
     const exportEvents = async () => {
       const proposals = events.flatMap((e) =>
         e.type === 'proposal' ? e.data : []

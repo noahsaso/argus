@@ -1,7 +1,7 @@
 import request from 'supertest'
 import { beforeEach, describe, it } from 'vitest'
 
-import { BankBalance, BankStateEvent, Contract, State } from '@/db'
+import { BankBalance, BankStateEvent, Block, Contract, State } from '@/db'
 import { WasmCodeService } from '@/services'
 import { BANK_HISTORY_CODE_IDS_KEYS } from '@/tracer/handlers/bank'
 
@@ -57,6 +57,25 @@ export const loadBankTests = (options: ComputerTestOptions) => {
             blockTimeUnixMs: 4,
             blockTimestamp,
             balance: '4000',
+          },
+        ])
+
+        await Block.createMany([
+          {
+            height: 1,
+            timeUnixMs: 1,
+          },
+          {
+            height: 2,
+            timeUnixMs: 2,
+          },
+          {
+            height: 3,
+            timeUnixMs: 3,
+          },
+          {
+            height: 4,
+            timeUnixMs: 4,
           },
         ])
 
@@ -328,6 +347,11 @@ export const loadBankTests = (options: ComputerTestOptions) => {
           blockTimestamp: new Date(),
         })
 
+        await Block.createOne({
+          height: 4,
+          timeUnixMs: 4,
+        })
+
         await State.updateSingleton({
           latestBlockHeight: 4,
           latestBlockTimeUnixMs: 4,
@@ -428,6 +452,25 @@ export const loadBankTests = (options: ComputerTestOptions) => {
             blockTimeUnixMs: '1701717323952',
             blockTimestamp: 1701717323952,
             balance: '69005049',
+          },
+        ])
+
+        await Block.createMany([
+          {
+            height: 11302166,
+            timeUnixMs: 1699018686709,
+          },
+          {
+            height: 11393241,
+            timeUnixMs: 1699334426599,
+          },
+          {
+            height: 11745184,
+            timeUnixMs: 1700544956761,
+          },
+          {
+            height: 12090598,
+            timeUnixMs: 1701717323952,
           },
         ])
 

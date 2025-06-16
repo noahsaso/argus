@@ -3,7 +3,7 @@ import { Coin } from '@dao-dao/types/protobuf/codegen/cosmos/base/v1beta1/coin'
 import retry from 'async-await-retry'
 import { Sequelize } from 'sequelize'
 
-import { BankBalance, BankStateEvent, Contract, State } from '@/db'
+import { BankBalance, BankStateEvent, Block, Contract, State } from '@/db'
 import { WasmCodeService } from '@/services'
 import { Handler, HandlerMaker, ParsedBankStateEvent } from '@/types'
 import { batch } from '@/utils'
@@ -115,6 +115,15 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
   }
 
   const process: Handler<ParsedBankStateEvent>['process'] = async (events) => {
+    // Save blocks from events.
+    await Block.createMany(
+      [...new Set(events.map((e) => e.blockHeight))].map((height) => ({
+        height,
+        timeUnixMs: events.find((e) => e.blockHeight === height)!
+          .blockTimeUnixMs,
+      }))
+    )
+
     const exportEvents = async () => {
       // Get unique addresses with balance updates.
       const uniqueAddresses = [...new Set(events.map((event) => event.address))]

@@ -1,7 +1,7 @@
 import request from 'supertest'
 import { beforeEach, describe, it } from 'vitest'
 
-import { GovProposal, GovProposalVote, State } from '@/db'
+import { Block, GovProposal, GovProposalVote, State } from '@/db'
 
 import { app } from '../../app'
 import { ComputerTestOptions } from '../types'
@@ -40,6 +40,25 @@ export const loadGovTests = (options: ComputerTestOptions) => {
             blockTimeUnixMs: 4,
             blockTimestamp,
             data: '3-4',
+          },
+        ])
+
+        await Block.createMany([
+          {
+            height: 1,
+            timeUnixMs: 1,
+          },
+          {
+            height: 2,
+            timeUnixMs: 2,
+          },
+          {
+            height: 3,
+            timeUnixMs: 3,
+          },
+          {
+            height: 4,
+            timeUnixMs: 4,
           },
         ])
 
@@ -456,6 +475,21 @@ export const loadGovTests = (options: ComputerTestOptions) => {
             blockTimeUnixMs: 3,
             blockTimestamp,
             data: '2-3',
+          },
+        ])
+
+        await Block.createMany([
+          {
+            height: 1,
+            timeUnixMs: 1,
+          },
+          {
+            height: 2,
+            timeUnixMs: 2,
+          },
+          {
+            height: 3,
+            timeUnixMs: 3,
           },
         ])
 

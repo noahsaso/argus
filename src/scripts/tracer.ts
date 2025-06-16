@@ -5,7 +5,7 @@ import * as Sentry from '@sentry/node'
 import { Command } from 'commander'
 
 import { ConfigManager } from '@/config'
-import { State, loadDb } from '@/db'
+import { Block, State, loadDb } from '@/db'
 import { ExportQueue } from '@/queues/queues/export'
 import { setupMeilisearch } from '@/search'
 import { WasmCodeService } from '@/services/wasm-codes'
@@ -137,10 +137,16 @@ const main = async () => {
     // Cache block time for block height in cache used by state.
     blockTimeFetcher.cache.set(latestBlockHeight, latestBlockTimeUnixMs)
 
-    // Update state singleton with chain ID.
-    await State.updateSingleton({
-      chainId: chain_id,
-    })
+    // Update state singleton with chain ID, and create block.
+    await Promise.all([
+      State.updateSingleton({
+        chainId: chain_id,
+      }),
+      Block.createOne({
+        height: latestBlockHeight,
+        timeUnixMs: latestBlockTimeUnixMs,
+      }),
+    ])
   })
 
   const exporter = new BatchedTraceExporter()
