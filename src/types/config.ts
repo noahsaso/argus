@@ -1,7 +1,7 @@
 import { Options as PusherOptions } from 'pusher'
 import { SequelizeOptions } from 'sequelize-typescript'
 
-type DB = { uri?: string } & Pick<
+export type DB = { uri?: string } & Pick<
   SequelizeOptions,
   | 'dialect'
   | 'dialectModulePath'
@@ -17,11 +17,13 @@ type DB = { uri?: string } & Pick<
   | 'pool'
   | 'schema'
   | 'logging'
+  | 'retry'
 >
 
 export type Config = {
   home: string
-  rpc: string
+  localRpc: string
+  remoteRpc: string
   bech32Prefix: string
   db: {
     data: DB

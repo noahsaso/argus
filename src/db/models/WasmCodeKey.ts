@@ -53,17 +53,16 @@ export class WasmCodeKey extends Model {
   static async createFromKeyAndIds(
     codeKey: string,
     codeKeyId: number | number[]
-  ): Promise<WasmCodeKey | null> {
+  ): Promise<void> {
     await WasmCodeKey.upsert({ codeKey })
-
-    const arrayCodeKeyId = Array.isArray(codeKeyId) ? codeKeyId : [codeKeyId]
     await WasmCodeKeyId.bulkCreate(
-      arrayCodeKeyId.map((codeKeyId) => ({ codeKeyId, codeKey })),
+      [codeKeyId].flat().map((codeKeyId) => ({
+        codeKey,
+        codeKeyId,
+      })),
       {
         ignoreDuplicates: true,
       }
     )
-
-    return WasmCodeKey.findByKeyIncludeIds(codeKey)
   }
 }

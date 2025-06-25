@@ -182,6 +182,93 @@ Find by contract name (key is `contract_info`)
 SELECT DISTINCT ON("codeId") "codeId", "value" FROM "WasmStateEvents" INNER JOIN "Contracts" ON "Contracts"."address" = "WasmStateEvents"."contractAddress" WHERE "key" = '99,111,110,116,114,97,99,116,95,105,110,102,111' AND value LIKE '%CONTRACT_NAME%' ORDER BY "codeId" ASC;
 ```
 
+### Find the contracts with the most state events
+
+```sql
+WITH address_counts AS (
+  SELECT
+    "contractAddress",
+    COUNT(*) as row_count
+  FROM "WasmStateEvents"
+  GROUP BY "contractAddress"
+),
+total AS (
+  SELECT SUM(row_count) AS total_rows
+  FROM address_counts
+)
+SELECT * FROM address_counts
+JOIN total ON true
+ORDER BY row_count DESC
+LIMIT 200;
+```
+
+## Find all code IDs for a given contract type
+
+```sql
+SELECT DISTINCT c."codeId"
+FROM "Contracts" c
+JOIN "WasmStateEvents" w ON c."address" = w."contractAddress"
+WHERE w."key" = '99,111,110,116,114,97,99,116,95,105,110,102,111'
+AND w."value" LIKE '%"contract":"crates.io:contract_one%'
+```
+
+### Delete all events for contracts of a certain type except the info key
+
+```sql
+WITH bad_addresses AS (
+  SELECT DISTINCT "address"
+  FROM "Contracts"
+  WHERE "codeId" IN (
+      SELECT DISTINCT c."codeId"
+      FROM "Contracts" c
+      JOIN "WasmStateEvents" w ON c."address" = w."contractAddress"
+      WHERE w."key" = '99,111,110,116,114,97,99,116,95,105,110,102,111'
+      AND (
+        w."value" LIKE '%"contract":"crates.io:contract_one%'
+        OR w."value" LIKE '%"contract":"crates.io:contract_two%'
+        OR w."value" LIKE '%"contract":"crates.io:contract_three%'
+      )
+  )
+)
+DELETE FROM "WasmStateEvents"
+WHERE "contractAddress" IN (SELECT "address" FROM bad_addresses)
+AND "key" != '99,111,110,116,114,97,99,116,95,105,110,102,111';
+```
+
+```sql
+
+WITH bad_addresses AS (
+  SELECT DISTINCT "address"
+  FROM "Contracts"
+  WHERE "codeId" IN (
+      SELECT DISTINCT c."codeId"
+      FROM "Contracts" c
+      JOIN "WasmStateEvents" w ON c."address" = w."contractAddress"
+      WHERE w."key" = '99,111,110,116,114,97,99,116,95,105,110,102,111'
+      AND (
+        w."value" LIKE '%"contract":"crates.io:contract_one%'
+        OR w."value" LIKE '%"contract":"crates.io:contract_two%'
+        OR w."value" LIKE '%"contract":"crates.io:contract_three%'
+      )
+  )
+)
+DELETE FROM "WasmStateEventTransformations"
+WHERE "contractAddress" IN (SELECT "address" FROM bad_addresses)
+AND "name" != 'info';
+```
+
+### View all table sizes
+
+```sql
+SELECT table_name, pg_size_pretty(pg_total_relation_size(quote_ident(table_name))), pg_total_relation_size(quote_ident(table_name)) FROM information_schema.tables WHERE table_schema = 'public' ORDER BY 3 DESC;
+```
+
+### View all database sizes
+
+```sql
+SELECT datname AS database_name, pg_size_pretty(pg_database_size(datname)) AS size FROM pg_database WHERE datname LIKE '%net' ORDER BY pg_database_size(datname) DESC;
+```
+
 ## Attribution
 
 Credit to ekez for the initial idea and design of the state-based x/wasm

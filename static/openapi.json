@@ -500,6 +500,40 @@
         }
       }
     },
+    "/{chainId}/contract/{contractAddress}/contractAdmin": {
+      "get": {
+        "tags": [
+          "contract"
+        ],
+        "summary": "retrieves the wasm-level contract admin",
+        "operationId": "contractAdmin_816abab",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "contractAddress",
+            "in": "path",
+            "description": "contract address",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          }
+        }
+      }
+    },
     "/{chainId}/contract/{contractAddress}/cw1Whitelist/adminList": {
       "get": {
         "tags": [
@@ -13213,56 +13247,6 @@
             "name": "accountAddress",
             "in": "path",
             "description": "account address",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "success"
-          }
-        }
-      }
-    },
-    "/{chainId}/generic/_/communityPool/balances": {
-      "get": {
-        "tags": [
-          "generic"
-        ],
-        "summary": "retrieves the current balances of the community pool",
-        "operationId": "communityPool_balances_389d52b",
-        "parameters": [
-          {
-            "name": "chainId",
-            "in": "path",
-            "description": "chain ID",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "success"
-          }
-        }
-      }
-    },
-    "/{chainId}/generic/_/featuredDaos": {
-      "get": {
-        "tags": [
-          "generic"
-        ],
-        "summary": "retrieves a list of featured DAOs for the current chain, with the order number from the entire featured list",
-        "operationId": "featuredDaos_2e024c5",
-        "parameters": [
-          {
-            "name": "chainId",
-            "in": "path",
-            "description": "chain ID",
             "required": true,
             "schema": {
               "type": "string"

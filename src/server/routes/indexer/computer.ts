@@ -6,12 +6,11 @@ import { ConfigManager, getRedis, testRedisConnection } from '@/config'
 import {
   AccountKey,
   AccountKeyCredit,
+  Block,
   Computation,
   Contract,
   State,
   Validator,
-  getBlockForTime,
-  getFirstBlock,
 } from '@/db'
 import {
   compute,
@@ -20,7 +19,12 @@ import {
   typeIsFormulaTypeOrWallet,
 } from '@/formulas'
 import { WasmCodeService } from '@/services/wasm-codes'
-import { Block, FormulaType, FormulaTypeValues } from '@/types'
+import {
+  Block as BlockType,
+  Cache,
+  FormulaType,
+  FormulaTypeValues,
+} from '@/types'
 import { validateBlockString } from '@/utils'
 
 import { captureSentryException } from '../../sentry'
@@ -39,9 +43,9 @@ export const loadComputer = async () => {
 
   let state = _state
 
-  // Update state every 500ms if not in test mode.
+  // Update state every second if not in test mode.
   if (!IS_TEST) {
-    setInterval(async () => {
+    const updateState = async () => {
       try {
         const newState = await State.getSingleton()
         if (newState) {
@@ -53,8 +57,13 @@ export const loadComputer = async () => {
         }
       } catch (err) {
         console.error('[computer] Unexpected error updating state cache', err)
+      } finally {
+        setTimeout(updateState, 1_000)
       }
-    }, 500)
+    }
+
+    console.log('Starting computer state updater...')
+    await updateState()
   }
 
   // Create Redis connection if available.
@@ -230,7 +239,7 @@ export const loadComputer = async () => {
     }
 
     // If block passed, validate.
-    let block: Block | undefined
+    let block: BlockType | undefined
     if (_block && typeof _block === 'string') {
       try {
         block = validateBlockString(_block, 'block')
@@ -242,7 +251,7 @@ export const loadComputer = async () => {
     }
 
     // If blocks passed, validate that it's a range of two blocks.
-    let blocks: [Block, Block] | undefined
+    let blocks: [BlockType, BlockType] | undefined
     let blockStep: bigint | undefined
     if (_blocks && typeof _blocks === 'string') {
       const [startBlock, endBlock] = _blocks.split('..')
@@ -362,6 +371,10 @@ export const loadComputer = async () => {
       return
     }
 
+    let cache: Partial<Cache> = {
+      contracts: {},
+    }
+
     try {
       // If type is "contract"...
       if (typedFormula.type === FormulaType.Contract) {
@@ -373,6 +386,8 @@ export const loadComputer = async () => {
           ctx.body = 'contract not found'
           return
         }
+
+        cache.contracts![address] = contract
 
         // ...validate that filter is satisfied.
         if (typedFormula.formula.filter) {
@@ -431,7 +446,7 @@ export const loadComputer = async () => {
           time += BigInt(currentTime)
         }
 
-        block = await getBlockForTime(time)
+        block = (await Block.getForTime(time))?.block
       }
 
       // If times passed, compute blocks that correlate with those times.
@@ -445,12 +460,12 @@ export const loadComputer = async () => {
         }
 
         const startBlock =
-          (await getBlockForTime(times[0])) ??
+          (await Block.getForTime(times[0]))?.block ??
           // Use first block if no event exists before start time.
-          (await getFirstBlock())
+          (await Block.getFirst())?.block
         // Use latest block if no end time exists.
         const endBlock = times[1]
-          ? await getBlockForTime(times[1])
+          ? (await Block.getForTime(times[1]))?.block
           : state.latestBlock
 
         if (startBlock && endBlock) {
@@ -783,6 +798,7 @@ export const loadComputer = async () => {
             targetAddress: address,
             args,
             block: block || state.latestBlock,
+            cache,
           }),
         ])
 
@@ -796,7 +812,13 @@ export const loadComputer = async () => {
 
         // Handle computation result.
         if (computationResult.status === 'rejected') {
-          console.error(computationResult.reason)
+          if (process.env.NODE_ENV === 'development') {
+            console.error(
+              `Error computing formula ${typedFormula.name} for address ${address}`,
+              computationResult.reason
+            )
+          }
+
           ctx.status = 400
           ctx.body =
             computationResult.reason instanceof Error

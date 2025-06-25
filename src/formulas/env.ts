@@ -1468,8 +1468,8 @@ export const getEnv = ({
         ? cachedEvent?.[0]
         : await GovProposalVote.findOne({
             where: {
-              proposalId,
               voterAddress,
+              proposalId,
               blockHeight: blockHeightFilter,
             },
             order: [['blockHeight', 'DESC']],
@@ -1532,7 +1532,7 @@ export const getEnv = ({
               // beginning of the query. This ensures we use the most recent
               // version of each proposal.
               Sequelize.literal(
-                'DISTINCT ON("proposalId", "voterAddress") \'\''
+                'DISTINCT ON("voterAddress", "proposalId") \'\''
               ) as unknown as string,
               'proposalId',
               'voterAddress',
@@ -1545,8 +1545,8 @@ export const getEnv = ({
             },
             order: [
               // Needs to be first so we can use DISTINCT ON.
-              ['proposalId', 'ASC'],
               ['voterAddress', 'ASC'],
+              ['proposalId', 'ASC'],
               ['blockHeight', 'DESC'],
             ],
           })
@@ -1627,7 +1627,7 @@ export const getEnv = ({
               // beginning of the query. This ensures we use the most recent
               // version of each proposal.
               Sequelize.literal(
-                'DISTINCT ON("proposalId", "voterAddress") \'\''
+                'DISTINCT ON("voterAddress", "proposalId") \'\''
               ) as unknown as string,
               'proposalId',
               'voterAddress',
@@ -1640,8 +1640,8 @@ export const getEnv = ({
             },
             order: [
               // Needs to be first so we can use DISTINCT ON.
-              ['proposalId', 'ASC'],
               ['voterAddress', 'ASC'],
+              ['proposalId', 'ASC'],
               ['blockHeight', 'DESC'],
             ],
           })

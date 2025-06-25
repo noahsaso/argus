@@ -73,6 +73,7 @@ export class WasmStateEventTransformation extends DependableEventModel {
 
   @BelongsTo(() => Contract)
   declare contract: Contract
+
   @PrimaryKey
   @AllowNull(false)
   @Column(DataType.TEXT)

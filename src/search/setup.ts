@@ -37,7 +37,7 @@ export const setupMeilisearch = async () => {
         })
       }
     } catch {
-      await client.createIndex(index, {
+      await client.createIndex(indexName, {
         primaryKey: 'id',
       })
     }

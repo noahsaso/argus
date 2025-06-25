@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"cosmossdk.io/log"
@@ -39,13 +40,28 @@ type (
 func main() {
 	args := os.Args
 	if len(args) < 4 {
-		fmt.Println("Usage: dump <home_dir> <output> <store_name> [address(es)]")
+		fmt.Println("Usage: dump <home_dir> <output> <store_name[:key_prefix_byte_value]> [address(es)]")
 		os.Exit(1)
 	}
 
 	home_dir := args[1]
+	dataDir := filepath.Join(home_dir, "data")
+
 	output := args[2]
-	storeName := args[3]
+
+	storeNameParts := strings.SplitN(args[3], ":", 2)
+	storeName := storeNameParts[0]
+
+	// parse key prefix as a number (supports both decimal and hex strings) and
+	// then convert to a single byte
+	keyPrefix := []byte{}
+	if len(storeNameParts) > 1 && storeNameParts[1] != "" {
+		keyPrefixInt, err := strconv.ParseInt(storeNameParts[1], 0, 8)
+		if err != nil {
+			panic(err)
+		}
+		keyPrefix = []byte{byte(keyPrefixInt)}
+	}
 
 	var addressesBech32Data [][]byte
 	if len(args) > 4 {
@@ -62,13 +78,15 @@ func main() {
 		}
 	}
 
+	fmt.Printf("Loading data from %s...\n", dataDir)
+	fmt.Printf("Writing to %s...\n", output)
+
 	out, err := os.OpenFile(output, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		panic(err)
 	}
 	defer out.Close()
 
-	dataDir := filepath.Join(home_dir, "data")
 	db, err := dbm.NewDB("application", dbm.GoLevelDBBackend, dataDir)
 	if err != nil {
 		panic(err)
@@ -82,7 +100,10 @@ func main() {
 	ms := rootmulti.NewStore(db, log.NewNopLogger(), metrics.NewNoOpMetrics())
 	ms.MountStoreWithDB(storeKey, types.StoreTypeIAVL, nil)
 
-	fmt.Println("Loading store...")
+	fmt.Printf("Loading %s store...\n", storeName)
+	if len(keyPrefix) > 0 {
+		fmt.Printf("Filtering by key prefix: %02x\n", keyPrefix)
+	}
 
 	err = ms.LoadLatestVersion()
 	if err != nil {
@@ -107,6 +128,13 @@ func main() {
 		processed++
 		if processed%25000 == 0 {
 			fmt.Printf("Processed %d keys\n", processed)
+		}
+
+		// Validate with key prefix if provided.
+		if len(keyPrefix) > 0 {
+			if !bytes.HasPrefix(key, keyPrefix) {
+				continue
+			}
 		}
 
 		// Make sure key is for the given address. Different stores have the address

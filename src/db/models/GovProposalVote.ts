@@ -17,18 +17,6 @@ import { getDependentKey } from '@/utils'
 
 @Table({
   timestamps: true,
-  indexes: [
-    {
-      fields: [
-        'proposalId',
-        'voterAddress',
-        {
-          name: 'blockHeight',
-          order: 'DESC',
-        },
-      ],
-    },
-  ],
 })
 export class GovProposalVote extends DependableEventModel {
   @PrimaryKey

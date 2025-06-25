@@ -45,6 +45,13 @@ export class WasmCodeService implements WasmCodeAdapter {
   }
 
   /**
+   * Return whether or not the service is initialized.
+   */
+  static get isInitialized(): boolean {
+    return !!this.instance
+  }
+
+  /**
    * Return the singleton created by the setUpInstance method, throwing an error
    * if not yet setup.
    */

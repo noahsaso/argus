@@ -63,6 +63,11 @@ import { Contract } from './Contract'
       concurrently: true,
       using: 'gin',
     },
+    // Speeds up transform script queries iterating over all events in order of
+    // block height.
+    {
+      fields: ['blockHeight'],
+    },
   ],
 })
 export class WasmStateEvent extends DependableEventModel {
@@ -74,6 +79,7 @@ export class WasmStateEvent extends DependableEventModel {
 
   @BelongsTo(() => Contract)
   declare contract: Contract
+
   // Key is stored as a comma separated list of uint8 values that represents a
   // byte array. The byte array datatype doesn't allow for prefix queries, so we
   // have to manually encode binary data in a format that allows for

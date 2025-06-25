@@ -11,7 +11,6 @@ import { getBullWorker } from './connection'
  */
 export type QueueOptions = {
   config: Config
-  updateComputations: boolean
   sendWebhooks: boolean
 }
 

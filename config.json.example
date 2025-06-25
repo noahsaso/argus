@@ -1,6 +1,7 @@
 {
   "home": "~/.juno/indexer",
-  "rpc": "https://juno-testnet-rpc.polkachu.com",
+  "localRpc": "http://localhost:26657",
+  "remoteRpc": "https://juno-testnet-rpc.polkachu.com",
   "bech32Prefix": "juno",
   "redis": {
     "host": "127.0.0.1",

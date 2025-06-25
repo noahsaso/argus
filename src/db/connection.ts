@@ -4,7 +4,7 @@ import path from 'path'
 import { Sequelize, SequelizeOptions } from 'sequelize-typescript'
 
 import { ConfigManager } from '@/config'
-import { DbType } from '@/types'
+import { DB, DbType } from '@/types'
 import { objectMatchesStructure } from '@/utils'
 
 import {
@@ -18,10 +18,10 @@ import {
   AccountWebhookEventAttempt,
   BankBalance,
   BankStateEvent,
+  Block,
   Computation,
   ComputationDependency,
   Contract,
-  DistributionCommunityPoolStateEvent,
   GovProposal,
   GovProposalVote,
   StakingSlashEvent,
@@ -39,6 +39,7 @@ const sequelizeInstances: Partial<Record<DbType, Sequelize>> = {}
 type LoadDbOptions = {
   type?: DbType
   logging?: boolean
+  configOverride?: DB
 }
 
 // List of models included in the database per type. Load in function to avoid
@@ -48,10 +49,11 @@ const getModelsForType = (type: DbType): SequelizeOptions['models'] =>
     ? [
         BankBalance,
         BankStateEvent,
+        Block,
         Computation,
         ComputationDependency,
         Contract,
-        DistributionCommunityPoolStateEvent,
+        // DistributionCommunityPoolStateEvent,
         GovProposal,
         GovProposalVote,
         StakingSlashEvent,
@@ -79,6 +81,7 @@ const getModelsForType = (type: DbType): SequelizeOptions['models'] =>
 export const loadDb = async ({
   logging = false,
   type = DbType.Data,
+  configOverride,
 }: LoadDbOptions = {}) => {
   if (sequelizeInstances[type]) {
     return sequelizeInstances[type]!
@@ -94,6 +97,47 @@ export const loadDb = async ({
   const options: SequelizeOptions = {
     // User config.
     ...dbConfig,
+
+    // Overrides.
+    ...configOverride,
+
+    // Pool options.
+    pool: {
+      max: 10,
+      // Maintain warm connections.
+      min: 3,
+      acquire: 30_000,
+      // Allow long idle times.
+      idle: 30_000,
+      // Regular health checks.
+      evict: 5_000,
+
+      // Override with config.
+      ...dbConfig.pool,
+
+      // Overrides.
+      ...configOverride?.pool,
+    },
+
+    // Retry
+    retry: {
+      max: 5,
+      backoffBase: 1_000,
+      backoffExponent: 1.5,
+      match: [
+        /Deadlock/i,
+        /ConnectionError/i,
+        /ConnectionRefusedError/i,
+        /ConnectionTimedOutError/i,
+        /TimeoutError/i,
+      ],
+
+      // Override with config.
+      ...dbConfig.retry,
+
+      // Overrides.
+      ...configOverride?.retry,
+    },
 
     // Allow options to override logging, but default to false.
     logging: dbConfig.logging ?? logging ? console.log : false,

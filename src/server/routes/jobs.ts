@@ -11,22 +11,50 @@ export const setUpBullBoard = async (
   app: Koa,
   { exporterDashboardPassword }: Config
 ) => {
-  // Test redis connection. If it fails, don't start the bull board.
-  if (!(await testRedisConnection())) {
-    console.error('REDIS CONNECTION FAILED, SKIPPING BULL BOARD\n')
-    return
+  const setUpBullBoard = async () => {
+    const bullApp = new Koa()
+
+    bullApp.use(
+      auth({
+        name: 'exporter',
+        pass: exporterDashboardPassword || 'exporter',
+      })
+    )
+
+    bullApp.use(makeBullBoardJobsMiddleware('/jobs'))
+
+    app.use(mount('/jobs', bullApp))
   }
 
-  const bullApp = new Koa()
+  // Test redis connection before mounting the bull board.
+  if (await testRedisConnection()) {
+    await setUpBullBoard()
+  }
+  // If connection fails, add placeholder route that attempts to connect to
+  // redis and re-mount the bull board.
+  else {
+    console.error('REDIS CONNECTION FAILED, BULL BOARD NOT CONNECTED\n')
 
-  bullApp.use(
-    auth({
-      name: 'exporter',
-      pass: exporterDashboardPassword || 'exporter',
+    const placeholderRoute = mount('/jobs', async (ctx) => {
+      try {
+        if (await testRedisConnection(true)) {
+          // Remove this placeholder route.
+          const index = app.middleware.indexOf(placeholderRoute)
+          if (index !== -1) {
+            app.middleware.splice(index, 1)
+          }
+
+          // Mount the bull board.
+          await setUpBullBoard()
+        }
+      } catch (err) {
+        ctx.status = 500
+        ctx.body = `Redis connection failed: ${
+          err instanceof Error ? err.message : `${err}`
+        }`
+      }
     })
-  )
 
-  bullApp.use(makeBullBoardJobsMiddleware('/jobs'))
-
-  app.use(mount('/jobs', bullApp))
+    app.use(placeholderRoute)
+  }
 }

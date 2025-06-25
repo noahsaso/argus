@@ -14,17 +14,12 @@ program.option(
   'path to config file, falling back to config.json'
 )
 program.option(
-  // Adds inverted `update` boolean to the options object.
-  '--no-update',
-  "don't update computation validity based on new events or transformations"
-)
-program.option(
   // Adds inverted `webhooks` boolean to the options object.
   '--no-webhooks',
   "don't send webhooks"
 )
 program.parse()
-const { config: _config, update, webhooks } = program.opts()
+const { config: _config, webhooks } = program.opts()
 
 // Load config from specific config file.
 const config = ConfigManager.load(_config)
@@ -58,7 +53,6 @@ const main = async () => {
   // Create bull workers.
   const options: QueueOptions = {
     config,
-    updateComputations: !!update,
     sendWebhooks: !!webhooks,
   }
 
@@ -90,6 +84,7 @@ const main = async () => {
       })
     }
   })
+
   // Tell pm2 we're ready.
   if (process.send) {
     process.send('ready')

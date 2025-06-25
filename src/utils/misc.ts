@@ -20,7 +20,7 @@ export const retry = async <T extends unknown>(
   callback: (
     attempt: number,
     bail: (error?: Error | string) => void
-  ) => Promise<T>,
+  ) => T | Promise<T>,
   delayMs?: number
 ): Promise<T> => {
   let attempt = 1

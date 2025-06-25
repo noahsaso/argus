@@ -9,7 +9,7 @@ export const accounts: AccountFormula<string[]> = {
 
     const codeIds = getCodeIdsForKeys('valence-account')
     if (!codeIds.length) {
-      throw new Error('missing valence account code IDs')
+      return []
     }
 
     const valenceAccounts =

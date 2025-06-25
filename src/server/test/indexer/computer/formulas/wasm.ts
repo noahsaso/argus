@@ -1,7 +1,7 @@
 import request from 'supertest'
 import { afterEach, beforeEach, describe, it } from 'vitest'
 
-import { State, WasmStateEvent } from '@/db'
+import { Block, State, WasmStateEvent } from '@/db'
 import { dbKeyForKeys } from '@/utils'
 
 import { app } from '../../app'
@@ -41,6 +41,21 @@ export const loadWasmTests = (options: ComputerTestOptions) => {
           value: '{"key3":"value3"}',
           valueJson: { key3: 'value3' },
           delete: false,
+        },
+      ])
+
+      await Block.createMany([
+        {
+          height: 1,
+          timeUnixMs: 1,
+        },
+        {
+          height: 2,
+          timeUnixMs: 2,
+        },
+        {
+          height: 3,
+          timeUnixMs: 3,
         },
       ])
 

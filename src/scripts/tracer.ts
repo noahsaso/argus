@@ -5,7 +5,7 @@ import * as Sentry from '@sentry/node'
 import { Command } from 'commander'
 
 import { ConfigManager } from '@/config'
-import { State, loadDb } from '@/db'
+import { Block, State, loadDb } from '@/db'
 import { ExportQueue } from '@/queues/queues/export'
 import { setupMeilisearch } from '@/search'
 import { WasmCodeService } from '@/services/wasm-codes'
@@ -18,7 +18,7 @@ import {
   setUpFifoJsonTracer,
 } from '@/tracer'
 import { DbType, NamedHandler, TracedEvent } from '@/types'
-import { getCosmWasmClient, objectMatchesStructure } from '@/utils'
+import { AutoCosmWasmClient, objectMatchesStructure } from '@/utils'
 
 // Parse arguments.
 const program = new Command()
@@ -78,6 +78,12 @@ const main = async () => {
 
   const dataSequelize = await loadDb({
     type: DbType.Data,
+    configOverride: {
+      pool: {
+        min: 2,
+        max: 5,
+      },
+    },
   })
 
   // Set up wasm code service.
@@ -99,7 +105,8 @@ const main = async () => {
     : null
 
   // Create CosmWasm client that batches requests.
-  const cosmWasmClient = await getCosmWasmClient(config.rpc)
+  const autoCosmWasmClient = new AutoCosmWasmClient(config.remoteRpc)
+  await autoCosmWasmClient.update()
 
   // Set up handlers.
   const handlers = await Promise.all(
@@ -108,20 +115,18 @@ const main = async () => {
         name,
         handler: await handlerMaker({
           config,
-          cosmWasmClient,
-          // These are only relevant when processing, not tracing.
-          updateComputations: false,
+          autoCosmWasmClient,
           sendWebhooks: false,
         }),
       })
     )
   )
 
-  console.log(`\n[${new Date().toISOString()}] Exporting from trace...`)
+  console.log(`\n[${new Date().toISOString()}] Starting tracer...`)
 
   const webSocketListener = new ChainWebSocketListener()
   const blockTimeFetcher = new BlockTimeFetcher(
-    cosmWasmClient,
+    autoCosmWasmClient,
     webSocketListener
   )
 
@@ -132,21 +137,20 @@ const main = async () => {
     // Cache block time for block height in cache used by state.
     blockTimeFetcher.cache.set(latestBlockHeight, latestBlockTimeUnixMs)
 
-    // Update state singleton with chain ID and latest block.
-    await State.updateSingleton({
-      chainId: chain_id,
-      latestBlockHeight: BigInt(latestBlockHeight).toString(),
-      latestBlockTimeUnixMs: BigInt(latestBlockTimeUnixMs).toString(),
-    })
+    // Update state singleton with chain ID, and create block.
+    await Promise.all([
+      State.updateSingleton({
+        chainId: chain_id,
+      }),
+      Block.createOne({
+        height: latestBlockHeight,
+        timeUnixMs: latestBlockTimeUnixMs,
+      }),
+    ])
   })
 
   const exporter = new BatchedTraceExporter()
   const manager = new TracerManager(handlers, blockTimeFetcher, exporter)
-
-  // Tell pm2 we're ready right before we start reading.
-  if (process.send) {
-    process.send('ready')
-  }
 
   const { promise: tracer, close: closeTracer } = setUpFifoJsonTracer({
     file: traceFile,
@@ -196,7 +200,7 @@ const main = async () => {
   // If WebSocket enabled, connect to it before queueing.
   if (webSocketEnabled) {
     console.log(`[${new Date().toISOString()}] Connecting to WebSocket...`)
-    await webSocketListener.connect()
+    webSocketListener.connect()
   }
 
   // Add shutdown signal handler.
@@ -221,6 +225,13 @@ const main = async () => {
       ].join('\n')
     )
   })
+
+  // Tell pm2 we're ready right before we start reading.
+  if (process.send) {
+    process.send('ready')
+  }
+
+  console.log(`[${new Date().toISOString()}] Tracer ready.`)
 
   // Wait for tracer to close. Happens on FIFO closure or if `closeTracer` is
   // manually called, such as in the SIGINT handler above.

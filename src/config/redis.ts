@@ -28,7 +28,12 @@ export const getRedis = (options?: RedisOptions): Redis => {
 /**
  * Test the connection to Redis.
  */
-export const testRedisConnection = async (): Promise<boolean> => {
+export const testRedisConnection = async (
+  /**
+   * If true, throw error if the connection fails instead of returning false.
+   */
+  throwError = false
+): Promise<boolean> => {
   const config = getRedisConfig()
   if (!config) {
     return false
@@ -48,6 +53,10 @@ export const testRedisConnection = async (): Promise<boolean> => {
 
     return true
   } catch (err) {
+    if (throwError) {
+      throw err
+    }
+
     if (
       err instanceof Error &&
       (err.message.includes('maxRetriesPerRequest') ||

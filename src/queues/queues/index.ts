@@ -1,4 +1,5 @@
 export { ExportQueue } from './export'
 export { SearchQueue } from './search'
 export { TransformationsQueue } from './transformations'
+export { WasmCodeTrackersQueue } from './wasm-code-trackers'
 export { WebhooksQueue } from './webhooks'

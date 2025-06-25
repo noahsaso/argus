@@ -7,13 +7,13 @@ import { Sequelize } from 'sequelize'
 
 import {
   AccountWebhook,
+  Block,
   Contract,
   State,
-  WasmCodeKey,
   WasmStateEvent,
   WasmStateEventTransformation,
-  updateComputationValidityDependentOnChanges,
 } from '@/db'
+import { WasmCodeTrackersQueue } from '@/queues/queues'
 import { WasmCodeService } from '@/services'
 import { transformParsedStateEvents } from '@/transformers'
 import {
@@ -22,18 +22,54 @@ import {
   ParsedWasmStateEvent,
   WasmExportData,
 } from '@/types'
-import { wasmCodeTrackers } from '@/wasmCodeTrackers'
+import { dbKeyForKeys } from '@/utils'
 
 const STORE_NAME = 'wasm'
 const DEFAULT_CONTRACT_BYTE_LENGTH = 32
 
+// Only save specific state events for contracts matching these code IDs keys.
+const CONTRACT_STATE_EVENT_KEY_ALLOWLIST: Partial<
+  Record<
+    string,
+    {
+      codeIdsKeys: string[]
+      stateKeys: string[]
+    }[]
+  >
+> = {
+  'kaiyo-1': [
+    {
+      codeIdsKeys: ['kujira-fin'],
+      stateKeys: ['contract_info'],
+    },
+  ],
+  'osmosis-1': [
+    {
+      codeIdsKeys: [
+        'levana-finance',
+        'cl-vault',
+        'icns-resolver',
+        'skip-api',
+        'calc-dca',
+        'rate-limiter',
+      ],
+      stateKeys: ['contract_info'],
+    },
+  ],
+}
+
 export const wasm: HandlerMaker<WasmExportData> = async ({
   config: { bech32Prefix },
-  updateComputations,
   sendWebhooks,
-  cosmWasmClient,
+  autoCosmWasmClient,
 }) => {
-  const chainId = await cosmWasmClient.getChainId()
+  const chainId =
+    autoCosmWasmClient.chainId || (await State.getSingleton())?.chainId
+  if (!chainId) {
+    throw new Error(
+      'Chain ID needed for wasm export, failed to load from RPC or State model in DB.'
+    )
+  }
 
   const isTerraClassic = chainId === 'columbus-5'
 
@@ -42,9 +78,12 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
   const CONTRACT_KEY_PREFIX = isTerraClassic ? 0x04 : 0x02
   const CONTRACT_STORE_PREFIX = isTerraClassic ? 0x05 : 0x03
 
-  // Get the wasm code trackers for this chain.
-  const chainWasmCodeTrackers = wasmCodeTrackers.filter(
-    (t) => t.chainId === chainId
+  // Get the contract state event allowlist.
+  const stateEventAllowlist = CONTRACT_STATE_EVENT_KEY_ALLOWLIST[chainId]?.map(
+    ({ codeIdsKeys, stateKeys }) => ({
+      codeIdsKeys,
+      stateKeys: stateKeys.map((key) => dbKeyForKeys(key)),
+    })
   )
 
   // Get code ID for contract, cached in memory.
@@ -59,8 +98,15 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
     const loadIntoCache = async () => {
       let codeId = 0
       try {
-        const contract = await cosmWasmClient.getContract(contractAddress)
-        codeId = contract.codeId
+        if (autoCosmWasmClient.client) {
+          codeId = (
+            await autoCosmWasmClient.client.getContract(contractAddress)
+          ).codeId
+        } else {
+          throw new Error(
+            `CosmWasm client not connected, cannot get code ID for ${contractAddress}.`
+          )
+        }
       } catch (err) {
         // If contract not found, ignore, leaving as 0. Otherwise, throw err.
         if (
@@ -186,6 +232,9 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
         data: {
           address: contractAddress,
           codeId: Number(contractInfo.codeId),
+          admin: contractInfo.admin,
+          creator: contractInfo.creator,
+          label: contractInfo.label,
           blockHeight,
           blockTimeUnixMs,
         },
@@ -232,6 +281,15 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
   }
 
   const process: Handler<WasmExportData>['process'] = async (events) => {
+    // Save blocks from events.
+    await Block.createMany(
+      [...new Set(events.map((e) => e.data.blockHeight))].map((height) => ({
+        height,
+        timeUnixMs: events.find((e) => e.data.blockHeight === height)!.data
+          .blockTimeUnixMs,
+      }))
+    )
+
     // Export contracts.
     const contractEvents = events.flatMap((event) =>
       event.type === 'contract' ? event.data : []
@@ -239,77 +297,56 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
     if (contractEvents.length > 0) {
       await Contract.bulkCreate(
         contractEvents.map(
-          ({ address, codeId, blockHeight, blockTimeUnixMs }) => ({
+          ({
             address,
             codeId,
+            admin,
+            creator,
+            label,
+            blockHeight,
+            blockTimeUnixMs,
+          }) => ({
+            address,
+            codeId,
+            admin,
+            creator,
+            label,
             instantiatedAtBlockHeight: blockHeight,
             instantiatedAtBlockTimeUnixMs: blockTimeUnixMs,
             instantiatedAtBlockTimestamp: new Date(Number(blockTimeUnixMs)),
           })
         ),
         {
-          updateOnDuplicate: ['codeId'],
+          updateOnDuplicate: ['codeId', 'admin', 'creator', 'label'],
         }
       )
-
-      // Check if any contracts are tracked, and save their code ID if so.
-      if (chainWasmCodeTrackers.length > 0) {
-        let updatedCodeKey = false
-        await Promise.all(
-          contractEvents.flatMap(({ address, codeId }) => {
-            const trackers = chainWasmCodeTrackers.filter((t) =>
-              t.contractAddresses.has(address)
-            )
-
-            if (!trackers.length) {
-              return []
-            }
-
-            return trackers.map(async ({ codeKey }) => {
-              try {
-                await WasmCodeKey.createFromKeyAndIds(codeKey, codeId)
-                updatedCodeKey = true
-              } catch (err) {
-                // Capture failures and move on.
-                console.error(
-                  `Failed to save tracked wasm code for ${address} with code ID ${codeId} and code key ${codeKey}:`,
-                  err
-                )
-                Sentry.captureException(err, {
-                  tags: {
-                    type: 'failed-save-tracked-wasm-code',
-                    script: 'export',
-                    handler: 'wasm',
-                    chainId,
-                    codeKey,
-                    address,
-                    codeId,
-                  },
-                })
-              }
-            })
-          })
-        )
-
-        // Update service if any code keys were updated.
-        if (updatedCodeKey) {
-          await WasmCodeService.getInstance().reloadWasmCodeIdsFromDB()
-        }
-      }
     }
 
     // Export state.
-    let stateEvents = events
-      .flatMap((event) => (event.type === 'state' ? event.data : []))
-      .map(
-        (e): ParsedWasmStateEvent => ({
-          ...e,
-          blockTimestamp: new Date(Number(e.blockTimeUnixMs)),
-        })
-      )
+    let stateEvents = events.flatMap((event) =>
+      event.type === 'state' ? event.data : []
+    )
+
+    // Attempt to track code keys based on BOTH contract and state event
+    // updates, since a contract may be instantiated in the same block it sets
+    // tracked state keys.
+    if (contractEvents.length > 0) {
+      WasmCodeTrackersQueue.add(contractEvents[0].blockHeight, {
+        contractEvents,
+        stateEventUpdates: stateEvents,
+      })
+    }
+
     if (!stateEvents.length) {
       return []
     }
+
+    stateEvents = stateEvents.map(
+      (e): ParsedWasmStateEvent => ({
+        ...e,
+        blockTimestamp: new Date(Number(e.blockTimeUnixMs)),
+      })
+    )
 
     const state = await State.getSingleton()
     if (!state) {
@@ -389,6 +426,33 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
           where: {
             address: uniqueContracts,
           },
+        })
+      }
+
+      const allowlist = stateEventAllowlist
+        ?.map(({ codeIdsKeys, ...rest }) => ({
+          ...rest,
+          codeIds: WasmCodeService.getInstance().findWasmCodeIdsByKeys(
+            ...codeIdsKeys
+          ),
+        }))
+        .filter(({ codeIds }) => codeIds.length > 0)
+
+      // Keep events for contracts that do not exist in the allowlist or whose
+      // state keys are not in the allowlist.
+      if (allowlist?.length) {
+        stateEvents = stateEvents.filter((event) => {
+          const codeId = contracts.find(
+            (contract) => contract.address === event.contractAddress
+          )?.codeId
+
+          return (
+            !codeId ||
+            !allowlist.some(
+              ({ codeIds, stateKeys }) =>
+                codeIds.includes(codeId) && !stateKeys.includes(event.key)
+            )
+          )
         })
       }
 
@@ -498,10 +562,6 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
 
     const createdEvents = [...exportedEvents, ...transformations]
 
-    if (updateComputations) {
-      await updateComputationValidityDependentOnChanges(createdEvents)
-    }
-
     // Queue webhooks as needed.
     if (sendWebhooks) {
       // Don't queue webhooks for events before `lastWasmBlockHeightExported` to
@@ -522,10 +582,11 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
 
     // Store last block height exported, and update latest block
     // height/time if the last export is newer.
-    const lastBlockHeightExported =
-      exportedEvents[exportedEvents.length - 1].blockHeight
-    const lastBlockTimeUnixMsExported =
-      exportedEvents[exportedEvents.length - 1].blockTimeUnixMs
+    const lastEvent = events.sort(
+      (a, b) => Number(a.data.blockHeight) - Number(b.data.blockHeight)
+    )[events.length - 1]
+    const lastBlockHeightExported = lastEvent.data.blockHeight
+    const lastBlockTimeUnixMsExported = lastEvent.data.blockTimeUnixMs
     await State.updateSingleton({
       lastWasmBlockHeightExported: Sequelize.fn(
         'GREATEST',

@@ -1,6 +1,6 @@
 {
   "name": "argus",
-  "version": "0.2.0",
+  "version": "0.2.7",
   "description": "",
   "license": "AGPL-3.0-only",
   "scripts": {
@@ -11,8 +11,8 @@
     "docker:test:dump": "docker compose -f compose.dump-test.yml up --exit-code-from test",
     "docker:test:computer": "docker compose -f compose.test.yml -f compose.test-computer.yml up --exit-code-from test",
     "coverage": "npm run test -- --coverage",
-    "prebuild": "tsc",
-    "build": "tsup",
+    "build": "tsc && tsup",
+    "build:only": "tsup",
     "build:watch": "tsup --watch",
     "postbuild": "npm run autodoc",
     "db:init": "npm run db:migrate:data; npm run db:setup -- -f",
@@ -28,8 +28,7 @@
     "tracer": "node dist/scripts/tracer.js",
     "workers": "node dist/scripts/workers.js",
     "workers:export": "node dist/scripts/worker-export.js",
-    "migrate-bank": "node dist/scripts/migrate-bank.js",
-    "migrate-timescaledb": "node dist/scripts/migrate-timescaledb.js",
+    "update-tracked-wasm-codes": "node dist/scripts/update-tracked-wasm-codes.js",
     "export:prod": "npm install && npm run build; pm2 delete all; npm run with-infisical -- npm run db:migrate:data && pm2 start ecosystem.config.js --only tracer,workers && pm2 save",
     "account-webhooks": "node dist/scripts/accountWebhooks.js",
     "transform": "node dist/scripts/transform.js",

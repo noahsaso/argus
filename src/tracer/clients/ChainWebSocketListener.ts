@@ -106,6 +106,8 @@ export class ChainWebSocketListener {
           },
         }
       )
+
+      return
     }
 
     // Get new-block WebSocket.

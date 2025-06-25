@@ -39,7 +39,6 @@ const main = async () => {
   // Create bull workers.
   const options: QueueOptions = {
     config,
-    updateComputations: false,
     sendWebhooks: false,
   }
 

@@ -1,6 +1,6 @@
 {
   "home": "/usr/src/app",
-  "rpc": "https://juno-testnet-rpc.polkachu.com",
+  "remoteRpc": "https://juno-testnet-rpc.polkachu.com",
   "bech32Prefix": "juno",
   "redis": {
     "host": "redis"

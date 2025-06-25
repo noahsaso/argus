@@ -4,11 +4,7 @@ import { FeePool } from '@dao-dao/types/protobuf/codegen/cosmos/distribution/v1b
 import retry from 'async-await-retry'
 import { Sequelize } from 'sequelize'
 
-import {
-  DistributionCommunityPoolStateEvent,
-  State,
-  updateComputationValidityDependentOnChanges,
-} from '@/db'
+import { Block, DistributionCommunityPoolStateEvent, State } from '@/db'
 import {
   Handler,
   HandlerMaker,
@@ -19,7 +15,7 @@ const STORE_NAME = 'distribution'
 
 export const distribution: HandlerMaker<
   ParsedDistributionCommunityPoolStateEvent
-> = async ({ updateComputations }) => {
+> = async () => {
   const match: Handler<ParsedDistributionCommunityPoolStateEvent>['match'] = (
     trace
   ) => {
@@ -77,6 +73,15 @@ export const distribution: HandlerMaker<
 
   const process: Handler<ParsedDistributionCommunityPoolStateEvent>['process'] =
     async (events) => {
+      // Save blocks from events.
+      await Block.createMany(
+        [...new Set(events.map((e) => e.blockHeight))].map((height) => ({
+          height,
+          timeUnixMs: events.find((e) => e.blockHeight === height)!
+            .blockTimeUnixMs,
+        }))
+      )
+
       const exportEvents = async () =>
         // Unique index on [blockHeight] ensures that we don't insert duplicate
         // events. If we encounter a duplicate, we update the `balances` field
@@ -94,16 +99,13 @@ export const distribution: HandlerMaker<
         interval: 100,
       })) as DistributionCommunityPoolStateEvent[]
 
-      if (updateComputations) {
-        await updateComputationValidityDependentOnChanges(exportedEvents)
-      }
-
       // Store last block height exported, and update latest block
       // height/time if the last export is newer.
-      const lastBlockHeightExported =
-        exportedEvents[exportedEvents.length - 1].blockHeight
-      const lastBlockTimeUnixMsExported =
-        exportedEvents[exportedEvents.length - 1].blockTimeUnixMs
+      const lastEvent = events.sort(
+        (a, b) => Number(a.blockHeight) - Number(b.blockHeight)
+      )[events.length - 1]
+      const lastBlockHeightExported = lastEvent.blockHeight
+      const lastBlockTimeUnixMsExported = lastEvent.blockTimeUnixMs
       await State.updateSingleton({
         lastDistributionBlockHeightExported: Sequelize.fn(
           'GREATEST',

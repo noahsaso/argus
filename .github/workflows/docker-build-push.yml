@@ -17,6 +17,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      security-events: write
 
     steps:
       - name: Checkout repository
@@ -55,3 +56,26 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Output SHA image tag
+        id: output_sha_image_tag
+        env:
+          DOCKER_METADATA: ${{ steps.meta.outputs.json }}
+        run: |
+          # Extract the image tag containing 'sha-'
+          image_tag=$(echo "$DOCKER_METADATA" | jq -r '.tags[] | select(. | test("sha-"))')
+          echo "Found SHA tag: $image_tag"
+          echo "sha_tag=$image_tag" >> $GITHUB_OUTPUT
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.output_sha_image_tag.outputs.sha_tag }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'

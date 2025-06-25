@@ -39,6 +39,9 @@ import { getDependentKey } from '@/utils'
         },
       ],
     },
+    {
+      fields: ['address'],
+    },
   ],
 })
 export class BankStateEvent extends DependableEventModel {
