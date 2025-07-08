@@ -12612,6 +12612,92 @@
         }
       }
     },
+    "/{chainId}/contract/{contractAddress}/xion/treasury/history": {
+      "get": {
+        "tags": [
+          "contract"
+        ],
+        "summary": "Get historical transaction data for the treasury with pagination and sorting",
+        "operationId": "xion_treasury_history_e8a04c6",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "contractAddress",
+            "in": "path",
+            "description": "contract address",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "description": "Page number (default: 1)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "query"
+          },
+          {
+            "name": "limit",
+            "description": "Items per page (default: 50, max: 1000)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            },
+            "in": "query"
+          },
+          {
+            "name": "sortBy",
+            "description": "Sort field (blockHeight, denom, balance, blockTimestamp)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "blockHeight",
+                "denom",
+                "balance",
+                "blockTimestamp"
+              ]
+            },
+            "in": "query"
+          },
+          {
+            "name": "sortOrder",
+            "description": "Sort direction (asc, desc)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            },
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          },
+          "400": {
+            "description": "missing required arguments"
+          }
+        }
+      }
+    },
     "/{chainId}/contract/{contractAddress}/xion/treasury/params": {
       "get": {
         "tags": [
