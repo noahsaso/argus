@@ -10,7 +10,7 @@ import type { Contract, StakingSlashEvent, WasmTxEvent } from '@/db'
 
 import { ComputationDependentKey } from './computation'
 import { ContractJson, DependableEventModel } from './db'
-import { Block, RequireAtLeastOne } from './misc'
+import { Block, NestedMap, RequireAtLeastOne } from './misc'
 
 export type KeyInput = string | number | Uint8Array
 export type KeyInputType = 'string' | 'number' | 'bytes'
@@ -438,6 +438,4 @@ export type ComputeRangeOptions = {
   timeStep?: bigint
 } & TypedFormula
 
-export type NestedFormulaMap<F> = {
-  [key: string]: F | NestedFormulaMap<F> | undefined
-}
+export type NestedFormulaMap<F> = NestedMap<F>

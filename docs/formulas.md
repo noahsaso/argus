@@ -12,7 +12,7 @@ means that the indexer doesn't have to recompute the formula for every block,
 but only when necessary. And if it has already computed it for a particular
 block, it can simply return the cached result.
 
-Formulas are defined in the `data/formulas` directory.
+Formulas are defined in the `src/formulas/formulas` directory.
 
 ## Formula Types
 

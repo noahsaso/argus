@@ -86,6 +86,10 @@ export class AccountKeyCredit extends Model {
     return this.paidAt !== null
   }
 
+  get remaining(): bigint {
+    return BigInt(this.amount) - BigInt(this.used)
+  }
+
   get apiJson(): AccountKeyCreditApiJson {
     return {
       paymentSource: this.paymentSource,

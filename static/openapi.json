@@ -21,6 +21,10 @@
     {
       "name": "generic",
       "description": "Endpoints that do not have a subject"
+    },
+    {
+      "name": "aggregator",
+      "description": "Endpoints that compute aggregated values"
     }
   ],
   "servers": [
@@ -13797,6 +13801,79 @@
             "name": "denom",
             "description": "native token denomination",
             "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          },
+          "400": {
+            "description": "missing required arguments"
+          }
+        }
+      }
+    },
+    "/{chainId}/a/balance/overTime": {
+      "get": {
+        "tags": [
+          "aggregator"
+        ],
+        "summary": "Aggregate account balance over a time range",
+        "operationId": "balance_overTime_d951fc3",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "address",
+            "description": "Account address to aggregate",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "in": "query"
+          },
+          {
+            "name": "denom",
+            "description": "Token denomination to aggregate",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "in": "query"
+          },
+          {
+            "name": "startTime",
+            "description": "Start time in Unix milliseconds",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "in": "query"
+          },
+          {
+            "name": "endTime",
+            "description": "End time in Unix milliseconds",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "in": "query"
+          },
+          {
+            "name": "timeStep",
+            "description": "Time step in milliseconds between data points",
+            "required": false,
             "schema": {
               "type": "string"
             },

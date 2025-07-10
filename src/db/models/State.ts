@@ -75,6 +75,14 @@ export class State extends Model {
     })
   }
 
+  static async mustGetSingleton(): Promise<State> {
+    const state = await State.getSingleton()
+    if (!state) {
+      throw new Error('State not found')
+    }
+    return state
+  }
+
   static async updateSingleton(
     updates: Parameters<typeof State.update>[0]
   ): Promise<State> {

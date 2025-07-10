@@ -74,6 +74,26 @@ this:
 An individual query, using `block`, `time`, or none of the above, returns a
 single result. **Its response is the value returned from the formula.**
 
+### GET `/:key/a/:aggregator`
+
+(Alternative: `GET /a/:aggregator` with `key` in the `X-API-Key` header.)
+
+Aggregators allow for complex aggregations of data over time, often by
+leveraging multiple formula calls and range queries.
+
+Aggregators are more flexible than formulas and define all of their own
+arguments.
+
+**Example**:
+
+To query the `sumFormulaOverRange` aggregator:
+
+```
+GET /api/indexer/aggregate/generic/simpleNumeric/sumFormulaOverRange?formulaType=contract&formulaName=someContract/balance&targetAddress=contract123&startBlockHeight=1000000&endBlockHeight=1001000
+```
+
+The response will be the aggregated value (e.g., a JSON number for the sum).
+
 ## Accounts
 
 The accounts API lets you manage accounts that can access the indexer API, as

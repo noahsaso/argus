@@ -26,6 +26,9 @@ be found in their respective docs:
 Read the [formulas docs](./formulas.md) for more information on how to write
 formulas that can be used to query the database.
 
+Read the [aggregators docs](./aggregators.md) for more information on how to
+write aggregators that can be used to query the database.
+
 ### API
 
 The API is a simple Koa server that makes it easy to write endpoints that query

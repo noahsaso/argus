@@ -16,12 +16,14 @@ import {
   compute,
   computeRange,
   getTypedFormula,
+  processComputationRange,
   typeIsFormulaTypeOrWallet,
 } from '@/formulas'
 import { WasmCodeService } from '@/services/wasm-codes'
 import {
   Block as BlockType,
   Cache,
+  ComputationOutput,
   FormulaType,
   FormulaTypeValues,
 } from '@/types'
@@ -500,11 +502,7 @@ export const loadComputer = async () => {
           return
         }
 
-        let outputs: {
-          value: any
-          blockHeight: bigint
-          blockTimeUnixMs: bigint
-        }[] = []
+        let rangeComputations: Pick<ComputationOutput, 'value' | 'block'>[] = []
 
         // Find existing start and end computations, and verify all are valid
         // between. If not, compute range.
@@ -612,11 +610,12 @@ export const loadComputer = async () => {
             }
 
             if (entireRangeValid) {
-              outputs = existingComputations.map(({ block, output }) => ({
-                value: output && JSON.parse(output),
-                blockHeight: block.height ?? -1n,
-                blockTimeUnixMs: block.timeUnixMs ?? -1n,
-              }))
+              rangeComputations = existingComputations.map(
+                ({ block, output }) => ({
+                  value: output && JSON.parse(output),
+                  block,
+                })
+              )
               existingUsed = true
             }
           }
@@ -624,7 +623,6 @@ export const loadComputer = async () => {
 
         // If could not find existing range, compute.
         if (!existingUsed) {
-          let rangeComputations
           // Formula errors are likely user errors, so just return 400.
           try {
             rangeComputations = await computeRange({
@@ -642,116 +640,15 @@ export const loadComputer = async () => {
             ctx.body = err instanceof Error ? err.message : `${err}`
             return
           }
-
-          outputs = rangeComputations.map(({ block, ...data }) => ({
-            ...data,
-            // If no block, the computation must not have accessed any keys. It
-            // may be a constant formula, in which case it doesn't have any
-            // block context.
-            blockHeight: block?.height ?? -1n,
-            blockTimeUnixMs: block?.timeUnixMs ?? -1n,
-            // Remove dependencies and latest block height valid from output.
-            dependencies: undefined,
-            latestBlockHeightValid: undefined,
-          }))
-
-          // Don't cache range computations automatically. // Cache computations
-          // for future queries. await Computation.createFromComputationOutputs(
-          // address, typedFormula, args, rangeComputations
-          // )
         }
 
-        let response: {
-          at?: string
-          value: any
-          // TODO: Turn into strings?
-          blockHeight: number
-          blockTimeUnixMs: number
-        }[] = []
-        // Skip to match step.
-        if (
-          (blockStep === undefined || blockStep === 1n) &&
-          (timeStep === undefined || timeStep === 1n)
-        ) {
-          response = outputs.map(({ value, blockHeight, blockTimeUnixMs }) => ({
-            value,
-            blockHeight: Number(blockHeight),
-            blockTimeUnixMs: Number(blockTimeUnixMs),
-          }))
-        } else if (blockStep) {
-          for (
-            let blockHeight = blocks[0].height;
-            blockHeight <= blocks[1].height;
-            blockHeight =
-              // Prevent infinite loop.
-              blockHeight === blocks[1].height
-                ? blockHeight + 1n
-                : // Make sure to include the last block.
-                blockHeight + blockStep > blocks[1].height
-                ? blocks[1].height
-                : // Increment normally.
-                  blockHeight + blockStep
-          ) {
-            // Sorted ascending by block, so find first computation with block
-            // height greater than desired block height and use the previous to
-            // get the latest value at the target block height. If not found,
-            // use the last one.
-            let index = outputs.findIndex((c) => c.blockHeight > blockHeight)
-            if (index === -1) {
-              index = outputs.length
-            }
-            if (index > 0) {
-              const output = outputs[index - 1]
-              response.push({
-                at: blockHeight.toString(),
-                value: output.value,
-                blockHeight: Number(output.blockHeight),
-                blockTimeUnixMs: Number(output.blockTimeUnixMs),
-              })
-              // Remove all computations before the one we just added, keeping
-              // the current one in case nothing has changed in the next step.
-              outputs.splice(0, index - 1)
-            }
-          }
-        } else if (times && timeStep) {
-          const endTimeUnixMs = times[1] ?? blocks[1].timeUnixMs
-          for (
-            let blockTime = times[0];
-            blockTime <= endTimeUnixMs;
-            blockTime =
-              // Prevent infinite loop.
-              blockTime === endTimeUnixMs
-                ? blockTime + 1n
-                : // Make sure to include the last block.
-                blockTime + timeStep > endTimeUnixMs
-                ? endTimeUnixMs
-                : // Increment normally.
-                  blockTime + timeStep
-          ) {
-            // Sorted ascending by block, so find first computation with block
-            // time greater than desired block time and use the previous to get
-            // the latest value at the target block time. If not found, use the
-            // last one.
-            let index = outputs.findIndex((c) => c.blockTimeUnixMs > blockTime)
-            if (index === -1) {
-              index = outputs.length
-            }
-            if (index > 0) {
-              const output = outputs[index - 1]
-              response.push({
-                at: blockTime.toString(),
-                value: output.value,
-                blockHeight: Number(output.blockHeight),
-                blockTimeUnixMs: Number(output.blockTimeUnixMs),
-              })
-              // Remove all computations before the one we just added, keeping
-              // the current one in case nothing has changed in the next step.
-              outputs.splice(0, index - 1)
-            }
-          }
-        }
-
-        computation = response
+        computation = processComputationRange({
+          outputs: rangeComputations,
+          blockStep,
+          timeStep,
+          blocks,
+          times,
+        })
       } else {
         // Otherwise compute for single block.
 
