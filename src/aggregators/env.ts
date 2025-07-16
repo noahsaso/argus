@@ -68,6 +68,7 @@ export const createAggregatorEnv = ({
     const typedFormula = getTypedFormula(type, formula)
 
     // Determine start and end blocks.
+    let times: [bigint, bigint | undefined] | undefined = undefined
 
     let blockStart = options.blocks?.start
     if (!blockStart && options.times?.start) {
@@ -76,6 +77,7 @@ export const createAggregatorEnv = ({
       if (time < 0) {
         time += BigInt(currentTime)
       }
+      times = [time, undefined]
       blockStart = (await Block.getForTime(time))?.block
     }
     // Fallback to first block if no start is provided.
@@ -92,6 +94,9 @@ export const createAggregatorEnv = ({
       // If time is negative, subtract from current time.
       if (time < 0) {
         time += BigInt(currentTime)
+      }
+      if (times) {
+        times[1] = time
       }
       blockEnd = (await Block.getForTime(time))?.block
     }
@@ -123,14 +128,13 @@ export const createAggregatorEnv = ({
       args,
       blockStart,
       blockEnd,
-      blockStep,
-      timeStep,
     })
 
     // Transform results to the expected format
     return processComputationRange({
       outputs: results,
       blocks: [blockStart, blockEnd],
+      times,
       blockStep,
       timeStep,
     })

@@ -573,8 +573,6 @@ export const loadComputer = async () => {
                   blockStart:
                     existingComputations[existingComputations.length - 1].block,
                   blockEnd: blocks[1],
-                  blockStep,
-                  timeStep,
                 })
               } catch (err) {
                 ctx.status = 400
@@ -632,8 +630,6 @@ export const loadComputer = async () => {
               args,
               blockStart: blocks[0],
               blockEnd: blocks[1],
-              blockStep,
-              timeStep,
             })
           } catch (err) {
             ctx.status = 400
