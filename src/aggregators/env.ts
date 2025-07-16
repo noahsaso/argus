@@ -20,6 +20,9 @@ export const createAggregatorEnv = ({
   block: latestBlock,
   args = {},
 }: AggregatorEnvOptions): AggregatorEnv => {
+  const date = new Date()
+  const currentTime = date.getTime()
+
   const formulaComputer: AggregatorFormulaComputer = async ({
     type,
     formula,
@@ -29,10 +32,19 @@ export const createAggregatorEnv = ({
   }) => {
     const typedFormula = getTypedFormula(type, formula)
 
-    const block =
-      options.block ||
-      (options.timeMs && (await Block.getForTime(options.timeMs))?.block) ||
-      latestBlock
+    let block = options.block
+    if (options.timeMs) {
+      let time = BigInt(options.timeMs)
+      // If time is negative, subtract from current time.
+      if (time < 0) {
+        time += BigInt(currentTime)
+      }
+
+      block = (await Block.getForTime(time))?.block
+    }
+    if (!block) {
+      block = latestBlock
+    }
 
     const result = await compute({
       ...typedFormula,
@@ -55,20 +67,38 @@ export const createAggregatorEnv = ({
   }) => {
     const typedFormula = getTypedFormula(type, formula)
 
-    // Determine start and end blocks
-    const blockStart = (options.blocks
-      ? options.blocks.start
-      : options.times.start &&
-        (await Block.getForTime(options.times.start))?.block) ||
-      // Fallback to first block if no start is provided.
-      (await Block.getFirst())?.block || { height: 0n, timeUnixMs: 0n }
-    const blockEnd =
-      (options.blocks
-        ? options.blocks.end
-        : options.times.end &&
-          (await Block.getForTime(options.times.end))?.block) ||
-      // Fallback to latest block if no end is provided.
-      latestBlock
+    // Determine start and end blocks.
+
+    let blockStart = options.blocks?.start
+    if (!blockStart && options.times?.start) {
+      let time = BigInt(options.times.start)
+      // If time is negative, subtract from current time.
+      if (time < 0) {
+        time += BigInt(currentTime)
+      }
+      blockStart = (await Block.getForTime(time))?.block
+    }
+    // Fallback to first block if no start is provided.
+    if (!blockStart) {
+      blockStart = (await Block.getFirst())?.block || {
+        height: 0n,
+        timeUnixMs: 0n,
+      }
+    }
+
+    let blockEnd = options.blocks?.end
+    if (!blockEnd && options.times?.end) {
+      let time = BigInt(options.times.end)
+      // If time is negative, subtract from current time.
+      if (time < 0) {
+        time += BigInt(currentTime)
+      }
+      blockEnd = (await Block.getForTime(time))?.block
+    }
+    // Fallback to latest block if no end is provided.
+    if (!blockEnd) {
+      blockEnd = latestBlock
+    }
 
     const blockStep =
       (options.blocks?.blockStep && BigInt(options.blocks.blockStep)) ||
@@ -109,7 +139,7 @@ export const createAggregatorEnv = ({
   return {
     chainId,
     block: latestBlock,
-    date: new Date(),
+    date,
     args,
     compute: formulaComputer,
     computeRange: formulaRangeComputer,
