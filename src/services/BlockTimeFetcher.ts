@@ -2,10 +2,9 @@ import * as Sentry from '@sentry/node'
 import { LRUCache } from 'lru-cache'
 
 import { State } from '@/db'
+import { ChainWebSocketListener } from '@/services'
 import { TracedEvent } from '@/types'
 import { AutoCosmWasmClient, retry } from '@/utils'
-
-import { ChainWebSocketListener } from './ChainWebSocketListener'
 
 export class BlockTimeFetcher {
   /**

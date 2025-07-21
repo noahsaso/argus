@@ -8,11 +8,13 @@ import { ConfigManager } from '@/config'
 import { Block, State, loadDb } from '@/db'
 import { ExportQueue } from '@/queues/queues/export'
 import { setupMeilisearch } from '@/search'
-import { WasmCodeService } from '@/services/wasm-codes'
 import {
-  BatchedTraceExporter,
   BlockTimeFetcher,
   ChainWebSocketListener,
+  WasmCodeService,
+} from '@/services'
+import {
+  BatchedTraceExporter,
   TracerManager,
   handlerMakers,
   setUpFifoJsonTracer,
@@ -124,7 +126,7 @@ const main = async () => {
 
   console.log(`\n[${new Date().toISOString()}] Starting tracer...`)
 
-  const webSocketListener = new ChainWebSocketListener()
+  const webSocketListener = new ChainWebSocketListener('NewBlock')
   const blockTimeFetcher = new BlockTimeFetcher(
     autoCosmWasmClient,
     webSocketListener

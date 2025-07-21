@@ -2,7 +2,7 @@
   "ignoreApiKey": true,
   "home": "./fake",
   "localRpc": "http://localhost:26657",
-  "remoteRpc": "https://juno-testnet-rpc.polkachu.com",
+  "remoteRpc": "https://juno-rpc.polkachu.com",
   "bech32Prefix": "juno",
   "redis": {
     "host": "redis"
