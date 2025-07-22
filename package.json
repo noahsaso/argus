@@ -27,7 +27,6 @@
     "clear-cache": "node dist/scripts/clearCache.js",
     "tracer": "node dist/scripts/tracer.js",
     "listener": "node dist/scripts/listener.js",
-    "listener:dev": "docker compose -f compose.dev.listener.yml up",
     "workers": "node dist/scripts/workers.js",
     "workers:export": "node dist/scripts/worker-export.js",
     "update-tracked-wasm-codes": "node dist/scripts/update-tracked-wasm-codes.js",

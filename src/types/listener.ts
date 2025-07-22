@@ -7,21 +7,29 @@ import { AutoCosmWasmClient } from '@/utils'
 import { Config } from './config'
 import { DependableEventModel } from './db'
 
-export type ExtractorInput = {
+export type ExtractorMatchInput = {
   hash: string
   tx: Tx
   messages: DecodedStargateMsg['stargate'][]
   events: TxResult['result']['events']
 }
 
+export type ExtractorExtractInput<Data extends unknown = unknown> = {
+  txHash: string
+  height: string
+  data: Data
+}
+
 export type Extractor<Data extends unknown = unknown> = {
   // The function that will be called for each TX which determines if it will be
   // queued for extraction. If returns an object, it will be queued. If returns
   // undefined, it will not be queued.
-  match: (input: ExtractorInput) => Data | undefined
+  match: (input: ExtractorMatchInput) => Data | undefined
   // The function that will be called with queued objects. Returns created
   // events.
-  extract: (data: Data[]) => Promise<DependableEventModel[]>
+  extract: (
+    input: ExtractorExtractInput<Data>
+  ) => Promise<DependableEventModel[]>
 }
 
 export type ExtractorMakerOptions = {

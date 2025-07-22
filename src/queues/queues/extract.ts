@@ -3,7 +3,7 @@ import { Job, Queue } from 'bullmq'
 
 import { extractorMakers } from '@/listener'
 import { queueMeilisearchIndexUpdates } from '@/search'
-import { NamedExtractor } from '@/types'
+import { ExtractorExtractInput, NamedExtractor } from '@/types'
 import { AutoCosmWasmClient } from '@/utils'
 import { queueWebhooks } from '@/webhooks'
 
@@ -12,7 +12,7 @@ import { closeBullQueue, getBullQueue, getBullQueueEvents } from '../connection'
 
 export type ExtractQueuePayload = {
   extractor: string
-  data: unknown
+  data: ExtractorExtractInput
 }
 
 export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {

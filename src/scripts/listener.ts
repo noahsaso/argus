@@ -3,6 +3,7 @@ import { decodeRawProtobufMsg } from '@dao-dao/types'
 import { Tx } from '@dao-dao/types/protobuf/codegen/cosmos/tx/v1beta1/tx'
 import * as Sentry from '@sentry/node'
 import { Command } from 'commander'
+import { Sequelize } from 'sequelize'
 
 import { ConfigManager } from '@/config'
 import { Block, State, loadDb } from '@/db'
@@ -62,7 +63,7 @@ const main = async () => {
   })
 
   // Initialize state.
-  await State.createSingletonIfMissing()
+  await State.createSingletonIfMissing(config.chainId)
 
   // Set up meilisearch.
   await setupMeilisearch()
@@ -95,10 +96,20 @@ const main = async () => {
     const latestBlockHeight = Number(height)
     const latestBlockTimeUnixMs = Date.parse(time)
 
-    // Update state singleton with chain ID, and create block.
+    // Update state singleton with chain ID and latest block, and create block.
     await Promise.all([
       State.updateSingleton({
         chainId: chain_id,
+        latestBlockHeight: Sequelize.fn(
+          'GREATEST',
+          Sequelize.col('latestBlockHeight'),
+          latestBlockHeight
+        ),
+        latestBlockTimeUnixMs: Sequelize.fn(
+          'GREATEST',
+          Sequelize.col('latestBlockTimeUnixMs'),
+          latestBlockTimeUnixMs
+        ),
       }),
       Block.createOne({
         height: latestBlockHeight,
@@ -144,26 +155,18 @@ const main = async () => {
         if (data) {
           await ExtractQueue.add(`${hash}-${name}`, {
             extractor: name,
-            data,
+            data: {
+              txHash: hash,
+              height,
+              data,
+            },
           })
 
           console.log(
-            `[${new Date().toISOString()}] TX ${hash} at block ${height} sent to ${name} extractor.`
+            `[${new Date().toISOString()}] TX ${hash} at block ${height} sent to "${name}" extractor.`
           )
         }
       }
-
-      // fs.writeFileSync(
-      //   `./txs/${hash}.json`,
-      //   JSON.stringify(
-      //     {
-      //       decodedMessages: messages,
-      //       events,
-      //     },
-      //     null,
-      //     2
-      //   )
-      // )
     }
   )
 

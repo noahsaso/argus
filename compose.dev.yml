@@ -1,7 +1,7 @@
 services:
   server:
     image: node:22-alpine
-    command: sh -c "npm install && npm run build; npm run db:init -- -d && npm run db:seed:dev && npm run serve:dev:nodocker"
+    command: sh -c "rm -f .ready; npm install && npm run build:only; npm run db:init -- -d && npm run db:seed:dev && touch .ready && npm run serve:dev:nodocker"
     working_dir: /usr/src/app
     ports:
       - 3420:3420 # server
@@ -20,6 +20,61 @@ services:
       db_data:
         condition: service_healthy
       redis:
+        condition: service_healthy
+    # check if app is built by looking for a ready file
+    healthcheck:
+      test: ['CMD-SHELL', 'test -f .ready']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 15s
+    # colorizes output
+    tty: true
+
+  # start listener once app is built
+  listener:
+    image: node:22-alpine
+    command: npm run listener
+    working_dir: /usr/src/app
+    volumes:
+      - .:/usr/src/app
+    environment:
+      NODE_ENV: development
+      # contains db connection info that matches db service setup below
+      CONFIG_FILE: config-dev.json
+    # waits for db and redis to start, and server to be done building
+    depends_on:
+      db_accounts:
+        condition: service_healthy
+      db_data:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      server:
+        condition: service_healthy
+    # colorizes output
+    tty: true
+
+  # start workers once app is built
+  workers:
+    image: node:22-alpine
+    command: npm run workers
+    working_dir: /usr/src/app
+    volumes:
+      - .:/usr/src/app
+    environment:
+      NODE_ENV: development
+      # contains db connection info that matches db service setup below
+      CONFIG_FILE: config-dev.json
+    # waits for db and redis to start, and server to be done building
+    depends_on:
+      db_accounts:
+        condition: service_healthy
+      db_data:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      server:
         condition: service_healthy
     # colorizes output
     tty: true

@@ -32,7 +32,7 @@ const main = async () => {
   await WasmCodeService.setUpInstance()
 
   // Initialize state.
-  await State.createSingletonIfMissing()
+  await State.createSingletonIfMissing(config.chainId)
 
   console.log(`\n[${new Date().toISOString()}] Starting export worker...`)
 
