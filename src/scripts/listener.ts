@@ -1,5 +1,3 @@
-import * as fs from 'fs'
-
 import { fromBase64 } from '@cosmjs/encoding'
 import { decodeRawProtobufMsg } from '@dao-dao/types'
 import { Tx } from '@dao-dao/types/protobuf/codegen/cosmos/tx/v1beta1/tx'
@@ -8,9 +6,11 @@ import { Command } from 'commander'
 
 import { ConfigManager } from '@/config'
 import { Block, State, loadDb } from '@/db'
+import { extractorMakers } from '@/listener'
+import { ExtractQueue } from '@/queues/queues'
 import { setupMeilisearch } from '@/search'
 import { ChainWebSocketListener, WasmCodeService } from '@/services'
-import { DbType } from '@/types'
+import { DbType, NamedExtractor } from '@/types'
 import { AutoCosmWasmClient } from '@/utils'
 
 declare global {
@@ -71,19 +71,19 @@ const main = async () => {
   const autoCosmWasmClient = new AutoCosmWasmClient(config.remoteRpc)
   await autoCosmWasmClient.update()
 
-  // Set up handlers.
-  // const handlers = await Promise.all(
-  //   Object.entries(handlerMakers).map(
-  //     async ([name, handlerMaker]): Promise<NamedHandler> => ({
-  //       name,
-  //       handler: await handlerMaker({
-  //         config,
-  //         autoCosmWasmClient,
-  //         sendWebhooks: false,
-  //       }),
-  //     })
-  //   )
-  // )
+  // Set up extractors.
+  const extractors = await Promise.all(
+    Object.entries(extractorMakers).map(
+      async ([name, extractorMaker]): Promise<NamedExtractor> => ({
+        name,
+        extractor: await extractorMaker({
+          config,
+          autoCosmWasmClient,
+          sendWebhooks: false,
+        }),
+      })
+    )
+  )
 
   console.log(`\n[${new Date().toISOString()}] Starting listener...`)
 
@@ -109,8 +109,6 @@ const main = async () => {
 
   webSocketListener.onTx(
     async (hash, { tx: txBase64, height, result: { events } }) => {
-      console.log(`TX ${hash} at block ${height}`)
-
       let tx
       try {
         tx = Tx.decode(fromBase64(txBase64))
@@ -124,27 +122,48 @@ const main = async () => {
         return
       }
 
-      // Attempt to decode each message, returning null if it fails.
-      const decodedMessages = tx.body.messages.map((message) => {
+      // Attempt to decode each message, ignoring errors.
+      const messages = tx.body.messages.flatMap((message) => {
         try {
           return decodeRawProtobufMsg(message)
         } catch (err) {
           console.error('Error decoding message', err)
-          return null
+          return []
         }
       })
 
-      fs.writeFileSync(
-        `./txs/${hash}.json`,
-        JSON.stringify(
-          {
-            decodedMessages,
-            events,
-          },
-          null,
-          2
-        )
-      )
+      // Match messages with extractors and add to queue.
+      for (const { name, extractor } of extractors) {
+        const data = extractor.match({
+          hash,
+          tx,
+          messages,
+          events,
+        })
+
+        if (data) {
+          await ExtractQueue.add(`${hash}-${name}`, {
+            extractor: name,
+            data,
+          })
+
+          console.log(
+            `[${new Date().toISOString()}] TX ${hash} at block ${height} sent to ${name} extractor.`
+          )
+        }
+      }
+
+      // fs.writeFileSync(
+      //   `./txs/${hash}.json`,
+      //   JSON.stringify(
+      //     {
+      //       decodedMessages: messages,
+      //       events,
+      //     },
+      //     null,
+      //     2
+      //   )
+      // )
     }
   )
 
@@ -161,6 +180,9 @@ const main = async () => {
 
     // Close database connection.
     await dataSequelize.close()
+
+    // Close queue.
+    ExtractQueue.close()
 
     process.exit(0)
   })
