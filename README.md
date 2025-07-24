@@ -260,7 +260,7 @@ AND "name" != 'info';
 ### View all table sizes
 
 ```sql
-SELECT table_name, pg_size_pretty(pg_total_relation_size(quote_ident(table_name))), pg_total_relation_size(quote_ident(table_name)) FROM information_schema.tables WHERE table_schema = 'public' ORDER BY 3 DESC;
+SELECT table_name, pg_size_pretty(pg_relation_size(quote_ident(table_name))) AS data_size, pg_size_pretty(pg_indexes_size(quote_ident(table_name))) AS index_size, pg_size_pretty(pg_total_relation_size(quote_ident(table_name))) AS total_size, pg_total_relation_size(quote_ident(table_name)) AS total_bytes FROM information_schema.tables WHERE table_schema = 'public' ORDER BY 3 DESC;
 ```
 
 ### View all database sizes
