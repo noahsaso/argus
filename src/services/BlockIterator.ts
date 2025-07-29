@@ -52,13 +52,13 @@ export class BlockIterator {
    * from 10 blocks after the earliest block the RPC endpoint has (in case the
    * earliest block gets pruned soon).
    */
-  private startHeight: number = 0
+  private _startHeight: number = 0
 
   /**
    * The end block height, if any. If not provided, the iterator will not stop
    * until stopped.
    */
-  private endHeight?: number
+  public readonly endHeight?: number
 
   /**
    * The current block height being processed.
@@ -73,7 +73,7 @@ export class BlockIterator {
   /**
    * Maximum number of blocks to buffer ahead.
    */
-  private readonly bufferSize: number
+  public readonly bufferSize: number
 
   /**
    * Whether the fetcher is currently running.
@@ -121,9 +121,13 @@ export class BlockIterator {
   }) {
     this.rpcUrl = rpcUrl
     this.autoCosmWasmClient = autoCosmWasmClient
-    this.startHeight = startHeight
+    this._startHeight = startHeight
     this.endHeight = endHeight
     this.bufferSize = bufferSize
+  }
+
+  get startHeight() {
+    return this._startHeight
   }
 
   /**
@@ -170,7 +174,7 @@ export class BlockIterator {
       )
     }
 
-    this.startHeight = Math.max(this.startHeight ?? 0, minStartHeight)
+    this._startHeight = Math.max(this.startHeight ?? 0, minStartHeight)
 
     // Fatal error if end height is less than start height.
     if (this.endHeight && this.endHeight < this.startHeight) {
@@ -370,8 +374,8 @@ export class BlockIterator {
       })
 
       // Set up the callback to update the latest block height.
-      this.chainWebSocketListener.onNewBlock(async (block) => {
-        this.latestBlockHeight = Number(block.height)
+      this.chainWebSocketListener.onNewBlock(async ({ height }) => {
+        this.latestBlockHeight = Number(height)
       })
 
       // Detect WebSocket connection state changes to start/stop the fallback

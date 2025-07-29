@@ -200,7 +200,7 @@ export class ChainWebSocketListener {
   private get _reconnectDelay() {
     // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s (max)
     const delay = Math.min(
-      1000 * Math.pow(2, this._reconnectAttempt),
+      1000 * Math.pow(2, this._reconnectAttempt - 1),
       this._maxReconnectDelay
     )
     return delay
@@ -263,10 +263,10 @@ export class ChainWebSocketListener {
     await this._emitConnectionEvent({
       state: 'connecting',
       isReconnection: this._reconnectAttempt > 0,
-      attempt: this._reconnectAttempt + 1,
+      attempt: this._reconnectAttempt,
     })
 
-    while (this._shouldReconnect && !this._connected) {
+    while (this._connecting) {
       try {
         await this._singleConnectionAttempt({ skipWait, timeoutMs })
         // If we get here, connection was successful
@@ -279,7 +279,10 @@ export class ChainWebSocketListener {
           await this._emitConnectionEvent({
             state: 'error',
             isReconnection: false,
-            error: error instanceof Error ? error : new Error(String(error)),
+            error:
+              error instanceof Error
+                ? error
+                : new Error(String(error || 'Unknown error')),
           })
 
           this._connecting = false
@@ -310,7 +313,10 @@ export class ChainWebSocketListener {
         await this._emitConnectionEvent({
           state: 'error',
           isReconnection: true,
-          error: error instanceof Error ? error : new Error(String(error)),
+          error:
+            error instanceof Error
+              ? error
+              : new Error(String(error || 'Unknown error')),
           attempt: this._reconnectAttempt,
         })
 
@@ -395,7 +401,17 @@ export class ChainWebSocketListener {
         this.rpc.replace(/^http/, 'ws') + '/websocket'
       )
 
-      this.webSocket.on('open', () => {
+      this.webSocket.onopen = () => {
+        cleanup()
+        this._connected = true
+
+        // Emit connected state
+        this._emitConnectionEvent({
+          state: 'connected',
+          isReconnection: this._reconnectAttempt > 0,
+          attempt: this._reconnectAttempt,
+        })
+
         // Subscribe to all event types.
         const types = [this.eventTypes].flat()
         types.forEach((type) =>
@@ -411,21 +427,13 @@ export class ChainWebSocketListener {
           )
         )
 
-        cleanup()
-        resolve()
-        this._connected = true
         console.log(`[${new Date().toISOString()}] WebSocket connected.`)
 
-        // Emit connected state
-        this._emitConnectionEvent({
-          state: 'connected',
-          isReconnection: this._reconnectAttempt > 0,
-          attempt: this._reconnectAttempt + 1,
-        })
-      })
+        resolve()
+      }
 
       // Listen for new blocks.
-      this.webSocket.on('message', async (data) => {
+      this.webSocket.onmessage = async ({ data }) => {
         try {
           const msg = JSON.parse(data.toString()) as WebSocketMessage
           // Ignore empty messages, such as the subscription confirmation.
@@ -466,16 +474,20 @@ export class ChainWebSocketListener {
             error
           )
         }
-      })
+      }
 
       // Log error and handle reconnection.
-      this.webSocket.on('error', async (error) => {
+      this.webSocket.onerror = async ({ error }) => {
         cleanup()
 
         // If we're in the middle of initial connection, reject connection
         // attempt so it retries or fails if retry is disabled.
         if (!this._connected) {
-          reject(error)
+          reject(
+            error instanceof Error
+              ? error
+              : new Error(String(error || 'Unknown error'))
+          )
           return
         }
 
@@ -483,8 +495,7 @@ export class ChainWebSocketListener {
 
         // Reset connection state.
         this._connected = false
-        this._reconnectAttempt = 0
-        this.webSocket?.terminate()
+        this.webSocket?.close()
         this.webSocket = null
 
         console.error(
@@ -495,20 +506,24 @@ export class ChainWebSocketListener {
         // Emit error state
         await this._emitConnectionEvent({
           state: 'error',
-          isReconnection: true,
-          error: error instanceof Error ? error : new Error(String(error)),
+          isReconnection: this._shouldReconnect,
+          error:
+            error instanceof Error
+              ? error
+              : new Error(String(error || 'Unknown error')),
         })
 
         // Reconnect if enabled
         if (this._shouldReconnect) {
+          this._reconnectAttempt++
           setTimeout(
             () => this._attemptConnection({ skipWait, timeoutMs }),
             1_000
           )
         }
-      })
+      }
 
-      this.webSocket.on('close', (code, reason) => {
+      this.webSocket.onclose = ({ code, reason }) => {
         cleanup()
 
         // If we're in the middle of initial connection, reject connection
@@ -526,8 +541,6 @@ export class ChainWebSocketListener {
 
         // Reset connection state.
         this._connected = false
-        this._reconnectAttempt = 0
-        this.webSocket?.terminate()
         this.webSocket = null
 
         console.error(
@@ -537,17 +550,18 @@ export class ChainWebSocketListener {
         // Emit disconnected state
         this._emitConnectionEvent({
           state: 'disconnected',
-          isReconnection: true,
+          isReconnection: this._shouldReconnect,
         })
 
         // Reconnect if enabled
         if (this._shouldReconnect) {
+          this._reconnectAttempt++
           setTimeout(
             () => this._attemptConnection({ skipWait, timeoutMs }),
             1_000
           )
         }
-      })
+      }
     })
   }
 
@@ -576,7 +590,7 @@ export class ChainWebSocketListener {
     }
 
     this._connected = false
-    this.webSocket.terminate()
+    this.webSocket.close()
     this.webSocket = null
 
     // Emit disconnected state for manual disconnection

@@ -10,6 +10,7 @@ services:
       - .:/usr/src/app
     environment:
       NODE_ENV: test
+      INTEGRATION_TESTS: true
       # contains db connection info that matches db service setup below
       CONFIG_FILE: config-test.json
     # waits for db and redis to start
