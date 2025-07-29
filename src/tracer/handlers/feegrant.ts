@@ -80,10 +80,10 @@ export const feegrant: HandlerMaker<ParsedFeegrantStateEvent> = async ({
     )
 
     const exportEvents = async () => {
-      // Use upsert pattern to handle grants and revocations
+      // Create new records for historical tracking (no upsert)
       const allowances = await Promise.all(
         events.map(async (event) => {
-          const [allowance] = await FeegrantAllowance.upsert({
+          const allowance = await FeegrantAllowance.create({
             granter: event.granter,
             grantee: event.grantee,
             blockHeight: event.blockHeight,

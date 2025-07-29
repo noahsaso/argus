@@ -180,6 +180,31 @@ export type FormulaCommunityPoolBalancesGetter = () => Promise<
   Record<string, string> | undefined
 >
 
+export type FormulaFeegrantAllowanceObject = {
+  granter: string
+  grantee: string
+  allowanceData: string
+  allowanceType: string | null
+  blockHeight: string
+  blockTimestamp: Date
+  active: boolean
+}
+
+export type FormulaFeegrantAllowanceGetter = (
+  granter: string,
+  grantee: string
+) => Promise<FormulaFeegrantAllowanceObject | undefined>
+
+export type FormulaFeegrantAllowancesGetter = (
+  address: string,
+  type?: 'granted' | 'received'
+) => Promise<FormulaFeegrantAllowanceObject[] | undefined>
+
+export type FormulaFeegrantHasAllowanceGetter = (
+  granter: string,
+  grantee: string
+) => Promise<boolean>
+
 export type FormulaProposalObject = {
   id: string
   data: string
@@ -293,6 +318,9 @@ export type Env<Args extends Record<string, string> = {}> = {
   getProposalVotes: FormulaProposalVotesGetter
   getProposalVoteCount: FormulaProposalVoteCountGetter
   getCommunityPoolBalances: FormulaCommunityPoolBalancesGetter
+  getFeegrantAllowance: FormulaFeegrantAllowanceGetter
+  getFeegrantAllowances: FormulaFeegrantAllowancesGetter
+  hasFeegrantAllowance: FormulaFeegrantHasAllowanceGetter
 
   /**
    * Raw database query. This cannot be cached, so any formula that uses this

@@ -15,6 +15,7 @@ module.exports = {
         type: DataType.TEXT,
       },
       blockHeight: {
+        primaryKey: true,
         allowNull: false,
         type: DataType.BIGINT,
       },
@@ -50,10 +51,31 @@ module.exports = {
       },
     })
 
-    // Add indexes for efficient querying
-    await queryInterface.addIndex('FeegrantAllowances', ['granter'])
-    await queryInterface.addIndex('FeegrantAllowances', ['grantee'])
-    await queryInterface.addIndex('FeegrantAllowances', ['active'])
+    // Add indexes for TimescaleDB optimization (matching WasmStateEvent pattern)
+    await queryInterface.addIndex('FeegrantAllowances', {
+      fields: [
+        'granter',
+        'grantee',
+        { name: 'blockHeight', order: 'DESC' },
+      ],
+    })
+
+    await queryInterface.addIndex('FeegrantAllowances', {
+      fields: [
+        { name: 'granter', operator: 'text_pattern_ops' },
+        { name: 'blockHeight', order: 'DESC' },
+      ],
+    })
+
+    await queryInterface.addIndex('FeegrantAllowances', {
+      fields: [
+        { name: 'grantee', operator: 'text_pattern_ops' },
+        { name: 'blockHeight', order: 'DESC' },
+      ],
+    })
+
+    // Speeds up transform script queries iterating over all events in order of block height
+    await queryInterface.addIndex('FeegrantAllowances', ['blockHeight'])
   },
   async down(queryInterface: QueryInterface) {
     await queryInterface.dropTable('FeegrantAllowances')

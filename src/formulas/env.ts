@@ -5,6 +5,7 @@ import {
   BankStateEvent,
   Contract,
   DistributionCommunityPoolStateEvent,
+  FeegrantAllowance,
   GovProposal,
   GovProposalVote,
   StakingSlashEvent,
@@ -1709,6 +1710,152 @@ export const getEnv = ({
       return event.balances
     }
 
+  const getFeegrantAllowance = async (granter: string, grantee: string) => {
+    const dependentKey = getDependentKey(
+      FeegrantAllowance.dependentKeyNamespace,
+      granter,
+      grantee
+    )
+    dependentKeys?.push({
+      key: dependentKey,
+      prefix: false,
+    })
+
+    // Check cache.
+    const cachedEvent = cache.events[dependentKey]
+    const event =
+      // If undefined, we haven't tried to fetch it yet. If not undefined,
+      // either it exists or it doesn't (null).
+      cachedEvent !== undefined
+        ? cachedEvent?.[0]
+        : await FeegrantAllowance.findOne({
+            where: {
+              granter,
+              grantee,
+              blockHeight: blockHeightFilter,
+            },
+            order: [['blockHeight', 'DESC']],
+          })
+
+    // Type-check. Should never happen assuming dependent key namespaces are
+    // unique across different event types.
+    if (event && !(event instanceof FeegrantAllowance)) {
+      throw new Error('Incorrect event type.')
+    }
+
+    // Cache event, null if nonexistent.
+    if (cachedEvent === undefined) {
+      cache.events[dependentKey] = event ? [event] : null
+    }
+
+    // If no event found, return undefined.
+    if (!event) {
+      return
+    }
+
+    // Call hook.
+    await onFetch?.([event])
+
+    return {
+      granter: event.granter,
+      grantee: event.grantee,
+      allowanceData: event.allowanceData,
+      allowanceType: event.allowanceType,
+      blockHeight: event.blockHeight,
+      blockTimestamp: event.blockTimestamp,
+      active: event.active,
+    }
+  }
+
+  const getFeegrantAllowances = async (
+    address: string,
+    type: 'granted' | 'received' = 'granted'
+  ) => {
+    const dependentKey = getDependentKey(
+      FeegrantAllowance.dependentKeyNamespace,
+      type === 'granted' ? address : '*',
+      type === 'received' ? address : '*'
+    )
+    dependentKeys?.push({
+      key: dependentKey,
+      prefix: true,
+    })
+
+    // Check cache.
+    const cachedEvents = cache.events[dependentKey]
+    const events =
+      // If undefined, we haven't tried to fetch them yet. If not undefined,
+      // either they exist or they don't (null).
+      cachedEvents !== undefined
+        ? ((cachedEvents ?? []) as FeegrantAllowance[])
+        : await FeegrantAllowance.findAll({
+            attributes: [
+              // DISTINCT ON is not directly supported by Sequelize, so we need
+              // to cast to unknown and back to string to insert this at the
+              // beginning of the query. This ensures we use the most recent
+              // version of each granter-grantee pair.
+              Sequelize.literal(
+                'DISTINCT ON("granter", "grantee") \'\''
+              ) as unknown as string,
+              'granter',
+              'grantee',
+              'blockHeight',
+              'blockTimeUnixMs',
+              'blockTimestamp',
+              'allowanceData',
+              'allowanceType',
+              'active',
+            ],
+            where: {
+              ...(type === 'granted' ? { granter: address } : { grantee: address }),
+              blockHeight: blockHeightFilter,
+            },
+            order: [
+              // Needs to be first so we can use DISTINCT ON.
+              ['granter', 'ASC'],
+              ['grantee', 'ASC'],
+              ['blockHeight', 'DESC'],
+            ],
+          })
+
+    // Type-check. Should never happen assuming dependent key namespaces are
+    // unique across different event types.
+    if (events.some((event) => !(event instanceof FeegrantAllowance))) {
+      throw new Error('Incorrect event type.')
+    }
+
+    // Cache events, null if nonexistent.
+    if (cachedEvents === undefined) {
+      cache.events[dependentKey] = events.length ? events : null
+    }
+
+    // If no events found, return undefined.
+    if (!events.length) {
+      return undefined
+    }
+
+    // Call hook.
+    await onFetch?.(events)
+
+    // Filter only active allowances and return formatted objects.
+    return events
+      .filter((event) => event.active)
+      .map((event) => ({
+        granter: event.granter,
+        grantee: event.grantee,
+        allowanceData: event.allowanceData,
+        allowanceType: event.allowanceType,
+        blockHeight: event.blockHeight,
+        blockTimestamp: event.blockTimestamp,
+        active: event.active,
+      }))
+  }
+
+  const hasFeegrantAllowance = async (granter: string, grantee: string) => {
+    const allowance = await getFeegrantAllowance(granter, grantee)
+    return allowance?.active ?? false
+  }
+
   const query: FormulaQuerier = async (query, bindParams) => {
     const db = await loadDb({
       type: DbType.Data,
@@ -1759,6 +1906,9 @@ export const getEnv = ({
     getProposalVoteCount,
 
     getCommunityPoolBalances,
+    getFeegrantAllowance,
+    getFeegrantAllowances,
+    hasFeegrantAllowance,
 
     query,
   }
