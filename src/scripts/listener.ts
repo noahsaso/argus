@@ -1,4 +1,3 @@
-import { fromBase64 } from '@cosmjs/encoding'
 import { decodeRawProtobufMsg } from '@dao-dao/types'
 import { Tx } from '@dao-dao/types/protobuf/codegen/cosmos/tx/v1beta1/tx'
 import * as Sentry from '@sentry/node'
@@ -10,7 +9,7 @@ import { Block, State, loadDb } from '@/db'
 import { extractorMakers } from '@/listener'
 import { ExtractQueue } from '@/queues/queues'
 import { setupMeilisearch } from '@/search'
-import { ChainWebSocketListener, WasmCodeService } from '@/services'
+import { BlockIterator, WasmCodeService } from '@/services'
 import { DbType, NamedExtractor } from '@/types'
 import { AutoCosmWasmClient } from '@/utils'
 
@@ -63,7 +62,7 @@ const main = async () => {
   })
 
   // Initialize state.
-  await State.createSingletonIfMissing(config.chainId)
+  const state = await State.createSingletonIfMissing(config.chainId)
 
   // Set up meilisearch.
   await setupMeilisearch()
@@ -88,41 +87,68 @@ const main = async () => {
 
   console.log(`\n[${new Date().toISOString()}] Starting listener...`)
 
-  const webSocketListener = new ChainWebSocketListener(['NewBlock', 'Tx'], {
-    rpc: config.remoteRpc,
+  const blockIterator = new BlockIterator({
+    rpcUrl: config.remoteRpc,
+    autoCosmWasmClient,
+    startHeight: Number(state.latestBlockHeight),
   })
 
-  webSocketListener.onNewBlock(async ({ chain_id, height, time }) => {
-    const latestBlockHeight = Number(height)
-    const latestBlockTimeUnixMs = Date.parse(time)
+  // Add shutdown signal handlers.
+  process.on('SIGINT', async () => {
+    console.log(`\n[${new Date().toISOString()}] Shutting down...`)
 
-    // Update state singleton with chain ID and latest block, and create block.
-    await Promise.all([
-      State.updateSingleton({
-        chainId: chain_id,
-        latestBlockHeight: Sequelize.fn(
-          'GREATEST',
-          Sequelize.col('latestBlockHeight'),
-          latestBlockHeight
-        ),
-        latestBlockTimeUnixMs: Sequelize.fn(
-          'GREATEST',
-          Sequelize.col('latestBlockTimeUnixMs'),
-          latestBlockTimeUnixMs
-        ),
-      }),
-      Block.createOne({
-        height: latestBlockHeight,
-        timeUnixMs: latestBlockTimeUnixMs,
-      }),
-    ])
+    // Stop services.
+    WasmCodeService.getInstance().stopUpdater()
+    blockIterator.stopIterating()
+  })
+  process.on('SIGTERM', async () => {
+    console.log(`\n[${new Date().toISOString()}] Shutting down...`)
+
+    // Stop services.
+    WasmCodeService.getInstance().stopUpdater()
+    blockIterator.stopIterating()
   })
 
-  webSocketListener.onTx(
-    async (hash, { tx: txBase64, height, result: { events } }) => {
+  // Tell pm2 we're ready right before we start reading.
+  if (process.send) {
+    process.send('ready')
+  }
+
+  console.log(`[${new Date().toISOString()}] Listener ready.`)
+
+  // Start iterating. This will resolve once the iterator is done (due to SIGINT
+  // or SIGTERM).
+  await blockIterator.iterate({
+    onBlock: async ({ header: { chainId, height, time } }) => {
+      const latestBlockHeight = Number(height)
+      const latestBlockTimeUnixMs = Date.parse(time)
+
+      // Update state singleton with chain ID and latest block, and create
+      // block.
+      await Promise.all([
+        State.updateSingleton({
+          chainId,
+          latestBlockHeight: Sequelize.fn(
+            'GREATEST',
+            Sequelize.col('latestBlockHeight'),
+            latestBlockHeight
+          ),
+          latestBlockTimeUnixMs: Sequelize.fn(
+            'GREATEST',
+            Sequelize.col('latestBlockTimeUnixMs'),
+            latestBlockTimeUnixMs
+          ),
+        }),
+        Block.createOne({
+          height: latestBlockHeight,
+          timeUnixMs: latestBlockTimeUnixMs,
+        }),
+      ])
+    },
+    onTx: async ({ hash, tx: rawTx, height, events }) => {
       let tx
       try {
-        tx = Tx.decode(fromBase64(txBase64))
+        tx = Tx.decode(rawTx)
       } catch (err) {
         console.error('Error decoding TX', hash, err)
         return
@@ -157,7 +183,7 @@ const main = async () => {
             extractor: name,
             data: {
               txHash: hash,
-              height,
+              height: BigInt(height).toString(),
               data,
             },
           })
@@ -167,35 +193,28 @@ const main = async () => {
           )
         }
       }
-    }
-  )
-
-  console.log(`[${new Date().toISOString()}] Connecting to WebSocket...`)
-  await webSocketListener.connect({ skipWait: true })
-
-  // Add shutdown signal handler.
-  process.on('SIGINT', async () => {
-    console.log(`\n[${new Date().toISOString()}] Shutting down...`)
-
-    // Stop services.
-    WasmCodeService.getInstance().stopUpdater()
-    webSocketListener.disconnect()
-
-    // Close database connection.
-    await dataSequelize.close()
-
-    // Close queue.
-    ExtractQueue.close()
-
-    process.exit(0)
+    },
+    onError: (type, error) => {
+      console.error(
+        `[${new Date().toISOString()}] Listener error: ${type}`,
+        error
+      )
+      Sentry.captureException(error, {
+        tags: {
+          script: 'listener',
+          type,
+        },
+      })
+    },
   })
 
-  // Tell pm2 we're ready right before we start reading.
-  if (process.send) {
-    process.send('ready')
-  }
+  // Close database connection.
+  await dataSequelize.close()
 
-  console.log(`[${new Date().toISOString()}] Listener ready.`)
+  // Close queue.
+  ExtractQueue.close()
+
+  process.exit(0)
 }
 
 main().catch((err) => {

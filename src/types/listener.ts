@@ -1,7 +1,7 @@
+import { Event } from '@cosmjs/stargate'
 import { DecodedStargateMsg } from '@dao-dao/types'
 import { Tx } from '@dao-dao/types/protobuf/codegen/cosmos/tx/v1beta1/tx'
 
-import { TxResult } from '@/services/ChainWebSocketListener'
 import { AutoCosmWasmClient } from '@/utils'
 
 import { Config } from './config'
@@ -11,7 +11,7 @@ export type ExtractorMatchInput = {
   hash: string
   tx: Tx
   messages: DecodedStargateMsg['stargate'][]
-  events: TxResult['result']['events']
+  events: readonly Event[]
 }
 
 export type ExtractorExtractInput<Data extends unknown = unknown> = {

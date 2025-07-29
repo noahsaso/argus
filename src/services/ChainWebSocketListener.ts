@@ -68,6 +68,19 @@ export type TxResult = {
 
 export type EventType = 'NewBlock' | 'Tx'
 
+export type ConnectionState =
+  | 'connecting'
+  | 'connected'
+  | 'disconnected'
+  | 'error'
+
+export type ConnectionEvent = {
+  state: ConnectionState
+  isReconnection: boolean
+  attempt?: number
+  error?: Error
+}
+
 /**
  * A listener for events from the local node's WebSocket.
  */
@@ -88,6 +101,26 @@ export class ChainWebSocketListener {
   private _connected = false
 
   /**
+   * Whether the listener is actively trying to connect or reconnect.
+   */
+  private _connecting = false
+
+  /**
+   * Current reconnection attempt number.
+   */
+  private _reconnectAttempt = 0
+
+  /**
+   * Maximum reconnection delay in milliseconds.
+   */
+  private readonly _maxReconnectDelay = 30_000 // 30 seconds
+
+  /**
+   * Whether continuous reconnection is enabled.
+   */
+  private _shouldReconnect = true
+
+  /**
    * New block callback.
    */
   private _onNewBlock: ((block: BlockHeader) => void | Promise<void>) | null =
@@ -98,6 +131,13 @@ export class ChainWebSocketListener {
    */
   private _onTx: ((hash: string, tx: TxResult) => void | Promise<void>) | null =
     null
+
+  /**
+   * Connection state callback.
+   */
+  private _onConnectionStateChange:
+    | ((event: ConnectionEvent) => void | Promise<void>)
+    | null = null
 
   constructor(
     /**
@@ -132,6 +172,15 @@ export class ChainWebSocketListener {
   }
 
   /**
+   * Set the connection state change callback.
+   */
+  onConnectionStateChange(
+    onConnectionStateChange: (event: ConnectionEvent) => void | Promise<void>
+  ) {
+    this._onConnectionStateChange = onConnectionStateChange
+  }
+
+  /**
    * Whether or not the WebSocket is connected.
    */
   get connected() {
@@ -139,11 +188,31 @@ export class ChainWebSocketListener {
   }
 
   /**
-   * Connect to the WebSocket if not already connected.
+   * Whether the listener is actively trying to connect.
+   */
+  get connecting() {
+    return this._connecting
+  }
+
+  /**
+   * Calculate reconnection delay with exponential backoff.
+   */
+  private get _reconnectDelay() {
+    // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s (max)
+    const delay = Math.min(
+      1000 * Math.pow(2, this._reconnectAttempt),
+      this._maxReconnectDelay
+    )
+    return delay
+  }
+
+  /**
+   * Connect to the WebSocket if not already connected or connecting.
    */
   async connect({
     skipWait = false,
     timeoutMs = 10_000,
+    continuousReconnect = true,
   }: {
     /**
      * Whether or not to skip waiting for the WebSocket port to be open. This is
@@ -158,11 +227,113 @@ export class ChainWebSocketListener {
      * Defaults to 10 seconds.
      */
     timeoutMs?: number
+    /**
+     * Whether to continuously attempt reconnection on failures.
+     *
+     * Defaults to `true`.
+     */
+    continuousReconnect?: boolean
   } = {}) {
-    if (this.webSocket) {
+    if (this.webSocket || this._connecting) {
       return
     }
 
+    this._shouldReconnect = continuousReconnect
+
+    return this._attemptConnection({ skipWait, timeoutMs })
+  }
+
+  /**
+   * Internal method to attempt a single connection with retry logic.
+   */
+  private async _attemptConnection({
+    skipWait = false,
+    timeoutMs = 10_000,
+  }: {
+    skipWait?: boolean
+    timeoutMs?: number
+  }): Promise<void> {
+    if (this.webSocket || this._connecting) {
+      return
+    }
+
+    this._connecting = true
+
+    // Emit connecting state
+    await this._emitConnectionEvent({
+      state: 'connecting',
+      isReconnection: this._reconnectAttempt > 0,
+      attempt: this._reconnectAttempt + 1,
+    })
+
+    while (this._shouldReconnect && !this._connected) {
+      try {
+        await this._singleConnectionAttempt({ skipWait, timeoutMs })
+        // If we get here, connection was successful
+        this._reconnectAttempt = 0
+        this._connecting = false
+        return
+      } catch (error) {
+        if (!this._shouldReconnect) {
+          // Emit error state
+          await this._emitConnectionEvent({
+            state: 'error',
+            isReconnection: false,
+            error: error instanceof Error ? error : new Error(String(error)),
+          })
+
+          this._connecting = false
+          throw error
+        }
+
+        this._reconnectAttempt++
+
+        console.error(
+          `[${new Date().toISOString()}] WebSocket connection attempt ${
+            this._reconnectAttempt
+          } failed, retrying in ${this._reconnectDelay / 1000}s...`,
+          error
+        )
+
+        Sentry.captureException(error, {
+          tags: {
+            type: 'websocket-connection-failed',
+            script: 'export',
+            attempt: this._reconnectAttempt,
+            chainId:
+              (await State.getSingleton().catch(() => null))?.chainId ??
+              'unknown',
+          },
+        })
+
+        // Emit error state
+        await this._emitConnectionEvent({
+          state: 'error',
+          isReconnection: true,
+          error: error instanceof Error ? error : new Error(String(error)),
+          attempt: this._reconnectAttempt,
+        })
+
+        // Wait before retrying
+        await new Promise((resolve) =>
+          setTimeout(resolve, this._reconnectDelay)
+        )
+      }
+    }
+
+    this._connecting = false
+  }
+
+  /**
+   * Attempt a single WebSocket connection.
+   */
+  private async _singleConnectionAttempt({
+    skipWait = false,
+    timeoutMs = 10_000,
+  }: {
+    skipWait?: boolean
+    timeoutMs?: number
+  }): Promise<void> {
     return new Promise<void>(async (resolve, reject) => {
       // Set up a timeout for the connection attempt
       const connectionTimeout = setTimeout(() => {
@@ -225,9 +396,6 @@ export class ChainWebSocketListener {
       )
 
       this.webSocket.on('open', () => {
-        cleanup()
-        resolve()
-
         // Subscribe to all event types.
         const types = [this.eventTypes].flat()
         types.forEach((type) =>
@@ -243,8 +411,17 @@ export class ChainWebSocketListener {
           )
         )
 
+        cleanup()
+        resolve()
         this._connected = true
         console.log(`[${new Date().toISOString()}] WebSocket connected.`)
+
+        // Emit connected state
+        this._emitConnectionEvent({
+          state: 'connected',
+          isReconnection: this._reconnectAttempt > 0,
+          attempt: this._reconnectAttempt + 1,
+        })
       })
 
       // Listen for new blocks.
@@ -291,44 +468,52 @@ export class ChainWebSocketListener {
         }
       })
 
-      // Log error and ignore.
+      // Log error and handle reconnection.
       this.webSocket.on('error', async (error) => {
         cleanup()
 
-        // If already disconnected, do nothing.
-        if (!this.connected) {
-          // If this is the initial connection attempt, reject the promise
+        // If we're in the middle of initial connection, reject connection
+        // attempt so it retries or fails if retry is disabled.
+        if (!this._connected) {
           reject(error)
           return
         }
 
-        this.disconnect()
+        // If we were connected and then errored, maybe initiate reconnection.
 
-        // On error and not disconnecting, reconnect.
+        // Reset connection state.
+        this._connected = false
+        this._reconnectAttempt = 0
+        this.webSocket?.terminate()
+        this.webSocket = null
+
         console.error(
-          `[${new Date().toISOString()}] WebSocket errored, reconnecting in 1 second...`,
+          `[${new Date().toISOString()}] WebSocket errored, will reconnect...`,
           error
         )
-        Sentry.captureException(error, {
-          tags: {
-            type: 'websocket-error',
-            script: 'export',
-            chainId:
-              (await State.getSingleton().catch(() => null))?.chainId ??
-              'unknown',
-          },
+
+        // Emit error state
+        await this._emitConnectionEvent({
+          state: 'error',
+          isReconnection: true,
+          error: error instanceof Error ? error : new Error(String(error)),
         })
 
-        // Reconnect.
-        setTimeout(() => this.connect({ skipWait, timeoutMs }), 1_000)
+        // Reconnect if enabled
+        if (this._shouldReconnect) {
+          setTimeout(
+            () => this._attemptConnection({ skipWait, timeoutMs }),
+            1_000
+          )
+        }
       })
 
       this.webSocket.on('close', (code, reason) => {
         cleanup()
 
-        // If already disconnected, do nothing.
-        if (!this.connected) {
-          // If this is the initial connection attempt, reject the promise
+        // If we're in the middle of initial connection, reject connection
+        // attempt so it retries or fails if retry is disabled.
+        if (!this._connected) {
           reject(
             new Error(
               `WebSocket closed during connection attempt: ${code} ${reason}`
@@ -337,20 +522,55 @@ export class ChainWebSocketListener {
           return
         }
 
-        this.disconnect()
+        // If we were connected and then closed, maybe initiate reconnection.
 
-        // On close and not disconnecting, reconnect.
+        // Reset connection state.
+        this._connected = false
+        this._reconnectAttempt = 0
+        this.webSocket?.terminate()
+        this.webSocket = null
+
         console.error(
-          `[${new Date().toISOString()}] WebSocket closed, reconnecting in 1 second...`
+          `[${new Date().toISOString()}] WebSocket closed (${code}: ${reason}), will reconnect...`
         )
 
-        // Reconnect.
-        setTimeout(() => this.connect({ skipWait, timeoutMs }), 1_000)
+        // Emit disconnected state
+        this._emitConnectionEvent({
+          state: 'disconnected',
+          isReconnection: true,
+        })
+
+        // Reconnect if enabled
+        if (this._shouldReconnect) {
+          setTimeout(
+            () => this._attemptConnection({ skipWait, timeoutMs }),
+            1_000
+          )
+        }
       })
     })
   }
 
+  /**
+   * Emit a connection state change event.
+   */
+  private async _emitConnectionEvent(event: ConnectionEvent) {
+    try {
+      await this._onConnectionStateChange?.(event)
+    } catch (error) {
+      console.error(
+        `[${new Date().toISOString()}] Error in connection state callback:`,
+        error
+      )
+    }
+  }
+
+  /**
+   * Disconnect from the WebSocket and stop reconnection attempts.
+   */
   disconnect() {
+    this._shouldReconnect = false
+
     if (!this.webSocket) {
       return
     }
@@ -358,5 +578,11 @@ export class ChainWebSocketListener {
     this._connected = false
     this.webSocket.terminate()
     this.webSocket = null
+
+    // Emit disconnected state for manual disconnection
+    this._emitConnectionEvent({
+      state: 'disconnected',
+      isReconnection: false,
+    })
   }
 }
