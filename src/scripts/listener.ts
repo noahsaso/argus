@@ -2,6 +2,7 @@ import { decodeRawProtobufMsg } from '@dao-dao/types'
 import { Tx } from '@dao-dao/types/protobuf/codegen/cosmos/tx/v1beta1/tx'
 import * as Sentry from '@sentry/node'
 import { Command } from 'commander'
+import Koa from 'koa'
 import { Sequelize } from 'sequelize'
 
 import { ConfigManager } from '@/config'
@@ -28,8 +29,14 @@ program.option(
   '-c, --config <path>',
   'path to config file, falling back to config.json'
 )
+program.option(
+  '-p, --port <port>',
+  'port to serve health probe on',
+  (value) => parseInt(value),
+  3420
+)
 program.parse()
-const { config: _config } = program.opts()
+const { config: _config, port } = program.opts()
 
 // Load config from specific config file.
 const config = ConfigManager.load(_config)
@@ -109,12 +116,27 @@ const main = async () => {
     blockIterator.stopIterating()
   })
 
-  // Tell pm2 we're ready right before we start reading.
-  if (process.send) {
-    process.send('ready')
-  }
+  // Serve health probe.
+  const app = new Koa()
+  app.use(async (ctx) => {
+    ctx.status = 200
+    ctx.body = {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+    }
+  })
+  app.listen(port, () => {
+    console.log(
+      `[${new Date().toISOString()}] Health probe ready on port ${port}.`
+    )
 
-  console.log(`[${new Date().toISOString()}] Listener ready.`)
+    // Tell pm2 we're ready right before we start reading.
+    if (process.send) {
+      process.send('ready')
+    }
+
+    console.log(`[${new Date().toISOString()}] Listener ready.`)
+  })
 
   // Start iterating. This will resolve once the iterator is done (due to SIGINT
   // or SIGTERM).
