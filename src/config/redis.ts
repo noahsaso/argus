@@ -10,6 +10,7 @@ export const getRedisConfig = (): RedisOptions | undefined => {
       port: redis.port ? Number(redis.port) : undefined,
       username: redis.username,
       password: redis.password,
+      keyPrefix: redis.keyPrefix,
     }
   )
 }

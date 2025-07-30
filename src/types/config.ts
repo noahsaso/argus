@@ -34,6 +34,7 @@ export type Config = {
     port?: number | string
     username?: string
     password: string
+    keyPrefix?: string
   }
   meilisearch?: {
     host: string
