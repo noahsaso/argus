@@ -46,7 +46,7 @@ const main = async () => {
   })
 
   // Initialize state.
-  await State.createSingletonIfMissing()
+  await State.createSingletonIfMissing(config.chainId)
 
   console.log(`\n[${new Date().toISOString()}] Starting workers...`)
 

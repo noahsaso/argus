@@ -20,5 +20,6 @@ src/test/dump/**/*.test.ts
 *.crt
 *.log
 .pg_data*
+.ready
 
 .idea/

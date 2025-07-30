@@ -1,6 +1,11 @@
 import { Op, Sequelize } from 'sequelize'
 
-import { Contract, WasmStateEvent, WasmStateEventTransformation } from '@/db'
+import {
+  Contract,
+  Extraction,
+  WasmStateEvent,
+  WasmStateEventTransformation,
+} from '@/db'
 import { getEnv } from '@/formulas'
 import { WasmCodeService } from '@/services/wasm-codes'
 import {
@@ -23,12 +28,19 @@ export const daos: MeilisearchIndexer = {
   ],
   sortableAttributes: ['value.proposalCount', 'value.createdAtEpoch'],
   matches: async ({ event, state }) => {
-    if (!(event instanceof WasmStateEvent)) {
+    if (!(event instanceof WasmStateEvent) && !(event instanceof Extraction)) {
       return
     }
 
-    let daoAddress = event.contract?.matchesCodeIdKeys('dao-dao-core')
-      ? event.contractAddress
+    const contract =
+      event instanceof WasmStateEvent
+        ? event.contract
+        : event instanceof Extraction
+        ? await event.getContract()
+        : undefined
+
+    let daoAddress = contract?.matchesCodeIdKeys('dao-dao-core')
+      ? contract.address
       : undefined
 
     // If not DAO, attempt to fetch DAO from proposal module. This will fail if
@@ -42,7 +54,10 @@ export const daos: MeilisearchIndexer = {
           block: event.block,
           useBlockDate: true,
         }),
-        contractAddress: event.contractAddress,
+        contractAddress:
+          event instanceof WasmStateEvent
+            ? event.contractAddress
+            : event.address,
       }
       daoAddress = await getDaoAddressForProposalModule(env)
     }

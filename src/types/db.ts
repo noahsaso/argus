@@ -23,6 +23,7 @@ export enum DependentKeyNamespace {
   GovProposal = 'gov_proposal',
   GovProposalVote = 'gov_proposal_vote',
   DistributionCommunityPoolStateEvent = 'distribution_community_pool_state',
+  Extraction = 'extraction',
 }
 
 // Interface that event models must implement to be depended on by computations.

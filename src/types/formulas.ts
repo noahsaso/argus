@@ -6,7 +6,7 @@ import {
 import { OpenAPIV3_1 } from 'openapi-types'
 import { BindOrReplacements, WhereOptions } from 'sequelize'
 
-import type { Contract, StakingSlashEvent, WasmTxEvent } from '@/db'
+import type { Contract, Extraction, StakingSlashEvent, WasmTxEvent } from '@/db'
 
 import { ComputationDependentKey } from './computation'
 import { ContractJson, DependableEventModel } from './db'
@@ -249,6 +249,11 @@ export type FormulaProposalVoteCountGetter = (
   proposalId: string
 ) => Promise<number>
 
+export type FormulaExtractionGetter = (
+  address: string,
+  name: string
+) => Promise<Extraction | undefined>
+
 export type FormulaQuerier = (
   query: string,
   bindParams?: BindOrReplacements
@@ -293,6 +298,7 @@ export type Env<Args extends Record<string, string> = {}> = {
   getProposalVotes: FormulaProposalVotesGetter
   getProposalVoteCount: FormulaProposalVoteCountGetter
   getCommunityPoolBalances: FormulaCommunityPoolBalancesGetter
+  getExtraction: FormulaExtractionGetter
 
   /**
    * Raw database query. This cannot be cached, so any formula that uses this

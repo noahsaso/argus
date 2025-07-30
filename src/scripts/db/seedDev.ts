@@ -23,7 +23,7 @@ export const main = async () => {
   const { config: _config } = program.opts()
 
   // Load config from specific config file.
-  ConfigManager.load(_config)
+  const config = ConfigManager.load(_config)
 
   const dataSequelize = await loadDb({
     type: DbType.Data,
@@ -99,6 +99,7 @@ export const main = async () => {
   ])
 
   await State.updateSingleton({
+    chainId: config.chainId,
     latestBlockHeight: 4,
     latestBlockTimeUnixMs: 4,
     lastGovBlockHeightExported: 4,

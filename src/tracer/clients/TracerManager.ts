@@ -1,10 +1,10 @@
 import * as Sentry from '@sentry/node'
 
 import { State } from '@/db'
+import { BlockTimeFetcher } from '@/services'
 import { NamedHandler, TracedEvent, TracedEventWithBlockTime } from '@/types'
 
 import { BatchItem, BatchedTraceExporter } from './BatchedTraceExporter'
-import { BlockTimeFetcher } from './BlockTimeFetcher'
 
 /**
  * A queue that exports traces to the database in batches.

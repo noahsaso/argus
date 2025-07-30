@@ -102,7 +102,12 @@ export class ExportQueue extends BaseQueue<ExportQueuePayload> {
 
             // Queue webhooks.
             if (this.options.sendWebhooks) {
-              const queued = await queueWebhooks(models)
+              const queued = await queueWebhooks(models).catch((err) => {
+                console.error(
+                  `[${new Date().toISOString()}] Error queuing webhooks: ${err}`
+                )
+                return 0
+              })
 
               if (queued > 0) {
                 console.log(
