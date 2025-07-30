@@ -17,18 +17,29 @@ export const main = async () => {
   )
   program.option('-f, --force', "don't ask for confirmation")
   program.option('-d, --destroy', 'destroy tables if they already exist')
+  program.option(
+    '-w, --which <which>',
+    'which database to setup (data, accounts, or both)',
+    'both'
+  )
   program.parse()
-  const { config: _config, force, destroy = false } = program.opts()
+  const { config: _config, force, destroy = false, which } = program.opts()
 
   // Load config from specific config file.
   ConfigManager.load(_config)
 
-  const dataSequelize = await loadDb({
-    type: DbType.Data,
-  })
-  const accountsSequelize = await loadDb({
-    type: DbType.Accounts,
-  })
+  const dataSequelize =
+    which === 'data' || which === 'both'
+      ? await loadDb({
+          type: DbType.Data,
+        })
+      : null
+  const accountsSequelize =
+    which === 'accounts' || which === 'both'
+      ? await loadDb({
+          type: DbType.Accounts,
+        })
+      : null
 
   const rl = readline.createInterface({
     input: process.stdin,
@@ -37,22 +48,28 @@ export const main = async () => {
 
   const setup = async () => {
     try {
-      await setupDb(dataSequelize, destroy, 'data')
-      // Do not destroy accounts tables.
-      await setupDb(accountsSequelize, false, 'accounts')
-
-      // Add migrations to data database.
-      const migrations = fs.readdirSync(
-        path.join(process.cwd(), './dist/db/migrations')
-      )
-      for (const migration of migrations) {
-        await dataSequelize.query(
-          `INSERT INTO "SequelizeMeta" ("name") VALUES ('${migration}') ON CONFLICT ("name") DO NOTHING;`
+      if (dataSequelize) {
+        await setupDb(dataSequelize, destroy, 'data')
+        // Add migrations to data database.
+        const migrations = fs.readdirSync(
+          path.join(process.cwd(), './dist/db/migrations')
         )
+        for (const migration of migrations) {
+          await dataSequelize.query(
+            `INSERT INTO "SequelizeMeta" ("name") VALUES ('${migration}') ON CONFLICT ("name") DO NOTHING;`
+          )
+        }
+      }
+
+      // Do not destroy accounts tables.
+      if (accountsSequelize) {
+        await setupDb(accountsSequelize, false, 'accounts')
       }
 
       console.log(
-        `\n${destroy ? 'Dropped and recreated' : 'Synced'} all tables.`
+        `\n${
+          destroy ? 'Dropped and recreated' : 'Synced'
+        } all tables for ${which} DB${which === 'both' ? '(s)' : ''}.`
       )
     } catch (err) {
       console.error(err)
@@ -60,8 +77,8 @@ export const main = async () => {
   }
 
   const close = async () => {
-    await dataSequelize.close()
-    await accountsSequelize.close()
+    await dataSequelize?.close()
+    await accountsSequelize?.close()
     process.exit()
   }
 
