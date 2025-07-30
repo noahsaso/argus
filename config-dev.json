@@ -2,10 +2,15 @@
   "ignoreApiKey": true,
   "home": "./fake",
   "localRpc": "http://localhost:26657",
-  "remoteRpc": "https://juno-testnet-rpc.polkachu.com",
+  "remoteRpc": "https://juno-rpc.polkachu.com",
   "bech32Prefix": "juno",
+  "chainId": "juno-1",
   "redis": {
     "host": "redis"
+  },
+  "meilisearch": {
+    "host": "http://meilisearch:7700",
+    "apiKey": "masterKey"
   },
   "db": {
     "data": {
@@ -24,20 +29,20 @@
     }
   },
   "codeIds": {
-    "cw20-stake": [155],
-    "dao-dao-core": [163],
-    "dao-proposal-multiple": [170],
-    "dao-proposal-single": [171],
-    "dao-voting-cw20-staked": [172],
-    "dao-voting-cw4": [173],
-    "dao-voting-cw721-staked": [174],
-    "dao-voting-native-staked": [175],
-    "cw4-group": [178],
+    "cw20-stake": [],
+    "dao-dao-core": [4862],
+    "dao-proposal-multiple": [],
+    "dao-proposal-single": [],
+    "dao-voting-cw20-staked": [],
+    "dao-voting-cw4": [],
+    "dao-voting-cw721-staked": [],
+    "dao-voting-native-staked": [],
+    "cw4-group": [],
     "polytone-note": [],
     "polytone-voice": [],
     "valence-account": []
   },
-  "daoDaoBase": "https://testnet.daodao.zone",
+  "daoDaoBase": "https://daodao.zone",
   "discordNotifierApiKey": "key",
   "inboxSecret": "secret",
   "websocketsSecret": "secret",

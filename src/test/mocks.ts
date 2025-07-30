@@ -1,3 +1,4 @@
+import { WebSocket } from 'mock-socket'
 import { vi } from 'vitest'
 
 import * as aggregatorRegistry from '@/aggregators/registry'
@@ -13,3 +14,8 @@ export const restoreOriginalMocks = () => {
 }
 
 restoreOriginalMocks()
+
+vi.mock('ws', () => ({
+  WebSocket: WebSocket,
+  default: WebSocket,
+}))

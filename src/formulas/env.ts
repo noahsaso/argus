@@ -5,6 +5,7 @@ import {
   BankStateEvent,
   Contract,
   DistributionCommunityPoolStateEvent,
+  Extraction,
   FeegrantAllowance,
   GovProposal,
   GovProposalVote,
@@ -29,6 +30,7 @@ import {
   FormulaContractMatchesCodeIdKeysGetter,
   FormulaDateGetter,
   FormulaDateWithValueMatchGetter,
+  FormulaExtractionGetter,
   FormulaGetter,
   FormulaMapGetter,
   FormulaPrefetch,
@@ -1710,6 +1712,56 @@ export const getEnv = ({
       return event.balances
     }
 
+  const getExtraction: FormulaExtractionGetter = async (address, name) => {
+    const dependentKey = getDependentKey(
+      Extraction.dependentKeyNamespace,
+      address,
+      name
+    )
+    dependentKeys?.push({
+      key: dependentKey,
+      prefix: false,
+    })
+
+    // Check cache.
+    const cachedEvent = cache.events[dependentKey]
+    const event =
+      // If undefined, we haven't tried to fetch it yet. If not undefined,
+      // either it exists or it doesn't (null).
+      cachedEvent !== undefined
+        ? cachedEvent?.[0]
+        : await Extraction.findOne({
+            where: {
+              address,
+              name,
+              blockHeight: blockHeightFilter,
+            },
+            order: [['blockHeight', 'DESC']],
+          })
+
+    // Type-check. Should never happen assuming dependent key namespaces are
+    // unique across different event types.
+    if (event && !(event instanceof Extraction)) {
+      throw new Error('Incorrect event type.')
+    }
+
+    // Cache event, null if nonexistent.
+    if (cachedEvent === undefined) {
+      cache.events[dependentKey] = event ? [event] : null
+    }
+
+    // If no event found, return undefined.
+    if (!event) {
+      return
+    }
+
+    // Call hook.
+    await onFetch?.([event])
+
+    return event.toJSON()
+  }
+    }
+
   const getFeegrantAllowance = async (granter: string, grantee: string) => {
     const dependentKey = getDependentKey(
       FeegrantAllowance.dependentKeyNamespace,
@@ -1906,6 +1958,8 @@ export const getEnv = ({
     getProposalVoteCount,
 
     getCommunityPoolBalances,
+
+    getExtraction,
     getFeegrantAllowance,
     getFeegrantAllowances,
     hasFeegrantAllowance,
