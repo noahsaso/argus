@@ -105,71 +105,76 @@ export const dao: ExtractorMaker<DaoExtractorData> = async ({
       return 0
     })
 
-    const contracts = await Promise.all(
-      addresses.map((address) =>
-        retry(3, () => client.getContract(address), 1_000)
-      )
-    )
-
-    // Dump state for each contract and create extractions.
+    // Get contract data, info, and dump state, and create extractions.
     const extractions = (
       await Promise.allSettled(
-        contracts.map((contract) =>
+        addresses.map((address) =>
           retry(
             3,
             async () =>
               Promise.all([
-                client.queryContractSmart(contract.address, {
+                client.getContract(address),
+                client.queryContractSmart(address, {
                   info: {},
                 }),
-                client.queryContractSmart(contract.address, {
+                client.queryContractSmart(address, {
                   dump_state: {},
                 }),
-              ]).then(([info, dumpState]) => [
-                {
-                  address: contract.address,
-                  name: 'dao-dao-core/info',
-                  blockHeight: height,
-                  blockTimeUnixMs,
-                  txHash,
-                  data: info,
-                },
-                {
-                  address: contract.address,
-                  name: 'dao-dao-core/dump_state',
-                  blockHeight: height,
-                  blockTimeUnixMs,
-                  txHash,
-                  data: dumpState,
-                },
-              ]),
+              ]).then(
+                ([contract, info, dumpState]) =>
+                  [
+                    contract,
+                    {
+                      address: contract.address,
+                      name: 'dao-dao-core/info',
+                      blockHeight: height,
+                      blockTimeUnixMs,
+                      txHash,
+                      data: info,
+                    },
+                    {
+                      address: contract.address,
+                      name: 'dao-dao-core/dump_state',
+                      blockHeight: height,
+                      blockTimeUnixMs,
+                      txHash,
+                      data: dumpState,
+                    },
+                  ] as const
+              ),
             1_000
           )
         )
       )
-    ).flatMap((s) => (s.status === 'fulfilled' ? s.value : []))
+    ).flatMap((s) => (s.status === 'fulfilled' ? [s.value] : []))
 
     // Ensure contracts exist in the DB.
-    await Contract.bulkCreate(
-      contracts.map((contract) => ({
-        address: contract.address,
-        codeId: contract.codeId,
-        admin: contract.admin,
-        creator: contract.creator,
-        label: contract.label,
-        instantiatedAtBlockHeight: height,
-        instantiatedAtBlockTimeUnixMs: blockTimeUnixMs,
-        instantiatedAtBlockTimestamp: new Date(Number(blockTimeUnixMs)),
-      })),
-      {
-        updateOnDuplicate: ['codeId', 'admin', 'creator', 'label'],
-      }
-    )
+    const [, createdExtractions] = await Promise.all([
+      Contract.bulkCreate(
+        extractions.map(([contract]) => ({
+          address: contract.address,
+          codeId: contract.codeId,
+          admin: contract.admin,
+          creator: contract.creator,
+          label: contract.label,
+          instantiatedAtBlockHeight: height,
+          instantiatedAtBlockTimeUnixMs: blockTimeUnixMs,
+          instantiatedAtBlockTimestamp: new Date(Number(blockTimeUnixMs)),
+        })),
+        {
+          updateOnDuplicate: ['codeId', 'admin', 'creator', 'label'],
+        }
+      ),
+      Extraction.bulkCreate(
+        extractions.flatMap(([, ...extractions]) => extractions),
+        {
+          updateOnDuplicate: ['blockTimeUnixMs', 'txHash', 'data'],
+          returning: true,
+        }
+      ),
+    ])
 
-    return Extraction.bulkCreate(extractions, {
-      updateOnDuplicate: ['blockTimeUnixMs', 'txHash', 'data'],
-      returning: true,
-    })
+    return createdExtractions
   }
 
   return {

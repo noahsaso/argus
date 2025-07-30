@@ -78,7 +78,14 @@ export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
           // Queue Meilisearch index updates.
           const queued = (
             await Promise.all(
-              models.map((event) => queueMeilisearchIndexUpdates(event))
+              models.map((event) =>
+                queueMeilisearchIndexUpdates(event).catch((err) => {
+                  console.error(
+                    `[${new Date().toISOString()}] Error queuing search index update: ${err}`
+                  )
+                  return 0
+                })
+              )
             )
           ).reduce((acc, q) => acc + q, 0)
 
@@ -90,7 +97,12 @@ export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
 
           // Queue webhooks.
           if (this.options.sendWebhooks) {
-            const queued = await queueWebhooks(models)
+            const queued = await queueWebhooks(models).catch((err) => {
+              console.error(
+                `[${new Date().toISOString()}] Error queuing webhooks: ${err}`
+              )
+              return 0
+            })
 
             if (queued > 0) {
               console.log(
