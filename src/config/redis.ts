@@ -52,8 +52,7 @@ export const testRedisConnection = async (
     const redis = new Redis({
       ...config,
       maxRetriesPerRequest: 3,
-      connectTimeout: 5_000,
-      commandTimeout: 5_000,
+      commandTimeout: 15_000,
     })
     // Do nothing on error (to avoid spamming logs).
     redis.on('error', () => {})
