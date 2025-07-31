@@ -60,10 +60,12 @@ export const closeBullQueue = async (name: string) =>
 
 export const getBullWorker = <T extends unknown>(
   name: string,
-  processor: Processor<T>
+  processor: Processor<T>,
+  concurrency: number = 1
 ) =>
   new Worker<T>(name, processor, {
     connection: getRedisConfig(),
+    concurrency,
     removeOnComplete: {
       // Keep last 10,000 successful jobs.
       count: 10_000,
