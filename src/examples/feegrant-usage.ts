@@ -1,6 +1,6 @@
 /**
  * Example usage of the Feegrant tracer
- * 
+ *
  * This file demonstrates how to query feegrant allowances after the tracer
  * has been running and collecting data.
  */
@@ -100,15 +100,15 @@ export async function countAllowancesByGranter() {
 
 /**
  * Example usage:
- * 
+ *
  * // Get all allowances granted by a specific address
  * const grantedAllowances = await getAllowancesGrantedBy('cosmos1abc...')
  * console.log(`Found ${grantedAllowances.length} active allowances granted`)
- * 
+ *
  * // Check if a specific allowance exists
  * const hasAllowance = await hasActiveAllowance('cosmos1granter...', 'cosmos1grantee...')
  * console.log(`Allowance exists: ${hasAllowance}`)
- * 
+ *
  * // Get allowance statistics
  * const stats = await countAllowancesByGranter()
  * console.log('Top granters:', stats.slice(0, 10))

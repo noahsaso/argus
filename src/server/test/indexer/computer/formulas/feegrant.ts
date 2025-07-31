@@ -222,9 +222,16 @@ describe('feegrant handler', () => {
         },
       ]
 
-      const mockAllowances = events.map((event) => ({ ...event, toJSON: () => event }))
-      vi.mocked(FeegrantAllowance.create).mockResolvedValueOnce(mockAllowances[0] as any)
-      vi.mocked(FeegrantAllowance.create).mockResolvedValueOnce(mockAllowances[1] as any)
+      const mockAllowances = events.map((event) => ({
+        ...event,
+        toJSON: () => event,
+      }))
+      vi.mocked(FeegrantAllowance.create).mockResolvedValueOnce(
+        mockAllowances[0] as any
+      )
+      vi.mocked(FeegrantAllowance.create).mockResolvedValueOnce(
+        mockAllowances[1] as any
+      )
 
       const result = await handler.process(events)
 
@@ -281,9 +288,16 @@ describe('feegrant handler', () => {
         },
       ]
 
-      const mockAllowances = events.map((event) => ({ ...event, toJSON: () => event }))
-      vi.mocked(FeegrantAllowance.create).mockResolvedValueOnce(mockAllowances[0] as any)
-      vi.mocked(FeegrantAllowance.create).mockResolvedValueOnce(mockAllowances[1] as any)
+      const mockAllowances = events.map((event) => ({
+        ...event,
+        toJSON: () => event,
+      }))
+      vi.mocked(FeegrantAllowance.create).mockResolvedValueOnce(
+        mockAllowances[0] as any
+      )
+      vi.mocked(FeegrantAllowance.create).mockResolvedValueOnce(
+        mockAllowances[1] as any
+      )
 
       await handler.process(events)
 
@@ -326,9 +340,16 @@ describe('feegrant handler', () => {
         },
       ]
 
-      const mockAllowances = events.map((event) => ({ ...event, toJSON: () => event }))
-      vi.mocked(FeegrantAllowance.create).mockResolvedValueOnce(mockAllowances[0] as any)
-      vi.mocked(FeegrantAllowance.create).mockResolvedValueOnce(mockAllowances[1] as any)
+      const mockAllowances = events.map((event) => ({
+        ...event,
+        toJSON: () => event,
+      }))
+      vi.mocked(FeegrantAllowance.create).mockResolvedValueOnce(
+        mockAllowances[0] as any
+      )
+      vi.mocked(FeegrantAllowance.create).mockResolvedValueOnce(
+        mockAllowances[1] as any
+      )
 
       await handler.process(events)
 

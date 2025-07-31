@@ -13,7 +13,7 @@ export const feegrant: HandlerMaker<ParsedFeegrantStateEvent> = async ({
   const match: Handler<ParsedFeegrantStateEvent>['match'] = (trace) => {
     // FeeAllowanceKeyPrefix = 0x00
     // Key format: 0x00 || len(granter) || granter || len(grantee) || grantee
-    
+
     const keyData = fromBase64(trace.key)
     if (keyData[0] !== 0x00 || keyData.length < 3) {
       return
@@ -25,15 +25,18 @@ export const feegrant: HandlerMaker<ParsedFeegrantStateEvent> = async ({
         return
       }
 
-      const granter = toBech32(bech32Prefix, keyData.slice(2, 2 + granterLength))
-      
+      const granter = toBech32(
+        bech32Prefix,
+        keyData.slice(2, 2 + granterLength)
+      )
+
       const granteeLength = keyData[2 + granterLength]
       if (keyData.length !== 2 + granterLength + 1 + granteeLength) {
         return
       }
 
       const grantee = toBech32(
-        bech32Prefix, 
+        bech32Prefix,
         keyData.slice(2 + granterLength + 1)
       )
 
@@ -70,12 +73,15 @@ export const feegrant: HandlerMaker<ParsedFeegrantStateEvent> = async ({
     }
   }
 
-  const process: Handler<ParsedFeegrantStateEvent>['process'] = async (events) => {
+  const process: Handler<ParsedFeegrantStateEvent>['process'] = async (
+    events
+  ) => {
     // Save blocks from events
     await Block.createMany(
       [...new Set(events.map((e) => e.blockHeight))].map((height) => ({
         height,
-        timeUnixMs: events.find((e) => e.blockHeight === height)!.blockTimeUnixMs,
+        timeUnixMs: events.find((e) => e.blockHeight === height)!
+          .blockTimeUnixMs,
       }))
     )
 
@@ -111,7 +117,7 @@ export const feegrant: HandlerMaker<ParsedFeegrantStateEvent> = async ({
     const lastEvent = events.sort(
       (a, b) => Number(a.blockHeight) - Number(b.blockHeight)
     )[events.length - 1]
-    
+
     await State.updateSingleton({
       lastFeegrantBlockHeightExported: Sequelize.fn(
         'GREATEST',

@@ -53,11 +53,7 @@ module.exports = {
 
     // Add indexes for TimescaleDB optimization (matching WasmStateEvent pattern)
     await queryInterface.addIndex('FeegrantAllowances', {
-      fields: [
-        'granter',
-        'grantee',
-        { name: 'blockHeight', order: 'DESC' },
-      ],
+      fields: ['granter', 'grantee', { name: 'blockHeight', order: 'DESC' }],
     })
 
     await queryInterface.addIndex('FeegrantAllowances', {

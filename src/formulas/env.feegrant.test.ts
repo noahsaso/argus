@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { FeegrantAllowance } from '@/db'
 import { DependentKeyNamespace } from '@/types'
 import { getDependentKey } from '@/utils'
+
 import { getEnv } from './env'
 
 // Mock dependencies
@@ -34,7 +35,7 @@ describe('feegrant formula functions', () => {
     vi.clearAllMocks()
     dependentKeys = []
     onFetch = vi.fn()
-    
+
     env = getEnv({
       ...mockEnvOptions,
       dependentKeys,
@@ -57,7 +58,10 @@ describe('feegrant formula functions', () => {
 
       vi.mocked(FeegrantAllowance.findOne).mockResolvedValueOnce(mockAllowance)
 
-      const result = await env.getFeegrantAllowance('xion1granter123', 'xion1grantee456')
+      const result = await env.getFeegrantAllowance(
+        'xion1granter123',
+        'xion1grantee456'
+      )
 
       expect(result).toEqual({
         granter: 'xion1granter123',
@@ -72,7 +76,11 @@ describe('feegrant formula functions', () => {
       // Check that dependent key was added
       expect(dependentKeys).toHaveLength(1)
       expect(dependentKeys[0].key).toBe(
-        getDependentKey(DependentKeyNamespace.FeegrantAllowance, 'xion1granter123', 'xion1grantee456')
+        getDependentKey(
+          DependentKeyNamespace.FeegrantAllowance,
+          'xion1granter123',
+          'xion1grantee456'
+        )
       )
       expect(dependentKeys[0].prefix).toBe(false)
 
@@ -83,7 +91,10 @@ describe('feegrant formula functions', () => {
     it('returns undefined for non-existent allowance', async () => {
       vi.mocked(FeegrantAllowance.findOne).mockResolvedValueOnce(null)
 
-      const result = await env.getFeegrantAllowance('xion1granter123', 'xion1grantee456')
+      const result = await env.getFeegrantAllowance(
+        'xion1granter123',
+        'xion1grantee456'
+      )
 
       expect(result).toBeUndefined()
       expect(onFetch).not.toHaveBeenCalled()
@@ -104,7 +115,11 @@ describe('feegrant formula functions', () => {
       // Create env with cache
       const cache = {
         events: {
-          [getDependentKey(DependentKeyNamespace.FeegrantAllowance, 'xion1granter123', 'xion1grantee456')]: [mockAllowance as any],
+          [getDependentKey(
+            DependentKeyNamespace.FeegrantAllowance,
+            'xion1granter123',
+            'xion1grantee456'
+          )]: [mockAllowance as any],
         },
         contracts: {},
       } as any
@@ -116,7 +131,10 @@ describe('feegrant formula functions', () => {
         cache,
       })
 
-      const result = await envWithCache.getFeegrantAllowance('xion1granter123', 'xion1grantee456')
+      const result = await envWithCache.getFeegrantAllowance(
+        'xion1granter123',
+        'xion1grantee456'
+      )
 
       expect(result).toEqual({
         granter: 'xion1granter123',
@@ -159,9 +177,14 @@ describe('feegrant formula functions', () => {
         },
       ]
 
-      vi.mocked(FeegrantAllowance.findAll).mockResolvedValueOnce(mockAllowances as any)
+      vi.mocked(FeegrantAllowance.findAll).mockResolvedValueOnce(
+        mockAllowances as any
+      )
 
-      const result = await env.getFeegrantAllowances('xion1granter123', 'granted')
+      const result = await env.getFeegrantAllowances(
+        'xion1granter123',
+        'granted'
+      )
 
       expect(result).toHaveLength(2)
       expect(result[0]).toEqual({
@@ -177,7 +200,11 @@ describe('feegrant formula functions', () => {
       // Check that dependent key was added with wildcard
       expect(dependentKeys).toHaveLength(1)
       expect(dependentKeys[0].key).toBe(
-        getDependentKey(DependentKeyNamespace.FeegrantAllowance, 'xion1granter123', '*')
+        getDependentKey(
+          DependentKeyNamespace.FeegrantAllowance,
+          'xion1granter123',
+          '*'
+        )
       )
       expect(dependentKeys[0].prefix).toBe(true)
 
@@ -198,16 +225,25 @@ describe('feegrant formula functions', () => {
         },
       ]
 
-      vi.mocked(FeegrantAllowance.findAll).mockResolvedValueOnce(mockAllowances as any)
+      vi.mocked(FeegrantAllowance.findAll).mockResolvedValueOnce(
+        mockAllowances as any
+      )
 
-      const result = await env.getFeegrantAllowances('xion1grantee456', 'received')
+      const result = await env.getFeegrantAllowances(
+        'xion1grantee456',
+        'received'
+      )
 
       expect(result).toHaveLength(1)
       expect(result[0].grantee).toBe('xion1grantee456')
 
       // Check that dependent key was added with wildcard for grantee
       expect(dependentKeys[0].key).toBe(
-        getDependentKey(DependentKeyNamespace.FeegrantAllowance, '*', 'xion1grantee456')
+        getDependentKey(
+          DependentKeyNamespace.FeegrantAllowance,
+          '*',
+          'xion1grantee456'
+        )
       )
     })
 
@@ -235,9 +271,14 @@ describe('feegrant formula functions', () => {
         },
       ]
 
-      vi.mocked(FeegrantAllowance.findAll).mockResolvedValueOnce(mockAllowances as any)
+      vi.mocked(FeegrantAllowance.findAll).mockResolvedValueOnce(
+        mockAllowances as any
+      )
 
-      const result = await env.getFeegrantAllowances('xion1granter123', 'granted')
+      const result = await env.getFeegrantAllowances(
+        'xion1granter123',
+        'granted'
+      )
 
       expect(result).toHaveLength(1)
       expect(result[0].grantee).toBe('xion1grantee456')
@@ -246,7 +287,10 @@ describe('feegrant formula functions', () => {
     it('returns undefined for no allowances', async () => {
       vi.mocked(FeegrantAllowance.findAll).mockResolvedValueOnce([])
 
-      const result = await env.getFeegrantAllowances('xion1granter123', 'granted')
+      const result = await env.getFeegrantAllowances(
+        'xion1granter123',
+        'granted'
+      )
 
       expect(result).toBeUndefined()
       expect(onFetch).not.toHaveBeenCalled()
@@ -266,14 +310,20 @@ describe('feegrant formula functions', () => {
         },
       ]
 
-      vi.mocked(FeegrantAllowance.findAll).mockResolvedValueOnce(mockAllowances as any)
+      vi.mocked(FeegrantAllowance.findAll).mockResolvedValueOnce(
+        mockAllowances as any
+      )
 
       // Call without type parameter
       const result = await env.getFeegrantAllowances('xion1granter123')
 
       expect(result).toHaveLength(1)
       expect(dependentKeys[0].key).toBe(
-        getDependentKey(DependentKeyNamespace.FeegrantAllowance, 'xion1granter123', '*')
+        getDependentKey(
+          DependentKeyNamespace.FeegrantAllowance,
+          'xion1granter123',
+          '*'
+        )
       )
     })
   })
@@ -291,9 +341,14 @@ describe('feegrant formula functions', () => {
         active: true,
       }
 
-      vi.mocked(FeegrantAllowance.findOne).mockResolvedValueOnce(mockAllowance as any)
+      vi.mocked(FeegrantAllowance.findOne).mockResolvedValueOnce(
+        mockAllowance as any
+      )
 
-      const result = await env.hasFeegrantAllowance('xion1granter123', 'xion1grantee456')
+      const result = await env.hasFeegrantAllowance(
+        'xion1granter123',
+        'xion1grantee456'
+      )
 
       expect(result).toBe(true)
     })
@@ -310,9 +365,14 @@ describe('feegrant formula functions', () => {
         active: false,
       }
 
-      vi.mocked(FeegrantAllowance.findOne).mockResolvedValueOnce(mockAllowance as any)
+      vi.mocked(FeegrantAllowance.findOne).mockResolvedValueOnce(
+        mockAllowance as any
+      )
 
-      const result = await env.hasFeegrantAllowance('xion1granter123', 'xion1grantee456')
+      const result = await env.hasFeegrantAllowance(
+        'xion1granter123',
+        'xion1grantee456'
+      )
 
       expect(result).toBe(false)
     })
@@ -320,7 +380,10 @@ describe('feegrant formula functions', () => {
     it('returns false for non-existent allowance', async () => {
       vi.mocked(FeegrantAllowance.findOne).mockResolvedValueOnce(null)
 
-      const result = await env.hasFeegrantAllowance('xion1granter123', 'xion1grantee456')
+      const result = await env.hasFeegrantAllowance(
+        'xion1granter123',
+        'xion1grantee456'
+      )
 
       expect(result).toBe(false)
     })

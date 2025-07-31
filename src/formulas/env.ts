@@ -18,38 +18,38 @@ import {
 import { WasmCodeService } from '@/services/wasm-codes'
 import { BANK_HISTORY_CODE_IDS_KEYS } from '@/tracer/handlers/bank'
 import {
-  Cache,
+  type Cache,
   DbType,
-  Env,
-  EnvOptions,
-  FormulaBalanceGetter,
-  FormulaBalancesGetter,
-  FormulaCodeIdKeyForContractGetter,
-  FormulaCommunityPoolBalancesGetter,
-  FormulaContractGetter,
-  FormulaContractMatchesCodeIdKeysGetter,
-  FormulaDateGetter,
-  FormulaDateWithValueMatchGetter,
-  FormulaExtractionGetter,
-  FormulaGetter,
-  FormulaMapGetter,
-  FormulaPrefetch,
-  FormulaPrefetchTransformations,
-  FormulaProposalCountGetter,
-  FormulaProposalGetter,
-  FormulaProposalObject,
-  FormulaProposalVoteCountGetter,
-  FormulaProposalVoteGetter,
-  FormulaProposalVoteObject,
-  FormulaProposalVotesGetter,
-  FormulaProposalsGetter,
-  FormulaQuerier,
-  FormulaSlashEventsGetter,
-  FormulaTransformationDateGetter,
-  FormulaTransformationMapGetter,
-  FormulaTransformationMatchGetter,
-  FormulaTransformationMatchesGetter,
-  FormulaTxEventsGetter,
+  type Env,
+  type EnvOptions,
+  type FormulaBalanceGetter,
+  type FormulaBalancesGetter,
+  type FormulaCodeIdKeyForContractGetter,
+  type FormulaCommunityPoolBalancesGetter,
+  type FormulaContractGetter,
+  type FormulaContractMatchesCodeIdKeysGetter,
+  type FormulaDateGetter,
+  type FormulaDateWithValueMatchGetter,
+  type FormulaExtractionGetter,
+  type FormulaGetter,
+  type FormulaMapGetter,
+  type FormulaPrefetch,
+  type FormulaPrefetchTransformations,
+  type FormulaProposalCountGetter,
+  type FormulaProposalGetter,
+  type FormulaProposalObject,
+  type FormulaProposalVoteCountGetter,
+  type FormulaProposalVoteGetter,
+  type FormulaProposalVoteObject,
+  type FormulaProposalVotesGetter,
+  type FormulaProposalsGetter,
+  type FormulaQuerier,
+  type FormulaSlashEventsGetter,
+  type FormulaTransformationDateGetter,
+  type FormulaTransformationMapGetter,
+  type FormulaTransformationMatchGetter,
+  type FormulaTransformationMatchesGetter,
+  type FormulaTxEventsGetter,
 } from '@/types'
 import { dbKeyForKeys, dbKeyToKeys, getDependentKey } from '@/utils'
 
@@ -137,10 +137,11 @@ export const getEnv = ({
     { keyType = 'string' } = {}
   ) => {
     const keyPrefix =
-      (Array.isArray(name)
+      `${Array.isArray(name)
         ? // Add an empty key at the end so the name(s) are treated as a prefix. Prefixes have their lengths encoded in the key and are treated differently from the final key in the tuple.
           dbKeyForKeys(...name, '')
-        : dbKeyForKeys(name, '')) + ','
+        : dbKeyForKeys(name, '')
+    },`
     const dependentKey = getDependentKey(
       WasmStateEvent.dependentKeyNamespace,
       contractAddress,
@@ -1177,8 +1178,11 @@ export const getEnv = ({
       return
     }
 
-    const dependentKey =
-      getDependentKey(BankStateEvent.dependentKeyNamespace, address) + ':'
+    const dependentKey = `${getDependentKey(
+      BankStateEvent.dependentKeyNamespace,
+      address
+    )}:`
+
     dependentKeys?.push({
       key: dependentKey,
       prefix: true,
@@ -1760,7 +1764,6 @@ export const getEnv = ({
 
     return event.toJSON()
   }
-    }
 
   const getFeegrantAllowance = async (granter: string, grantee: string) => {
     const dependentKey = getDependentKey(
@@ -1859,7 +1862,9 @@ export const getEnv = ({
               'active',
             ],
             where: {
-              ...(type === 'granted' ? { granter: address } : { grantee: address }),
+              ...(type === 'granted'
+                ? { granter: address }
+                : { grantee: address }),
               blockHeight: blockHeightFilter,
             },
             order: [

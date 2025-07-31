@@ -147,66 +147,61 @@ export class FeegrantAllowance extends DependableEventModel {
   ): WhereOptions {
     // Some keys (most likely those with wildcards) may not have a granter
     // address. It is fine to group these together.
-    const dependentKeysByGranter = dependentKeys.reduce(
-      (acc, dependentKey) => {
-        // 1. Remove namespace from key.
-        let key = dependentKey.key.replace(
-          new RegExp(`^${this.dependentKeyNamespace}:`),
-          ''
-        )
+    const dependentKeysByGranter = dependentKeys.reduce((acc, dependentKey) => {
+      // 1. Remove namespace from key.
+      let key = dependentKey.key.replace(
+        new RegExp(`^${this.dependentKeyNamespace}:`),
+        ''
+      )
 
-        // 2. Extract granter address from key.
-        // Dependent keys for any granter start with "*:".
-        const granter = key.startsWith('*:') ? '' : key.split(':')[0]
+      // 2. Extract granter address from key.
+      // Dependent keys for any granter start with "*:".
+      const granter = key.startsWith('*:') ? '' : key.split(':')[0]
 
-        key = key
-          // 3. Remove granter address from key.
-          .replace(new RegExp(`^${granter || '\\*'}:`), '')
-          // 4. Replace wildcard symbol with LIKE wildcard for database query.
-          .replace(/\*/g, '%')
+      key = key
+        // 3. Remove granter address from key.
+        .replace(new RegExp(`^${granter || '\\*'}:`), '')
+        // 4. Replace wildcard symbol with LIKE wildcard for database query.
+        .replace(/\*/g, '%')
 
-        return {
-          ...acc,
-          [granter]: [
-            ...(acc[granter] ?? []),
-            {
-              key,
-              prefix: dependentKey.prefix,
-            },
-          ],
-        }
-      },
-      {} as Record<string, { key: string; prefix: boolean }[]>
-    )
+      return {
+        ...acc,
+        [granter]: [
+          ...(acc[granter] ?? []),
+          {
+            key,
+            prefix: dependentKey.prefix,
+          },
+        ],
+      }
+    }, {} as Record<string, { key: string; prefix: boolean }[]>)
 
     return {
-      [Op.or]: Object.entries(dependentKeysByGranter).map(
-        ([granter, keys]) => {
-          const exactKeys = keys
-            .filter(({ key, prefix }) => !prefix && !key.includes('%'))
-            .map(({ key }) => key)
-          const wildcardKeys = keys
-            .filter(({ key, prefix }) => prefix || key.includes('%'))
-            .map(({ key, prefix }) => key + (prefix ? '%' : ''))
+      [Op.or]: Object.entries(dependentKeysByGranter).map(([granter, keys]) => {
+        const exactKeys = keys
+          .filter(({ key, prefix }) => !prefix && !key.includes('%'))
+          .map(({ key }) => key)
+        const wildcardKeys = keys
+          .filter(({ key, prefix }) => prefix || key.includes('%'))
+          .map(({ key, prefix }) => key + (prefix ? '%' : ''))
 
-          return {
-            // Only include if granter address is defined.
-            ...(granter && { granter }),
-            // Related logic in `makeComputationDependencyWhere` in
-            // `src/db/utils.ts`.
-            grantee: {
-              [Op.or]: [
-                // Exact matches.
-                ...(exactKeys.length > 0 ? [{ [Op.in]: exactKeys }] : []),
-                // Wildcards. May or may not be prefixes.
-                ...wildcardKeys.map((key) => ({
-                  [Op.like]: key,
-                })),
-              ],
-            },
-          }
+        return {
+          // Only include if granter address is defined.
+          ...(granter && { granter }),
+          // Related logic in `makeComputationDependencyWhere` in
+          // `src/db/utils.ts`.
+          grantee: {
+            [Op.or]: [
+              // Exact matches.
+              ...(exactKeys.length > 0 ? [{ [Op.in]: exactKeys }] : []),
+              // Wildcards. May or may not be prefixes.
+              ...wildcardKeys.map((key) => ({
+                [Op.like]: key,
+              })),
+            ],
+          },
         }
-      ),
+      }),
     }
   }
 }

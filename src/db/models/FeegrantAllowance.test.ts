@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest'
 import { Op } from 'sequelize'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 import { FeegrantAllowance } from '@/db'
 import { DependentKeyNamespace } from '@/types'
@@ -156,9 +156,8 @@ describe('FeegrantAllowance', () => {
         },
       ]
 
-      const whereClause = FeegrantAllowance.getWhereClauseForDependentKeys(
-        dependentKeys
-      )
+      const whereClause =
+        FeegrantAllowance.getWhereClauseForDependentKeys(dependentKeys)
 
       expect(whereClause).toEqual({
         [Op.or]: [
@@ -192,9 +191,8 @@ describe('FeegrantAllowance', () => {
         },
       ]
 
-      const whereClause = FeegrantAllowance.getWhereClauseForDependentKeys(
-        dependentKeys
-      )
+      const whereClause =
+        FeegrantAllowance.getWhereClauseForDependentKeys(dependentKeys)
 
       expect(whereClause).toEqual({
         [Op.or]: [
@@ -226,9 +224,8 @@ describe('FeegrantAllowance', () => {
         },
       ]
 
-      const whereClause = FeegrantAllowance.getWhereClauseForDependentKeys(
-        dependentKeys
-      )
+      const whereClause =
+        FeegrantAllowance.getWhereClauseForDependentKeys(dependentKeys)
 
       expect(whereClause).toEqual({
         [Op.or]: [
