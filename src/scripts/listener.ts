@@ -53,8 +53,12 @@ if (config.sentryDsn) {
 }
 
 const main = async () => {
+  console.log(`[${new Date().toISOString()}] Testing Redis connection...`)
+
   // Test Redis connection to ensure we can connect, throwing error if not.
   await testRedisConnection(true)
+
+  console.log(`[${new Date().toISOString()}] Connecting to database...`)
 
   const dataSequelize = await loadDb({
     type: DbType.Data,
@@ -74,12 +78,26 @@ const main = async () => {
   // Initialize state.
   const state = await State.createSingletonIfMissing(config.chainId)
 
+  console.log(
+    `[${new Date().toISOString()}] State initialized: chainId=${
+      state.chainId
+    } latestBlockHeight=${state.latestBlockHeight} latestBlockTimeUnixMs=${
+      state.latestBlockTimeUnixMs
+    }`
+  )
+
   // Set up meilisearch.
   await setupMeilisearch()
+
+  console.log(
+    `[${new Date().toISOString()}] Connecting to ${config.remoteRpc}...`
+  )
 
   // Create CosmWasm client that batches requests.
   const autoCosmWasmClient = new AutoCosmWasmClient(config.remoteRpc)
   await autoCosmWasmClient.update()
+
+  console.log(`[${new Date().toISOString()}] Setting up extractors...`)
 
   // Set up extractors.
   const extractors = await Promise.all(
@@ -95,7 +113,7 @@ const main = async () => {
     )
   )
 
-  console.log(`\n[${new Date().toISOString()}] Starting listener...`)
+  console.log(`[${new Date().toISOString()}] Starting listener...`)
 
   const blockIterator = new BlockIterator({
     rpcUrl: config.remoteRpc,
@@ -130,15 +148,13 @@ const main = async () => {
   })
   app.listen(port, () => {
     console.log(
-      `[${new Date().toISOString()}] Health probe ready on port ${port}.`
+      `\n[${new Date().toISOString()}] Listener ready, health probe on port ${port}.`
     )
 
     // Tell pm2 we're ready right before we start reading.
     if (process.send) {
       process.send('ready')
     }
-
-    console.log(`[${new Date().toISOString()}] Listener ready.`)
   })
 
   // Start iterating. This will resolve once the iterator is done (due to SIGINT

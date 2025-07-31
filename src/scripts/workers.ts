@@ -32,8 +32,12 @@ if (config.sentryDsn) {
 }
 
 const main = async () => {
+  console.log(`[${new Date().toISOString()}] Testing Redis connection...`)
+
   // Test Redis connection to ensure we can connect, throwing error if not.
   await testRedisConnection(true)
+
+  console.log(`[${new Date().toISOString()}] Connecting to database...`)
 
   // Load DB on start.
   const dataSequelize = await loadDb({
@@ -49,9 +53,17 @@ const main = async () => {
   })
 
   // Initialize state.
-  await State.createSingletonIfMissing(config.chainId)
+  const state = await State.createSingletonIfMissing(config.chainId)
 
-  console.log(`\n[${new Date().toISOString()}] Starting workers...`)
+  console.log(
+    `[${new Date().toISOString()}] State initialized: chainId=${
+      state.chainId
+    } latestBlockHeight=${state.latestBlockHeight} latestBlockTimeUnixMs=${
+      state.latestBlockTimeUnixMs
+    }`
+  )
+
+  console.log(`[${new Date().toISOString()}] Starting workers...`)
 
   // Create bull workers.
   const options: QueueOptions = {
@@ -92,6 +104,8 @@ const main = async () => {
   if (process.send) {
     process.send('ready')
   }
+
+  console.log(`\n[${new Date().toISOString()}] Workers ready.`)
 }
 
 main().catch((err) => {
