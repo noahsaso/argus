@@ -1,7 +1,7 @@
 import * as Sentry from '@sentry/node'
 import { Command } from 'commander'
 
-import { ConfigManager } from '@/config'
+import { ConfigManager, testRedisConnection } from '@/config'
 import { State, loadDb } from '@/db'
 import { QueueOptions, queues } from '@/queues'
 import { WasmCodeService } from '@/services/wasm-codes'
@@ -32,6 +32,9 @@ if (config.sentryDsn) {
 }
 
 const main = async () => {
+  // Test Redis connection to ensure we can connect, throwing error if not.
+  await testRedisConnection(true)
+
   // Load DB on start.
   const dataSequelize = await loadDb({
     type: DbType.Data,

@@ -5,7 +5,7 @@ import { Command } from 'commander'
 import Koa from 'koa'
 import { Sequelize } from 'sequelize'
 
-import { ConfigManager } from '@/config'
+import { ConfigManager, testRedisConnection } from '@/config'
 import { Block, State, loadDb } from '@/db'
 import { extractorMakers } from '@/listener'
 import { ExtractQueue } from '@/queues/queues'
@@ -53,6 +53,9 @@ if (config.sentryDsn) {
 }
 
 const main = async () => {
+  // Test Redis connection to ensure we can connect, throwing error if not.
+  await testRedisConnection(true)
+
   const dataSequelize = await loadDb({
     type: DbType.Data,
     configOverride: {
