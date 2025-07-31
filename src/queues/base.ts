@@ -35,7 +35,7 @@ export abstract class BaseQueue<Payload = any, Result = any> {
     const worker = getBullWorker(this.queueName, this.process.bind(this))
 
     worker.on('error', async (err) => {
-      console.error('Worker errored', err)
+      console.error(`Worker errored (queue=${this.queueName})`, err)
 
       Sentry.captureException(err, {
         tags: {
