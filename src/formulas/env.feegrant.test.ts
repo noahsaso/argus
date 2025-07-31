@@ -218,7 +218,7 @@ describe('feegrant formula functions', () => {
 
     it('returns allowances received by address', async () => {
       const mockAllowances = [
-        {
+        new MockFeegrantAllowance({
           granter: 'xion1granter123',
           grantee: 'xion1grantee456',
           blockHeight: '100',
@@ -227,7 +227,7 @@ describe('feegrant formula functions', () => {
           allowanceData: 'data1',
           allowanceType: 'BasicAllowance',
           active: true,
-        },
+        }),
       ]
 
       vi.mocked(FeegrantAllowance.findAll).mockResolvedValueOnce(
@@ -254,7 +254,7 @@ describe('feegrant formula functions', () => {
 
     it('filters out inactive allowances', async () => {
       const mockAllowances = [
-        {
+        new MockFeegrantAllowance({
           granter: 'xion1granter123',
           grantee: 'xion1grantee456',
           blockHeight: '100',
@@ -263,8 +263,8 @@ describe('feegrant formula functions', () => {
           allowanceData: 'data1',
           allowanceType: 'BasicAllowance',
           active: true,
-        },
-        {
+        }),
+        new MockFeegrantAllowance({
           granter: 'xion1granter123',
           grantee: 'xion1grantee789',
           blockHeight: '100',
@@ -273,7 +273,7 @@ describe('feegrant formula functions', () => {
           allowanceData: 'data2',
           allowanceType: 'BasicAllowance',
           active: false, // Inactive
-        },
+        }),
       ]
 
       vi.mocked(FeegrantAllowance.findAll).mockResolvedValueOnce(
@@ -303,7 +303,7 @@ describe('feegrant formula functions', () => {
 
     it('defaults to granted type', async () => {
       const mockAllowances = [
-        {
+        new MockFeegrantAllowance({
           granter: 'xion1granter123',
           grantee: 'xion1grantee456',
           blockHeight: '100',
@@ -312,7 +312,7 @@ describe('feegrant formula functions', () => {
           allowanceData: 'data1',
           allowanceType: 'BasicAllowance',
           active: true,
-        },
+        }),
       ]
 
       vi.mocked(FeegrantAllowance.findAll).mockResolvedValueOnce(
@@ -335,7 +335,7 @@ describe('feegrant formula functions', () => {
 
   describe('hasFeegrantAllowance', () => {
     it('returns true for active allowance', async () => {
-      const mockAllowance = {
+      const mockAllowance = new MockFeegrantAllowance({
         granter: 'xion1granter123',
         grantee: 'xion1grantee456',
         blockHeight: '100',
@@ -344,7 +344,7 @@ describe('feegrant formula functions', () => {
         allowanceData: 'base64data',
         allowanceType: 'BasicAllowance',
         active: true,
-      }
+      })
 
       vi.mocked(FeegrantAllowance.findOne).mockResolvedValueOnce(
         mockAllowance as any
@@ -359,7 +359,7 @@ describe('feegrant formula functions', () => {
     })
 
     it('returns false for inactive allowance', async () => {
-      const mockAllowance = {
+      const mockAllowance = new MockFeegrantAllowance({
         granter: 'xion1granter123',
         grantee: 'xion1grantee456',
         blockHeight: '100',
@@ -368,7 +368,7 @@ describe('feegrant formula functions', () => {
         allowanceData: 'base64data',
         allowanceType: 'BasicAllowance',
         active: false,
-      }
+      })
 
       vi.mocked(FeegrantAllowance.findOne).mockResolvedValueOnce(
         mockAllowance as any
