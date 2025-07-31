@@ -1832,7 +1832,7 @@ export const getEnv = ({
     )
     dependentKeys?.push({
       key: dependentKey,
-      prefix: true,
+      prefix: false,
     })
 
     // Check cache.
