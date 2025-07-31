@@ -22,7 +22,7 @@ export type DB = { uri?: string } & Pick<
 
 export type Config = {
   home: string
-  localRpc: string
+  localRpc?: string
   remoteRpc: string
   bech32Prefix: string
   db: {
