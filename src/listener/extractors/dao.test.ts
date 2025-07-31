@@ -314,8 +314,10 @@ describe('DAO Extractor', () => {
 
   describe('extract function', () => {
     const mockContractInfo = {
-      contract: 'crates.io:dao-dao-core',
-      version: '2.4.0',
+      info: {
+        contract: 'crates.io:dao-dao-core',
+        version: '2.4.0',
+      },
     }
 
     const mockDumpState = {

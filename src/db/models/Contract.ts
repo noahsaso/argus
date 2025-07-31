@@ -46,6 +46,10 @@ export class Contract extends Model {
   @Column(DataType.DATE)
   declare instantiatedAtBlockTimestamp: Date
 
+  @AllowNull
+  @Column(DataType.TEXT)
+  declare txHash: string | null
+
   get json(): ContractJson {
     return {
       address: this.address,
@@ -55,11 +59,12 @@ export class Contract extends Model {
       label: this.label,
       instantiatedAt: {
         block: {
-          height: BigInt(this.instantiatedAtBlockHeight),
-          timeUnixMs: BigInt(this.instantiatedAtBlockTimeUnixMs),
+          height: this.instantiatedAtBlockHeight,
+          timeUnixMs: this.instantiatedAtBlockTimeUnixMs,
         },
-        timestamp: this.instantiatedAtBlockTimestamp,
+        timestamp: this.instantiatedAtBlockTimestamp.toISOString(),
       },
+      txHash: this.txHash,
     }
   }
 

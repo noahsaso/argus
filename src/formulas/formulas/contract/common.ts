@@ -1,4 +1,4 @@
-import { ContractFormula } from '@/types'
+import { ContractFormula, ContractJson } from '@/types'
 
 import { ContractInfo } from '../types'
 import { makeSimpleContractFormula } from '../utils'
@@ -7,16 +7,41 @@ export const info: ContractFormula<ContractInfo> = {
   docs: {
     description: 'retrieves the contract info (name and version)',
   },
-  compute: async ({ contractAddress, getTransformationMatch, get }) => {
+  compute: async ({
+    contractAddress,
+    getTransformationMatch,
+    get,
+    getExtraction,
+  }) => {
     const info =
       (await getTransformationMatch<ContractInfo>(contractAddress, 'info'))
         ?.value || (await get(contractAddress, 'contract_info'))
 
     if (!info) {
+      // If no info found in state, try to get from extraction.
+      const extraction = await getExtraction(contractAddress, 'info')
+      if (extraction) {
+        return extraction.data as ContractInfo
+      }
+
       throw new Error(`no contract info found for ${contractAddress}`)
     }
 
     return info
+  },
+}
+
+export const details: ContractFormula<ContractJson> = {
+  docs: {
+    description:
+      'retrieves contract details (codeId, admin, creator, label, instantiation block, txHash)',
+  },
+  compute: async ({ contractAddress, getContract }) => {
+    const contract = await getContract(contractAddress)
+    if (!contract) {
+      throw new Error('contract not yet indexed')
+    }
+    return contract
   },
 }
 
@@ -52,9 +77,8 @@ export const instantiatedAt: ContractFormula<string> = {
     description: 'retrieves the contract instantiation timestamp',
   },
   compute: async ({ contractAddress, getContract }) => {
-    const timestamp = (
-      await getContract(contractAddress)
-    )?.instantiatedAt.timestamp.toISOString()
+    const timestamp = (await getContract(contractAddress))?.instantiatedAt
+      .timestamp
 
     if (!timestamp) {
       throw new Error('contract not yet indexed')

@@ -2,7 +2,7 @@ import { WhereOptions } from 'sequelize'
 import { Model } from 'sequelize-typescript'
 
 import { ComputationDependentKey } from './computation'
-import { Block } from './misc'
+import { Block, SerializedBlock } from './misc'
 
 export enum DbType {
   Accounts = 'accounts',
@@ -62,7 +62,8 @@ export type ContractJson = {
   creator?: string | null
   label?: string | null
   instantiatedAt: {
-    block: Block
-    timestamp: Date
+    block: SerializedBlock
+    timestamp: string
   }
+  txHash?: string | null
 }
