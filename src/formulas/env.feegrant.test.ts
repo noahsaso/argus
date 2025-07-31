@@ -397,7 +397,7 @@ describe('feegrant formula functions', () => {
         where: {
           granter: 'xion1granter123',
           grantee: 'xion1grantee456',
-          blockHeight: { $lte: BigInt(100) },
+          blockHeight: { [Symbol.for('lte')]: BigInt(100) },
         },
         order: [['blockHeight', 'DESC']],
       })
@@ -410,7 +410,7 @@ describe('feegrant formula functions', () => {
         expect.objectContaining({
           where: expect.objectContaining({
             granter: 'xion1granter123',
-            blockHeight: { $lte: BigInt(100) },
+            blockHeight: { [Symbol.for('lte')]: BigInt(100) },
           }),
         })
       )

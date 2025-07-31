@@ -145,6 +145,11 @@ export class FeegrantAllowance extends DependableEventModel {
   static getWhereClauseForDependentKeys(
     dependentKeys: ComputationDependentKey[]
   ): WhereOptions {
+    // Handle empty dependent keys array
+    if (dependentKeys.length === 0) {
+      return {}
+    }
+
     // Some keys (most likely those with wildcards) may not have a granter
     // address. It is fine to group these together.
     const dependentKeysByGranter = dependentKeys.reduce((acc, dependentKey) => {
