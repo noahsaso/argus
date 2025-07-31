@@ -22,7 +22,7 @@ export type DB = { uri?: string } & Pick<
 
 export type Config = {
   home: string
-  localRpc: string
+  localRpc?: string
   remoteRpc: string
   bech32Prefix: string
   db: {
@@ -32,7 +32,10 @@ export type Config = {
   redis?: {
     host?: string
     port?: number | string
+    username?: string
     password: string
+    keyPrefix?: string
+    tls?: boolean | 'true' | 1 | '1' | { ca: string }
   }
   meilisearch?: {
     host: string

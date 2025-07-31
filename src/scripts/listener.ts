@@ -2,9 +2,10 @@ import { decodeRawProtobufMsg } from '@dao-dao/types'
 import { Tx } from '@dao-dao/types/protobuf/codegen/cosmos/tx/v1beta1/tx'
 import * as Sentry from '@sentry/node'
 import { Command } from 'commander'
+import Koa from 'koa'
 import { Sequelize } from 'sequelize'
 
-import { ConfigManager } from '@/config'
+import { ConfigManager, testRedisConnection } from '@/config'
 import { Block, State, loadDb } from '@/db'
 import { extractorMakers } from '@/listener'
 import { ExtractQueue } from '@/queues/queues'
@@ -28,8 +29,14 @@ program.option(
   '-c, --config <path>',
   'path to config file, falling back to config.json'
 )
+program.option(
+  '-p, --port <port>',
+  'port to serve health probe on',
+  (value) => parseInt(value),
+  3420
+)
 program.parse()
-const { config: _config } = program.opts()
+const { config: _config, port } = program.opts()
 
 // Load config from specific config file.
 const config = ConfigManager.load(_config)
@@ -46,6 +53,13 @@ if (config.sentryDsn) {
 }
 
 const main = async () => {
+  console.log(`[${new Date().toISOString()}] Testing Redis connection...`)
+
+  // Test Redis connection to ensure we can connect, throwing error if not.
+  await testRedisConnection(true)
+
+  console.log(`[${new Date().toISOString()}] Connecting to database...`)
+
   const dataSequelize = await loadDb({
     type: DbType.Data,
     configOverride: {
@@ -64,12 +78,26 @@ const main = async () => {
   // Initialize state.
   const state = await State.createSingletonIfMissing(config.chainId)
 
+  console.log(
+    `[${new Date().toISOString()}] State initialized: chainId=${
+      state.chainId
+    } latestBlockHeight=${state.latestBlockHeight} latestBlockTimeUnixMs=${
+      state.latestBlockTimeUnixMs
+    }`
+  )
+
   // Set up meilisearch.
   await setupMeilisearch()
+
+  console.log(
+    `[${new Date().toISOString()}] Connecting to ${config.remoteRpc}...`
+  )
 
   // Create CosmWasm client that batches requests.
   const autoCosmWasmClient = new AutoCosmWasmClient(config.remoteRpc)
   await autoCosmWasmClient.update()
+
+  console.log(`[${new Date().toISOString()}] Setting up extractors...`)
 
   // Set up extractors.
   const extractors = await Promise.all(
@@ -85,7 +113,7 @@ const main = async () => {
     )
   )
 
-  console.log(`\n[${new Date().toISOString()}] Starting listener...`)
+  console.log(`[${new Date().toISOString()}] Starting listener...`)
 
   const blockIterator = new BlockIterator({
     rpcUrl: config.remoteRpc,
@@ -109,12 +137,25 @@ const main = async () => {
     blockIterator.stopIterating()
   })
 
-  // Tell pm2 we're ready right before we start reading.
-  if (process.send) {
-    process.send('ready')
-  }
+  // Serve health probe.
+  const app = new Koa()
+  app.use(async (ctx) => {
+    ctx.status = 200
+    ctx.body = {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+    }
+  })
+  app.listen(port, () => {
+    console.log(
+      `\n[${new Date().toISOString()}] Listener ready, health probe on port ${port}.`
+    )
 
-  console.log(`[${new Date().toISOString()}] Listener ready.`)
+    // Tell pm2 we're ready right before we start reading.
+    if (process.send) {
+      process.send('ready')
+    }
+  })
 
   // Start iterating. This will resolve once the iterator is done (due to SIGINT
   // or SIGTERM).
@@ -159,13 +200,13 @@ const main = async () => {
         return
       }
 
-      // Attempt to decode each message, ignoring errors.
+      // Attempt to decode each message, ignoring errors and returning the
+      // original message if it fails.
       const messages = tx.body.messages.flatMap((message) => {
         try {
           return decodeRawProtobufMsg(message)
-        } catch (err) {
-          console.error('Error decoding message', err)
-          return []
+        } catch {
+          return message
         }
       })
 
@@ -194,15 +235,20 @@ const main = async () => {
         }
       }
     },
-    onError: (type, error) => {
+    onError: (error) => {
       console.error(
-        `[${new Date().toISOString()}] Listener error: ${type}`,
-        error
+        `[${new Date().toISOString()}] Listener error for ${error.type} (${
+          error.blockHeight
+        }${error.txHash ? `/${error.txHash}` : ''}):`,
+        error,
+        error.cause
       )
-      Sentry.captureException(error, {
+      Sentry.captureException(error.cause, {
         tags: {
           script: 'listener',
-          type,
+          type: error.type,
+          blockHeight: error.blockHeight,
+          txHash: error.txHash,
         },
       })
     },

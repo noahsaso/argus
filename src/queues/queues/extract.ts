@@ -17,6 +17,7 @@ export type ExtractQueuePayload = {
 
 export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
   static queueName = 'extract'
+  static concurrency = 5
 
   static getQueue = () => getBullQueue<ExtractQueuePayload>(this.queueName)
   static getQueueEvents = () => getBullQueueEvents(this.queueName)
@@ -50,7 +51,7 @@ export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
     this.extractors = extractors
   }
 
-  process({ data }: Job<ExtractQueuePayload>): Promise<void> {
+  process({ data, log }: Job<ExtractQueuePayload>): Promise<void> {
     return new Promise<void>(async (resolve, reject) => {
       // Time out if takes more than 30 seconds.
       let timeout: NodeJS.Timeout | null = setTimeout(() => {
@@ -117,6 +118,15 @@ export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
         }
       } catch (err) {
         if (timeout !== null) {
+          log(
+            `${err instanceof Error ? err.name : 'Error'}: ${
+              err instanceof Error ? err.message : err
+            } ${
+              err && typeof err === 'object' && 'parent' in err
+                ? err.parent
+                : ''
+            }`.trim()
+          )
           reject(err)
         }
       } finally {

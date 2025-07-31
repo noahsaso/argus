@@ -64,6 +64,7 @@ describe('ExtractQueue', () => {
           },
         },
       },
+      log: async (_) => 0,
     } as Job<ExtractQueuePayload>
   })
 
@@ -126,6 +127,7 @@ describe('ExtractQueue', () => {
             data: {},
           },
         },
+        log: async (_) => 0,
       } as Job<ExtractQueuePayload>
 
       await expect(extractQueue.process(invalidJob)).rejects.toThrow(

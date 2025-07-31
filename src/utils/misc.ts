@@ -67,7 +67,7 @@ export const batch = async <T extends unknown>({
   delayMs,
   ...args
 }: {
-  list: T[]
+  list: readonly T[] | T[]
   batchSize: number
   tries?: number
   delayMs?: number

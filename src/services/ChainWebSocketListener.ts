@@ -531,7 +531,9 @@ export class ChainWebSocketListener {
         if (!this._connected) {
           reject(
             new Error(
-              `WebSocket closed during connection attempt: ${code} ${reason}`
+              `WebSocket closed during connection attempt: code=${code} reason=${
+                reason || '<empty>'
+              }`
             )
           )
           return
@@ -544,7 +546,9 @@ export class ChainWebSocketListener {
         this.webSocket = null
 
         console.error(
-          `[${new Date().toISOString()}] WebSocket closed (${code}: ${reason}), will reconnect...`
+          `[${new Date().toISOString()}] WebSocket closed (code=${code} reason=${
+            reason || '<empty>'
+          }), will reconnect...`
         )
 
         // Emit disconnected state

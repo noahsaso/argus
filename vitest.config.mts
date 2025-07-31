@@ -7,9 +7,9 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     watch: false,
     hideSkippedTests: true,
-    // 1 hour timeout for tests.
-    testTimeout: 3_600_000,
-    hookTimeout: 3_600_000,
+    // 30 second timeout for tests.
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
   },
   plugins: [tsconfigPaths()],
 })

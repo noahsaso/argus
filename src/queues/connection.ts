@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/node'
-import { Processor, Queue, QueueEvents, Worker } from 'bullmq'
+import { Processor, Queue, QueueBaseOptions, QueueEvents, Worker } from 'bullmq'
 
 import { getRedisConfig } from '@/config/redis'
 import { State } from '@/db/models'
@@ -13,7 +13,7 @@ export const activeBullQueues: Partial<Record<string, Queue>> = {}
 export const getBullQueue = <T extends unknown>(name: string): Queue<T> => {
   if (!activeBullQueues[name]) {
     activeBullQueues[name] = new Queue<T>(name, {
-      connection: getRedisConfig(),
+      ...getBullMqConnection(),
       defaultJobOptions: {
         attempts: 3,
         backoff: {
@@ -38,7 +38,7 @@ export const getBullQueue = <T extends unknown>(name: string): Queue<T> => {
 }
 
 export const getBullQueueEvents = (name: string): QueueEvents =>
-  new QueueEvents(name, { connection: getRedisConfig() })
+  new QueueEvents(name, getBullMqConnection())
 
 /**
  * Close all active bull queues.
@@ -60,10 +60,12 @@ export const closeBullQueue = async (name: string) =>
 
 export const getBullWorker = <T extends unknown>(
   name: string,
-  processor: Processor<T>
+  processor: Processor<T>,
+  concurrency: number = 1
 ) =>
   new Worker<T>(name, processor, {
-    connection: getRedisConfig(),
+    ...getBullMqConnection(),
+    concurrency,
     removeOnComplete: {
       // Keep last 10,000 successful jobs.
       count: 10_000,
@@ -73,3 +75,21 @@ export const getBullWorker = <T extends unknown>(
       age: 30 * 24 * 60 * 60,
     },
   })
+
+const getBullMqConnection = (): QueueBaseOptions => {
+  const config = getRedisConfig()
+  if (!config) {
+    throw new Error('Redis config not found')
+  }
+
+  // The BullMQ docs (https://docs.bullmq.io/guide/connections#queue) say: When
+  // using ioredis connections, be careful not to use the "keyPrefix" option in
+  // ioredis as this option is not compatible with BullMQ, which provides its
+  // own key prefixing mechanism by using prefix option.
+  const { keyPrefix: prefix, ...connection } = config
+
+  return {
+    connection,
+    prefix,
+  }
+}

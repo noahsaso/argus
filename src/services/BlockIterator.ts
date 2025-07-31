@@ -2,34 +2,40 @@ import { sha256 } from '@cosmjs/crypto'
 import { toHex } from '@cosmjs/encoding'
 import { Block, IndexedTx } from '@cosmjs/stargate'
 
-import { AutoCosmWasmClient } from '@/utils'
+import { AutoCosmWasmClient, batch, retry } from '@/utils'
 
 import { ChainWebSocketListener } from './ChainWebSocketListener'
 
 interface BufferedBlockData {
   height: number
   block: Block
-  txs: IndexedTx[]
-  /**
-   * TX-specific errors that occurred within this block.
-   */
-  txErrors: Error[]
+  txs: (IndexedTx | BlockIteratorError)[]
 }
 
-/**
- * Block-level error (entire block failed to load).
- */
-interface BufferedBlockError {
-  height: number
-  error: Error
-}
+type BufferedItem = BufferedBlockData | BlockIteratorError
 
-type BufferedItem = BufferedBlockData | BufferedBlockError
-
-enum ErrorType {
+export enum BlockIteratorErrorType {
   StartHeightTooLow = 'startHeightTooLow',
   Block = 'block',
   Tx = 'tx',
+}
+
+export class BlockIteratorError extends Error {
+  constructor(
+    public readonly type: BlockIteratorErrorType,
+    public readonly cause: unknown,
+    public readonly blockHeight?: number,
+    public readonly txHash?: string
+  ) {
+    super(
+      cause
+        ? cause instanceof Error
+          ? cause.message
+          : String(cause) || ''
+        : ''
+    )
+    this.name = 'BlockIteratorError'
+  }
 }
 
 /**
@@ -140,7 +146,7 @@ export class BlockIterator {
   }: {
     onBlock?: (block: Block) => void | Promise<void>
     onTx?: (tx: IndexedTx) => void | Promise<void>
-    onError?: (type: ErrorType, error: Error) => void | Promise<void>
+    onError?: (error: BlockIteratorError) => void | Promise<void>
   }) {
     if (!onBlock && !onTx) {
       throw new Error('No callbacks provided')
@@ -167,9 +173,11 @@ export class BlockIterator {
     // start height instead.
     if (this.startHeight > 0 && this.startHeight < minStartHeight) {
       await onError?.(
-        ErrorType.StartHeightTooLow,
-        new Error(
-          `Start height ${this.startHeight} is too low, using ${minStartHeight}`
+        new BlockIteratorError(
+          BlockIteratorErrorType.StartHeightTooLow,
+          new Error(
+            `Start height ${this.startHeight} is too low, using ${minStartHeight}`
+          )
         )
       )
     }
@@ -202,21 +210,20 @@ export class BlockIterator {
       // If we got the item, delete it from the buffer.
       this.buffer.delete(this.currentHeight)
 
-      if ('error' in item) {
-        // This is a block-level error
-        await onError?.(ErrorType.Block, item.error)
+      // Emit block-level errors.
+      if (item instanceof BlockIteratorError) {
+        await onError?.(item)
       } else {
-        // This is block data (may include TX errors)
+        // Emit block data.
         await onBlock?.(item.block)
 
-        // Process successful transactions
+        // Emit successful transactions and errors in order.
         for (const tx of item.txs) {
-          await onTx?.(tx)
-        }
-
-        // Process TX-specific errors that occurred within this block
-        for (const txError of item.txErrors) {
-          await onError?.(ErrorType.Tx, txError)
+          if (tx instanceof BlockIteratorError) {
+            await onError?.(tx)
+          } else {
+            await onTx?.(tx)
+          }
         }
       }
 
@@ -285,52 +292,67 @@ export class BlockIterator {
    */
   private async fetchBlockData(height: number): Promise<void> {
     try {
-      if (!this.autoCosmWasmClient.client) {
-        throw new Error('Client is undefined')
-      }
+      // Fetch the block first.
+      const block = await retry(
+        5,
+        () => {
+          if (!this.autoCosmWasmClient.client) {
+            throw new Error('Client is undefined')
+          }
+          return this.autoCosmWasmClient.client.getBlock(height)
+        },
+        500
+      )
 
-      // Try to fetch the block first
-      const block = await this.autoCosmWasmClient.client.getBlock(height)
+      // Fetch transactions in parallel, batched 10 at a time.
+      const txs: (IndexedTx | BlockIteratorError)[] = []
+      await batch({
+        list: block.txs,
+        batchSize: 10,
+        grouped: true,
+        task: async (rawTxs) => {
+          const batchTxs = await Promise.all(
+            rawTxs.map(async (rawTx) => {
+              let txHash: string | undefined
+              try {
+                txHash = toHex(sha256(rawTx)).toUpperCase()
+                const tx = await retry(
+                  5,
+                  async (_, bail) => {
+                    if (!this.autoCosmWasmClient.client) {
+                      await this.autoCosmWasmClient.update()
+                      if (!this.autoCosmWasmClient.client) {
+                        bail('Client is undefined')
+                        return
+                      }
+                    }
+                    return this.autoCosmWasmClient.client.getTx(txHash!)
+                  },
+                  500
+                )
+                if (!tx) {
+                  throw new Error(`Tx ${txHash} not found in block ${height}`)
+                }
 
-      // Block loaded successfully, now fetch transactions
-      const txs: IndexedTx[] = []
-      const txErrors: Error[] = []
-
-      // Fetch all transactions in parallel
-      const txPromises = block.txs.map(async (rawTx) => {
-        if (!this.autoCosmWasmClient.client) {
-          throw new Error('Client is undefined')
-        }
-
-        const txHash = toHex(sha256(rawTx)).toUpperCase()
-        const tx = await this.autoCosmWasmClient.client.getTx(txHash)
-        if (!tx) {
-          throw new Error(`Tx ${txHash} not found in block ${height}`)
-        }
-
-        return tx
+                return tx
+              } catch (cause) {
+                return new BlockIteratorError(
+                  BlockIteratorErrorType.Tx,
+                  cause,
+                  height,
+                  txHash
+                )
+              }
+            })
+          )
+          txs.push(...batchTxs)
+        },
       })
 
-      const txResults = await Promise.allSettled(txPromises)
-
-      // Separate successful TXs from TX-specific errors
-      for (const result of txResults) {
-        if (result.status === 'fulfilled') {
-          txs.push(result.value)
-        } else {
-          txErrors.push(
-            result.reason instanceof Error
-              ? result.reason
-              : new Error(String(result.reason))
-          )
-        }
-      }
-
-      // Buffer the block data with both successful TXs and TX errors
+      // Buffer the block data with both successful TXs and errors.
       this.buffer.set(height, {
         block,
         txs,
-        txErrors,
         height,
       })
     } catch (error) {
@@ -348,10 +370,10 @@ export class BlockIterator {
       }
 
       // Block-level error - the entire block failed to load
-      this.buffer.set(height, {
-        error: error instanceof Error ? error : new Error(String(error)),
+      this.buffer.set(
         height,
-      })
+        new BlockIteratorError(BlockIteratorErrorType.Block, error, height)
+      )
     }
   }
 

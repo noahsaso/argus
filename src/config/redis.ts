@@ -8,7 +8,20 @@ export const getRedisConfig = (): RedisOptions | undefined => {
     redis && {
       host: redis.host,
       port: redis.port ? Number(redis.port) : undefined,
+      username: redis.username,
       password: redis.password,
+      keyPrefix: redis.keyPrefix,
+      // Empty object is used to enable TLS. Optionally allow TLS options.
+      tls:
+        redis.tls === true ||
+        redis.tls === 'true' ||
+        redis.tls === 1 ||
+        redis.tls === '1'
+          ? {}
+          : redis.tls && typeof redis.tls === 'object'
+          ? redis.tls
+          : undefined,
+      connectTimeout: 30_000,
     }
   )
 }
@@ -42,9 +55,8 @@ export const testRedisConnection = async (
   try {
     const redis = new Redis({
       ...config,
-      maxRetriesPerRequest: 3,
-      connectTimeout: 5_000,
-      commandTimeout: 5_000,
+      maxRetriesPerRequest: 5,
+      commandTimeout: 30_000,
     })
     // Do nothing on error (to avoid spamming logs).
     redis.on('error', () => {})

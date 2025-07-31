@@ -160,9 +160,10 @@ export const dao: ExtractorMaker<DaoExtractorData> = async ({
           instantiatedAtBlockHeight: height,
           instantiatedAtBlockTimeUnixMs: blockTimeUnixMs,
           instantiatedAtBlockTimestamp: new Date(Number(blockTimeUnixMs)),
+          txHash,
         })),
         {
-          updateOnDuplicate: ['codeId', 'admin', 'creator', 'label'],
+          updateOnDuplicate: ['codeId', 'admin', 'creator', 'label', 'txHash'],
         }
       ),
       Extraction.bulkCreate(
