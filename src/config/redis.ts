@@ -11,6 +11,13 @@ export const getRedisConfig = (): RedisOptions | undefined => {
       username: redis.username,
       password: redis.password,
       keyPrefix: redis.keyPrefix,
+      // Empty object is used to enable TLS. Optionally allow TLS options.
+      tls:
+        redis.tls === true || redis.tls === 'true' || redis.tls === '1'
+          ? {}
+          : redis.tls && typeof redis.tls === 'object'
+          ? redis.tls
+          : undefined,
     }
   )
 }

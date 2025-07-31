@@ -35,6 +35,7 @@ export type Config = {
     username?: string
     password: string
     keyPrefix?: string
+    tls?: boolean | 'true' | '1' | { ca: string }
   }
   meilisearch?: {
     host: string
