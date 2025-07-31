@@ -51,7 +51,7 @@ export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
     this.extractors = extractors
   }
 
-  process({ id, data }: Job<ExtractQueuePayload>): Promise<void> {
+  process({ data, log }: Job<ExtractQueuePayload>): Promise<void> {
     return new Promise<void>(async (resolve, reject) => {
       // Time out if takes more than 30 seconds.
       let timeout: NodeJS.Timeout | null = setTimeout(() => {
@@ -118,9 +118,14 @@ export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
         }
       } catch (err) {
         if (timeout !== null) {
-          console.error(
-            `[${new Date().toISOString()}] Error processing extract (jobId=${id})`,
-            err
+          log(
+            `${err instanceof Error ? err.name : 'Error'}: ${
+              err instanceof Error ? err.message : err
+            } ${
+              err && typeof err === 'object' && 'parent' in err
+                ? err.parent
+                : ''
+            }`.trim()
           )
           reject(err)
         }
