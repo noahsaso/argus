@@ -6,13 +6,30 @@ import { getDependentKey } from '@/utils'
 
 import { getEnv } from './env'
 
+// Create a mock class that passes instanceof checks
+class MockFeegrantAllowance {
+  granter!: string
+  grantee!: string
+  blockHeight!: string
+  blockTimeUnixMs!: string
+  blockTimestamp!: Date
+  allowanceData!: string
+  allowanceType!: string | null
+  active!: boolean
+
+  constructor(data: Record<string, any>) {
+    Object.assign(this, data)
+  }
+
+  static findOne = vi.fn()
+  static findAll = vi.fn()
+  static dependentKeyNamespace = DependentKeyNamespace.FeegrantAllowance
+}
+
 // Mock dependencies
 vi.mock('@/db', () => ({
-  FeegrantAllowance: {
-    findOne: vi.fn(),
-    findAll: vi.fn(),
-    dependentKeyNamespace: 'FeegrantAllowance',
-  },
+  FeegrantAllowance: MockFeegrantAllowance,
+  loadDb: vi.fn(),
 }))
 
 describe('feegrant formula functions', () => {
@@ -45,7 +62,7 @@ describe('feegrant formula functions', () => {
 
   describe('getFeegrantAllowance', () => {
     it('returns allowance for valid granter-grantee pair', async () => {
-      const mockAllowance = {
+      const mockAllowance = new MockFeegrantAllowance({
         granter: 'xion1granter123',
         grantee: 'xion1grantee456',
         blockHeight: '100',
@@ -54,9 +71,9 @@ describe('feegrant formula functions', () => {
         allowanceData: 'base64data',
         allowanceType: 'BasicAllowance',
         active: true,
-      } as any
+      })
 
-      vi.mocked(FeegrantAllowance.findOne).mockResolvedValueOnce(mockAllowance)
+      vi.mocked(FeegrantAllowance.findOne).mockResolvedValueOnce(mockAllowance as any)
 
       const result = await env.getFeegrantAllowance(
         'xion1granter123',
@@ -101,7 +118,7 @@ describe('feegrant formula functions', () => {
     })
 
     it('uses cache when available', async () => {
-      const mockAllowance = {
+      const mockAllowance = new MockFeegrantAllowance({
         granter: 'xion1granter123',
         grantee: 'xion1grantee456',
         blockHeight: '100',
@@ -110,7 +127,7 @@ describe('feegrant formula functions', () => {
         allowanceData: 'base64data',
         allowanceType: 'BasicAllowance',
         active: true,
-      }
+      })
 
       // Create env with cache
       const cache = {
@@ -119,7 +136,7 @@ describe('feegrant formula functions', () => {
             DependentKeyNamespace.FeegrantAllowance,
             'xion1granter123',
             'xion1grantee456'
-          )]: [mockAllowance as any],
+          )]: [mockAllowance],
         },
         contracts: {},
       } as any
@@ -155,7 +172,7 @@ describe('feegrant formula functions', () => {
   describe('getFeegrantAllowances', () => {
     it('returns allowances granted by address', async () => {
       const mockAllowances = [
-        {
+        new MockFeegrantAllowance({
           granter: 'xion1granter123',
           grantee: 'xion1grantee456',
           blockHeight: '100',
@@ -164,8 +181,8 @@ describe('feegrant formula functions', () => {
           allowanceData: 'data1',
           allowanceType: 'BasicAllowance',
           active: true,
-        },
-        {
+        }),
+        new MockFeegrantAllowance({
           granter: 'xion1granter123',
           grantee: 'xion1grantee789',
           blockHeight: '100',
@@ -174,12 +191,10 @@ describe('feegrant formula functions', () => {
           allowanceData: 'data2',
           allowanceType: 'PeriodicAllowance',
           active: true,
-        },
+        }),
       ]
 
-      vi.mocked(FeegrantAllowance.findAll).mockResolvedValueOnce(
-        mockAllowances as any
-      )
+      vi.mocked(FeegrantAllowance.findAll).mockResolvedValueOnce(mockAllowances as any)
 
       const result = await env.getFeegrantAllowances(
         'xion1granter123',
