@@ -7,30 +7,12 @@ import { getDependentKey } from '@/utils'
 import { getEnv } from './env'
 
 // Create a mock class that passes instanceof checks
-class MockFeegrantAllowance {
-  granter!: string
-  grantee!: string
-  blockHeight!: string
-  blockTimeUnixMs!: string
-  blockTimestamp!: Date
-  allowanceData!: string
-  allowanceType!: string | null
-  active!: boolean
-
+class MockFeegrantAllowance extends FeegrantAllowance {
   constructor(data: Record<string, any>) {
+    super()
     Object.assign(this, data)
   }
-
-  static findOne = vi.fn()
-  static findAll = vi.fn()
-  static dependentKeyNamespace = DependentKeyNamespace.FeegrantAllowance
 }
-
-// Mock dependencies
-vi.mock('@/db', () => ({
-  FeegrantAllowance: MockFeegrantAllowance,
-  loadDb: vi.fn(),
-}))
 
 describe('feegrant formula functions', () => {
   const mockBlock = {
@@ -52,6 +34,10 @@ describe('feegrant formula functions', () => {
     vi.clearAllMocks()
     dependentKeys = []
     onFetch = vi.fn()
+
+    // Mock the static methods
+    vi.spyOn(FeegrantAllowance, 'findOne').mockResolvedValue(null)
+    vi.spyOn(FeegrantAllowance, 'findAll').mockResolvedValue([])
 
     env = getEnv({
       ...mockEnvOptions,
