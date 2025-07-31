@@ -216,15 +216,20 @@ const main = async () => {
         }
       }
     },
-    onError: (type, error) => {
+    onError: (error) => {
       console.error(
-        `[${new Date().toISOString()}] Listener error: ${type}`,
-        error
+        `[${new Date().toISOString()}] Listener error for ${error.type} (${
+          error.blockHeight
+        }${error.txHash ? `/${error.txHash}` : ''}):`,
+        error,
+        error.cause
       )
-      Sentry.captureException(error, {
+      Sentry.captureException(error.cause, {
         tags: {
           script: 'listener',
-          type,
+          type: error.type,
+          blockHeight: error.blockHeight,
+          txHash: error.txHash,
         },
       })
     },

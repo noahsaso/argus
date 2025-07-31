@@ -6,7 +6,7 @@ import WS from 'vitest-websocket-mock'
 
 import { AutoCosmWasmClient } from '@/utils'
 
-import { BlockIterator } from './BlockIterator'
+import { BlockIterator, BlockIteratorErrorType } from './BlockIterator'
 
 describe('BlockIterator', () => {
   let mockAutoCosmWasmClient: AutoCosmWasmClient
@@ -224,11 +224,13 @@ describe('BlockIterator', () => {
       // block height returned by the client.
       expect(lowStartIterator.startHeight).toBe(11)
       expect(onError).toHaveBeenCalledWith(
-        'startHeightTooLow',
         expect.objectContaining({
-          message: expect.stringContaining(
-            'Start height 5 is too low, using 11'
-          ),
+          type: BlockIteratorErrorType.StartHeightTooLow,
+          cause: expect.objectContaining({
+            message: expect.stringContaining(
+              'Start height 5 is too low, using 11'
+            ),
+          }),
         })
       )
     })
@@ -297,9 +299,12 @@ describe('BlockIterator', () => {
       await iteratePromise
 
       expect(onError).toHaveBeenCalledWith(
-        'block',
         expect.objectContaining({
-          message: 'Block fetch failed',
+          type: BlockIteratorErrorType.Block,
+          cause: expect.objectContaining({
+            message: 'Block fetch failed',
+          }),
+          blockHeight: 100,
         })
       )
     })
@@ -334,9 +339,13 @@ describe('BlockIterator', () => {
       // Block should still be processed
       expect(onBlock).toHaveBeenCalled()
       expect(onError).toHaveBeenCalledWith(
-        'tx',
         expect.objectContaining({
-          message: 'Transaction fetch failed',
+          type: BlockIteratorErrorType.Tx,
+          cause: expect.objectContaining({
+            message: 'Transaction fetch failed',
+          }),
+          blockHeight: 100,
+          txHash: expect.any(String),
         })
       )
     })
