@@ -181,13 +181,13 @@ const main = async () => {
         return
       }
 
-      // Attempt to decode each message, ignoring errors.
+      // Attempt to decode each message, ignoring errors and returning the
+      // original message if it fails.
       const messages = tx.body.messages.flatMap((message) => {
         try {
           return decodeRawProtobufMsg(message)
-        } catch (err) {
-          console.error('Error decoding message', err)
-          return []
+        } catch {
+          return message
         }
       })
 
