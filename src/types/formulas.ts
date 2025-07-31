@@ -9,7 +9,7 @@ import { BindOrReplacements, WhereOptions } from 'sequelize'
 import type { Contract, Extraction, StakingSlashEvent, WasmTxEvent } from '@/db'
 
 import { ComputationDependentKey } from './computation'
-import { ContractJson, DependableEventModel } from './db'
+import { ContractJson, DependableEventModel, FeegrantAllowanceJson } from './db'
 import { Block, NestedMap, RequireAtLeastOne } from './misc'
 
 export type KeyInput = string | number | Uint8Array
@@ -180,25 +180,15 @@ export type FormulaCommunityPoolBalancesGetter = () => Promise<
   Record<string, string> | undefined
 >
 
-export type FormulaFeegrantAllowanceObject = {
-  granter: string
-  grantee: string
-  allowanceData: string
-  allowanceType: string | null
-  blockHeight: string
-  blockTimestamp: Date
-  active: boolean
-}
-
 export type FormulaFeegrantAllowanceGetter = (
   granter: string,
   grantee: string
-) => Promise<FormulaFeegrantAllowanceObject | undefined>
+) => Promise<FeegrantAllowanceJson | undefined>
 
 export type FormulaFeegrantAllowancesGetter = (
   address: string,
   type?: 'granted' | 'received'
-) => Promise<FormulaFeegrantAllowanceObject[] | undefined>
+) => Promise<FeegrantAllowanceJson[] | undefined>
 
 export type FormulaFeegrantHasAllowanceGetter = (
   granter: string,

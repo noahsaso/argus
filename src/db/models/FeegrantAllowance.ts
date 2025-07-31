@@ -12,8 +12,9 @@ import {
   ComputationDependentKey,
   DependableEventModel,
   DependentKeyNamespace,
+  FeegrantAllowanceJson,
 } from '@/types'
-import { getDependentKey } from '@/utils'
+import { getDependentKey, serializeBlock } from '@/utils'
 
 @Table({
   timestamps: true,
@@ -99,6 +100,17 @@ export class FeegrantAllowance extends DependableEventModel {
   @AllowNull(false)
   @Column(DataType.BOOLEAN)
   declare active: boolean
+
+  get json(): FeegrantAllowanceJson {
+    return {
+      granter: this.granter,
+      grantee: this.grantee,
+      allowanceData: this.allowanceData,
+      allowanceType: this.allowanceType,
+      active: this.active,
+      block: serializeBlock(this.block),
+    }
+  }
 
   get block(): Block {
     return {

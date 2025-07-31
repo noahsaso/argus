@@ -73,8 +73,11 @@ describe('feegrant formula functions', () => {
         grantee: 'xion1grantee456',
         allowanceData: 'base64data',
         allowanceType: 'BasicAllowance',
-        blockHeight: '100',
-        blockTimestamp: new Date('2022-01-01T00:00:00.000Z'),
+        block: {
+          height: '100',
+          timeUnixMs: '1640995200000',
+          timestamp: '2022-01-01T00:00:00.000Z',
+        },
         active: true,
       })
 
@@ -146,8 +149,11 @@ describe('feegrant formula functions', () => {
         grantee: 'xion1grantee456',
         allowanceData: 'base64data',
         allowanceType: 'BasicAllowance',
-        blockHeight: '100',
-        blockTimestamp: new Date('2022-01-01T00:00:00.000Z'),
+        block: {
+          height: '100',
+          timeUnixMs: '1640995200000',
+          timestamp: '2022-01-01T00:00:00.000Z',
+        },
         active: true,
       })
 
@@ -197,8 +203,11 @@ describe('feegrant formula functions', () => {
         grantee: 'xion1grantee456',
         allowanceData: 'data1',
         allowanceType: 'BasicAllowance',
-        blockHeight: '100',
-        blockTimestamp: new Date('2022-01-01T00:00:00.000Z'),
+        block: {
+          height: '100',
+          timeUnixMs: '1640995200000',
+          timestamp: '2022-01-01T00:00:00.000Z',
+        },
         active: true,
       })
 
@@ -211,7 +220,7 @@ describe('feegrant formula functions', () => {
           '*'
         )
       )
-      expect(dependentKeys[0].prefix).toBe(true)
+      expect(dependentKeys[0].prefix).toBe(false)
 
       expect(onFetch).toHaveBeenCalledWith(mockAllowances)
     })

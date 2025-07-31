@@ -37,7 +37,7 @@ type RequestBody = {
     uuid: string
     attempt: number
   }
-  block: SerializedBlock & { timestamp: string }
+  block: SerializedBlock
   contractAddress: string
   codeId: number
   key: string

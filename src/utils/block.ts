@@ -33,4 +33,5 @@ export const serializeBlock = ({
 }: Block): SerializedBlock => ({
   height: height.toString(),
   timeUnixMs: timeUnixMs.toString(),
+  timestamp: new Date(Number(timeUnixMs)).toISOString(),
 })

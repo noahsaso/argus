@@ -62,9 +62,15 @@ export type ContractJson = {
   admin?: string | null
   creator?: string | null
   label?: string | null
-  instantiatedAt: {
-    block: SerializedBlock
-    timestamp: string
-  }
+  instantiatedAt: SerializedBlock
   txHash?: string | null
+}
+
+export type FeegrantAllowanceJson = {
+  granter: string
+  grantee: string
+  allowanceData: string
+  allowanceType: string | null
+  active: boolean
+  block: SerializedBlock
 }

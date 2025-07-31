@@ -76,34 +76,20 @@ export const feegrant: HandlerMaker<ParsedFeegrantStateEvent> = async ({
   const process: Handler<ParsedFeegrantStateEvent>['process'] = async (
     events
   ) => {
-    // Save blocks from events
-    await Block.createMany(
-      [...new Set(events.map((e) => e.blockHeight))].map((height) => ({
-        height,
-        timeUnixMs: events.find((e) => e.blockHeight === height)!
-          .blockTimeUnixMs,
-      }))
-    )
-
     const exportEvents = async () => {
-      // Create new records for historical tracking (no upsert)
-      const allowances = await Promise.all(
-        events.map(async (event) => {
-          const allowance = await FeegrantAllowance.create({
-            granter: event.granter,
-            grantee: event.grantee,
-            blockHeight: event.blockHeight,
-            blockTimeUnixMs: event.blockTimeUnixMs,
-            blockTimestamp: event.blockTimestamp,
-            allowanceData: event.allowanceData,
-            allowanceType: event.allowanceType,
-            active: event.active,
-          })
-          return allowance
-        })
+      // Save blocks from events
+      await Block.createMany(
+        [...new Set(events.map((e) => e.blockHeight))].map((height) => ({
+          height,
+          timeUnixMs: events.find((e) => e.blockHeight === height)!
+            .blockTimeUnixMs,
+        }))
       )
 
-      return allowances
+      // Bulk create allowances.
+      return FeegrantAllowance.bulkCreate(events, {
+        updateOnDuplicate: ['allowanceData', 'allowanceType', 'active'],
+      })
     }
 
     // Retry with exponential backoff

@@ -1177,10 +1177,8 @@ export const getEnv = ({
       return
     }
 
-    const dependentKey = `${getDependentKey(
-      BankStateEvent.dependentKeyNamespace,
-      address
-    )}:`
+    const dependentKey =
+      getDependentKey(BankStateEvent.dependentKeyNamespace, address) + ':'
 
     dependentKeys?.push({
       key: dependentKey,
@@ -1810,15 +1808,7 @@ export const getEnv = ({
     // Call hook.
     await onFetch?.([event])
 
-    return {
-      granter: event.granter,
-      grantee: event.grantee,
-      allowanceData: event.allowanceData,
-      allowanceType: event.allowanceType,
-      blockHeight: event.blockHeight,
-      blockTimestamp: event.blockTimestamp,
-      active: event.active,
-    }
+    return event.json
   }
 
   const getFeegrantAllowances = async (
@@ -1894,17 +1884,7 @@ export const getEnv = ({
     await onFetch?.(events)
 
     // Filter only active allowances and return formatted objects.
-    return events
-      .filter((event) => event.active)
-      .map((event) => ({
-        granter: event.granter,
-        grantee: event.grantee,
-        allowanceData: event.allowanceData,
-        allowanceType: event.allowanceType,
-        blockHeight: event.blockHeight,
-        blockTimestamp: event.blockTimestamp,
-        active: event.active,
-      }))
+    return events.filter((event) => event.active).map((event) => event.json)
   }
 
   const hasFeegrantAllowance = async (granter: string, grantee: string) => {

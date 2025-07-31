@@ -105,16 +105,16 @@ export const gov: HandlerMaker<ParsedGovStateEvent> = async ({
   }
 
   const process: Handler<ParsedGovStateEvent>['process'] = async (events) => {
-    // Save blocks from events.
-    await Block.createMany(
-      [...new Set(events.map((e) => e.data.blockHeight))].map((height) => ({
-        height,
-        timeUnixMs: events.find((e) => e.data.blockHeight === height)!.data
-          .blockTimeUnixMs,
-      }))
-    )
-
     const exportEvents = async () => {
+      // Save blocks from events.
+      await Block.createMany(
+        [...new Set(events.map((e) => e.data.blockHeight))].map((height) => ({
+          height,
+          timeUnixMs: events.find((e) => e.data.blockHeight === height)!.data
+            .blockTimeUnixMs,
+        }))
+      )
+
       const proposals = events.flatMap((e) =>
         e.type === 'proposal' ? e.data : []
       )
