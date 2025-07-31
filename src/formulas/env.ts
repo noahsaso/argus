@@ -137,11 +137,10 @@ export const getEnv = ({
     { keyType = 'string' } = {}
   ) => {
     const keyPrefix =
-      `${Array.isArray(name)
+      (Array.isArray(name)
         ? // Add an empty key at the end so the name(s) are treated as a prefix. Prefixes have their lengths encoded in the key and are treated differently from the final key in the tuple.
           dbKeyForKeys(...name, '')
-        : dbKeyForKeys(name, '')
-    },`
+        : dbKeyForKeys(name, '')) + ','
     const dependentKey = getDependentKey(
       WasmStateEvent.dependentKeyNamespace,
       contractAddress,
