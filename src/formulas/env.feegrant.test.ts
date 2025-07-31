@@ -73,7 +73,9 @@ describe('feegrant formula functions', () => {
         active: true,
       })
 
-      vi.mocked(FeegrantAllowance.findOne).mockResolvedValueOnce(mockAllowance as any)
+      vi.mocked(FeegrantAllowance.findOne).mockResolvedValueOnce(
+        mockAllowance as any
+      )
 
       const result = await env.getFeegrantAllowance(
         'xion1granter123',
@@ -194,7 +196,9 @@ describe('feegrant formula functions', () => {
         }),
       ]
 
-      vi.mocked(FeegrantAllowance.findAll).mockResolvedValueOnce(mockAllowances as any)
+      vi.mocked(FeegrantAllowance.findAll).mockResolvedValueOnce(
+        mockAllowances as any
+      )
 
       const result = await env.getFeegrantAllowances(
         'xion1granter123',
