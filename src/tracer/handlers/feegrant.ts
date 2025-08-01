@@ -12,7 +12,7 @@ export const feegrant: HandlerMaker<ParsedFeegrantStateEvent> = async ({
 }) => {
   const match: Handler<ParsedFeegrantStateEvent>['match'] = (trace) => {
     // FeeAllowanceKeyPrefix = 0x00
-    // Key format: 0x00 || len(granter) || granter || len(grantee) || grantee
+    // Key format: 0x00 || len(grantee) || grantee || len(granter) || granter
 
     const keyData = fromBase64(trace.key)
     if (keyData[0] !== 0x00 || keyData.length < 3) {
@@ -20,24 +20,24 @@ export const feegrant: HandlerMaker<ParsedFeegrantStateEvent> = async ({
     }
 
     try {
-      const granterLength = keyData[1]
-      if (keyData.length < 2 + granterLength + 1) {
-        return
-      }
-
-      const granter = toBech32(
-        bech32Prefix,
-        keyData.slice(2, 2 + granterLength)
-      )
-
-      const granteeLength = keyData[2 + granterLength]
-      if (keyData.length !== 2 + granterLength + 1 + granteeLength) {
+      const granteeLength = keyData[1]
+      if (keyData.length < 2 + granteeLength + 1) {
         return
       }
 
       const grantee = toBech32(
         bech32Prefix,
-        keyData.slice(2 + granterLength + 1)
+        keyData.slice(2, 2 + granteeLength)
+      )
+
+      const granterLength = keyData[2 + granteeLength]
+      if (keyData.length !== 2 + granteeLength + 1 + granterLength) {
+        return
+      }
+
+      const granter = toBech32(
+        bech32Prefix,
+        keyData.slice(2 + granteeLength + 1)
       )
 
       const blockHeight = BigInt(trace.metadata.blockHeight).toString()
