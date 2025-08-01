@@ -156,7 +156,7 @@ export const memberOf: AccountFormula<
       (
         await getTransformationMatches(
           undefined,
-          `member:${walletAddress}`,
+          `members:${walletAddress}`,
           {
             [Op.and]: [{ [Op.ne]: null }, { [Op.ne]: 0 }],
           },
