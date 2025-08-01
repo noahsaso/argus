@@ -15,7 +15,7 @@ type UpResponse =
   | {
       chainId: string
       remoteBlock: UpBlock
-      localBlock: UpBlock | null
+      localBlock: UpBlock | { error: string } | null
       exportedBlock: UpBlock
       caughtUp: boolean
       timing: {
@@ -40,14 +40,13 @@ export const up: Router.Middleware<
 
   let state,
     stateDuration,
-    localChainBlock,
-    localChainBlockDuration,
+    localResponse,
     remoteChainBlock,
     remoteChainBlockDuration
   try {
     ;[
       { state, duration: stateDuration },
-      { block: localChainBlock, duration: localChainBlockDuration },
+      localResponse,
       { block: remoteChainBlock, duration: remoteChainBlockDuration },
     ] = await Promise.all([
       State.getSingleton()
@@ -90,6 +89,9 @@ export const up: Router.Middleware<
                   )
                 )
             )
+            .catch((err) => ({
+              error: err instanceof Error ? err.message : `${err}`,
+            }))
         : { block: null, duration: null },
       getStargateClient('remote')
         .catch((err) =>
@@ -128,11 +130,16 @@ export const up: Router.Middleware<
     timeUnixMs: new Date(remoteChainBlock.header.time).getTime(),
     timestamp: new Date(remoteChainBlock.header.time).toISOString(),
   }
-  const localBlock: UpBlock | null = localChainBlock && {
-    height: Number(localChainBlock.header.height),
-    timeUnixMs: new Date(localChainBlock.header.time).getTime(),
-    timestamp: new Date(localChainBlock.header.time).toISOString(),
-  }
+  const localBlock: UpBlock | { error: string } | null =
+    'block' in localResponse
+      ? localResponse?.block
+        ? {
+            height: Number(localResponse.block.header.height),
+            timeUnixMs: new Date(localResponse.block.header.time).getTime(),
+            timestamp: new Date(localResponse.block.header.time).toISOString(),
+          }
+        : null
+      : localResponse
   const exportedBlock: UpBlock = {
     height: Number(state.latestBlock.height),
     timeUnixMs: Number(state.latestBlock.timeUnixMs),
@@ -142,7 +149,10 @@ export const up: Router.Middleware<
   // If local chain is within 5 blocks of actual chain, consider it caught up.
   // If no local RPC, use the exported block instead.
   const caughtUp =
-    (localBlock?.height ?? exportedBlock.height) > remoteBlock.height - 5
+    (localBlock && 'height' in localBlock
+      ? localBlock.height
+      : exportedBlock.height) >
+    remoteBlock.height - 5
 
   ctx.status = caughtUp ? 200 : 412
   ctx.body = {
@@ -153,7 +163,10 @@ export const up: Router.Middleware<
     caughtUp,
     timing: {
       state: stateDuration,
-      localChainBlock: localChainBlockDuration,
+      localChainBlock:
+        localResponse && 'duration' in localResponse
+          ? localResponse.duration
+          : null,
       remoteChainBlock: remoteChainBlockDuration,
     },
   }
