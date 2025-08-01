@@ -12958,6 +12958,148 @@
         }
       }
     },
+    "/{chainId}/account/{accountAddress}/feegrant/allowance": {
+      "get": {
+        "tags": [
+          "account"
+        ],
+        "summary": "retrieves the feegrant allowance for a specific grantee",
+        "operationId": "feegrant_allowance_1535d37",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "accountAddress",
+            "in": "path",
+            "description": "account address",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "grantee",
+            "description": "address of the grantee to check allowance for",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          },
+          "400": {
+            "description": "missing required arguments"
+          }
+        }
+      }
+    },
+    "/{chainId}/account/{accountAddress}/feegrant/allowances": {
+      "get": {
+        "tags": [
+          "account"
+        ],
+        "summary": "retrieves all feegrant allowances for this account",
+        "operationId": "feegrant_allowances_3014114",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "accountAddress",
+            "in": "path",
+            "description": "account address",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "description": "type of allowances to retrieve: \"granted\" (default) or \"received\"",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "granted",
+                "received"
+              ]
+            },
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          },
+          "400": {
+            "description": "missing required arguments"
+          }
+        }
+      }
+    },
+    "/{chainId}/account/{accountAddress}/feegrant/has": {
+      "get": {
+        "tags": [
+          "account"
+        ],
+        "summary": "checks if there is an active feegrant allowance for a specific grantee",
+        "operationId": "feegrant_has_0dc1a7a",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "accountAddress",
+            "in": "path",
+            "description": "account address",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "grantee",
+            "description": "address of the grantee to check allowance for",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          },
+          "400": {
+            "description": "missing required arguments"
+          }
+        }
+      }
+    },
     "/{chainId}/account/{accountAddress}/nft/collections": {
       "get": {
         "tags": [

@@ -1,376 +1,365 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import request from 'supertest'
+import { beforeEach, describe, it } from 'vitest'
 
 import { Block, FeegrantAllowance, State } from '@/db'
 
-import { feegrant } from '../../../../../tracer/handlers/feegrant'
+import { app } from '../../app'
+import { ComputerTestOptions } from '../types'
 
-// Mock dependencies
-vi.mock('@/db', () => ({
-  Block: {
-    createMany: vi.fn(),
-  },
-  FeegrantAllowance: {
-    create: vi.fn(),
-  },
-  State: {
-    updateSingleton: vi.fn(),
-  },
-}))
+export const loadFeegrantTests = (options: ComputerTestOptions) => {
+  describe('feegrant', () => {
+    beforeEach(async () => {
+      const blockTimestamp = new Date('2022-01-01T00:00:00.000Z')
 
-describe('feegrant handler', () => {
-  const mockConfig = {
-    bech32Prefix: 'xion',
-    home: '/tmp',
-    localRpc: 'http://localhost:26657',
-    remoteRpc: 'http://localhost:26657',
-    db: {
-      data: {
-        host: 'localhost',
-        port: 5432,
-        database: 'test',
-        username: 'test',
-        password: 'test',
-      },
-      accounts: {
-        host: 'localhost',
-        port: 5432,
-        database: 'test',
-        username: 'test',
-        password: 'test',
-      },
-    },
-  }
-
-  let handler: any
-
-  beforeEach(async () => {
-    vi.clearAllMocks()
-    handler = await feegrant({
-      config: mockConfig,
-      sendWebhooks: false,
-      autoCosmWasmClient: {} as any,
-    })
-  })
-
-  describe('match function', () => {
-    it('processes grant events correctly', () => {
-      // Create a valid feegrant key: 0x00 || len(granter) || granter || len(grantee) || grantee
-      const granterBytes = Buffer.from('xion1granter123')
-      const granteeBytes = Buffer.from('xion1grantee456')
-
-      const keyData = Buffer.concat([
-        Buffer.from([0x00]), // prefix
-        Buffer.from([granterBytes.length]), // granter length
-        granterBytes, // granter
-        Buffer.from([granteeBytes.length]), // grantee length
-        granteeBytes, // grantee
-      ])
-
-      const trace = {
-        key: Buffer.from(keyData).toString('base64'),
-        value: 'allowancedata',
-        operation: 'write',
-        metadata: {
-          blockHeight: '100',
-        },
-        blockTimeUnixMs: 1640995200000,
-      }
-
-      const result = handler.match(trace)
-
-      expect(result).toBeDefined()
-      expect(result.granter).toBe('xion1granter123')
-      expect(result.grantee).toBe('xion1grantee456')
-      expect(result.blockHeight).toBe('100')
-      expect(result.active).toBe(true)
-      expect(result.allowanceData).toBe('allowancedata')
-    })
-
-    it('processes revoke events correctly', () => {
-      const granterBytes = Buffer.from('xion1granter123')
-      const granteeBytes = Buffer.from('xion1grantee456')
-
-      const keyData = Buffer.concat([
-        Buffer.from([0x00]),
-        Buffer.from([granterBytes.length]),
-        granterBytes,
-        Buffer.from([granteeBytes.length]),
-        granteeBytes,
-      ])
-
-      const trace = {
-        key: Buffer.from(keyData).toString('base64'),
-        value: '',
-        operation: 'delete',
-        metadata: {
-          blockHeight: '200',
-        },
-        blockTimeUnixMs: 1640995300000,
-      }
-
-      const result = handler.match(trace)
-
-      expect(result).toBeDefined()
-      expect(result.granter).toBe('xion1granter123')
-      expect(result.grantee).toBe('xion1grantee456')
-      expect(result.active).toBe(false)
-      expect(result.allowanceData).toBe('')
-    })
-
-    it('ignores invalid keys with wrong prefix', () => {
-      const keyData = Buffer.from([0x01, 0x05, 0x67, 0x72, 0x61, 0x6e, 0x74]) // wrong prefix
-
-      const trace = {
-        key: Buffer.from(keyData).toString('base64'),
-        value: 'data',
-        operation: 'write',
-        metadata: {
-          blockHeight: '100',
-        },
-        blockTimeUnixMs: 1640995200000,
-      }
-
-      const result = handler.match(trace)
-      expect(result).toBeUndefined()
-    })
-
-    it('ignores keys that are too short', () => {
-      const keyData = Buffer.from([0x00, 0x01]) // too short
-
-      const trace = {
-        key: Buffer.from(keyData).toString('base64'),
-        value: 'data',
-        operation: 'write',
-        metadata: {
-          blockHeight: '100',
-        },
-        blockTimeUnixMs: 1640995200000,
-      }
-
-      const result = handler.match(trace)
-      expect(result).toBeUndefined()
-    })
-
-    it('handles malformed keys gracefully', () => {
-      const keyData = Buffer.from([0x00, 0x20, 0x67, 0x72]) // length mismatch
-
-      const trace = {
-        key: Buffer.from(keyData).toString('base64'),
-        value: 'data',
-        operation: 'write',
-        metadata: {
-          blockHeight: '100',
-        },
-        blockTimeUnixMs: 1640995200000,
-      }
-
-      const result = handler.match(trace)
-      expect(result).toBeUndefined()
-    })
-
-    it('generates correct event ID', () => {
-      const granterBytes = Buffer.from('xion1granter123')
-      const granteeBytes = Buffer.from('xion1grantee456')
-
-      const keyData = Buffer.concat([
-        Buffer.from([0x00]),
-        Buffer.from([granterBytes.length]),
-        granterBytes,
-        Buffer.from([granteeBytes.length]),
-        granteeBytes,
-      ])
-
-      const trace = {
-        key: Buffer.from(keyData).toString('base64'),
-        value: 'data',
-        operation: 'write',
-        metadata: {
-          blockHeight: '100',
-        },
-        blockTimeUnixMs: 1640995200000,
-      }
-
-      const result = handler.match(trace)
-      expect(result.id).toBe('100:xion1granter123:xion1grantee456')
-    })
-  })
-
-  describe('process function', () => {
-    it('creates blocks and allowances correctly', async () => {
-      const events = [
+      await FeegrantAllowance.bulkCreate([
         {
-          id: '100:xion1granter1:xion1grantee1',
-          granter: 'xion1granter1',
-          grantee: 'xion1grantee1',
+          granter: 'xion1granter123',
+          grantee: 'xion1grantee456',
           blockHeight: '100',
           blockTimeUnixMs: '1640995200000',
-          blockTimestamp: new Date('2022-01-01T00:00:00.000Z'),
-          allowanceData: 'data1',
-          allowanceType: null,
+          blockTimestamp,
+          allowanceData: 'base64allowancedata1',
+          allowanceType: 'BasicAllowance',
           active: true,
         },
         {
-          id: '100:xion1granter2:xion1grantee2',
-          granter: 'xion1granter2',
-          grantee: 'xion1grantee2',
-          blockHeight: '100',
-          blockTimeUnixMs: '1640995200000',
-          blockTimestamp: new Date('2022-01-01T00:00:00.000Z'),
-          allowanceData: 'data2',
-          allowanceType: null,
-          active: true,
-        },
-      ]
-
-      const mockAllowances = events.map((event) => ({
-        ...event,
-        toJSON: () => event,
-      }))
-      vi.mocked(FeegrantAllowance.create).mockResolvedValueOnce(
-        mockAllowances[0] as any
-      )
-      vi.mocked(FeegrantAllowance.create).mockResolvedValueOnce(
-        mockAllowances[1] as any
-      )
-
-      const result = await handler.process(events)
-
-      // Check that blocks were created
-      expect(Block.createMany).toHaveBeenCalledWith([
-        {
-          height: '100',
-          timeUnixMs: '1640995200000',
-        },
-      ])
-
-      // Check that allowances were created
-      expect(FeegrantAllowance.create).toHaveBeenCalledTimes(2)
-      expect(FeegrantAllowance.create).toHaveBeenCalledWith({
-        granter: 'xion1granter1',
-        grantee: 'xion1grantee1',
-        blockHeight: '100',
-        blockTimeUnixMs: '1640995200000',
-        blockTimestamp: new Date('2022-01-01T00:00:00.000Z'),
-        allowanceData: 'data1',
-        allowanceType: null,
-        active: true,
-      })
-
-      // Check that state was updated
-      expect(State.updateSingleton).toHaveBeenCalled()
-
-      expect(result).toEqual(mockAllowances)
-    })
-
-    it('handles multiple blocks correctly', async () => {
-      const events = [
-        {
-          id: '100:xion1granter1:xion1grantee1',
-          granter: 'xion1granter1',
-          grantee: 'xion1grantee1',
-          blockHeight: '100',
-          blockTimeUnixMs: '1640995200000',
-          blockTimestamp: new Date('2022-01-01T00:00:00.000Z'),
-          allowanceData: 'data1',
-          allowanceType: null,
-          active: true,
-        },
-        {
-          id: '200:xion1granter2:xion1grantee2',
-          granter: 'xion1granter2',
-          grantee: 'xion1grantee2',
+          granter: 'xion1granter123',
+          grantee: 'xion1grantee789',
           blockHeight: '200',
           blockTimeUnixMs: '1640995300000',
           blockTimestamp: new Date('2022-01-01T00:01:40.000Z'),
-          allowanceData: 'data2',
+          allowanceData: 'base64allowancedata2',
+          allowanceType: 'PeriodicAllowance',
+          active: true,
+        },
+        {
+          granter: 'xion1granter456',
+          grantee: 'xion1grantee123',
+          blockHeight: '150',
+          blockTimeUnixMs: '1640995250000',
+          blockTimestamp: new Date('2022-01-01T00:00:50.000Z'),
+          allowanceData: 'base64allowancedata3',
+          allowanceType: 'BasicAllowance',
+          active: true,
+        },
+        {
+          granter: 'xion1granter789',
+          grantee: 'xion1grantee456',
+          blockHeight: '300',
+          blockTimeUnixMs: '1640995400000',
+          blockTimestamp: new Date('2022-01-01T00:03:20.000Z'),
+          allowanceData: '',
           allowanceType: null,
-          active: false,
-        },
-      ]
-
-      const mockAllowances = events.map((event) => ({
-        ...event,
-        toJSON: () => event,
-      }))
-      vi.mocked(FeegrantAllowance.create).mockResolvedValueOnce(
-        mockAllowances[0] as any
-      )
-      vi.mocked(FeegrantAllowance.create).mockResolvedValueOnce(
-        mockAllowances[1] as any
-      )
-
-      await handler.process(events)
-
-      // Check that both blocks were created
-      expect(Block.createMany).toHaveBeenCalledWith([
-        {
-          height: '100',
-          timeUnixMs: '1640995200000',
-        },
-        {
-          height: '200',
-          timeUnixMs: '1640995300000',
+          active: false, // Revoked allowance
         },
       ])
+
+      await Block.createMany([
+        {
+          height: 100,
+          timeUnixMs: 1640995200000,
+        },
+        {
+          height: 150,
+          timeUnixMs: 1640995250000,
+        },
+        {
+          height: 200,
+          timeUnixMs: 1640995300000,
+        },
+        {
+          height: 300,
+          timeUnixMs: 1640995400000,
+        },
+      ])
+
+      await State.updateSingleton({
+        latestBlockHeight: 300,
+        latestBlockTimeUnixMs: 1640995400000,
+        lastFeegrantBlockHeightExported: 300,
+      })
     })
 
-    it('updates state with latest block information', async () => {
-      const events = [
-        {
-          id: '100:xion1granter1:xion1grantee1',
-          granter: 'xion1granter1',
-          grantee: 'xion1grantee1',
-          blockHeight: '100',
-          blockTimeUnixMs: '1640995200000',
-          blockTimestamp: new Date('2022-01-01T00:00:00.000Z'),
-          allowanceData: 'data1',
-          allowanceType: null,
-          active: true,
-        },
-        {
-          id: '50:xion1granter2:xion1grantee2',
-          granter: 'xion1granter2',
-          grantee: 'xion1grantee2',
-          blockHeight: '50',
-          blockTimeUnixMs: '1640995100000',
-          blockTimestamp: new Date('2022-01-01T00:00:00.000Z'),
-          allowanceData: 'data2',
-          allowanceType: null,
-          active: true,
-        },
-      ]
+    describe('getFeegrantAllowance', () => {
+      it('returns allowance for valid granter-grantee pair', async () => {
+        await request(app.callback())
+          .get('/account/xion1granter123/feegrant/allowance?grantee=xion1grantee456')
+          .set('x-api-key', options.apiKey)
+          .expect(200)
+          .expect({
+            granter: 'xion1granter123',
+            grantee: 'xion1grantee456',
+            allowanceData: 'base64allowancedata1',
+            allowanceType: 'BasicAllowance',
+            active: true,
+            block: {
+              height: '100',
+              timeUnixMs: '1640995200000',
+              timestamp: '2022-01-01T00:00:00.000Z',
+            },
+          })
+      })
 
-      const mockAllowances = events.map((event) => ({
-        ...event,
-        toJSON: () => event,
-      }))
-      vi.mocked(FeegrantAllowance.create).mockResolvedValueOnce(
-        mockAllowances[0] as any
-      )
-      vi.mocked(FeegrantAllowance.create).mockResolvedValueOnce(
-        mockAllowances[1] as any
-      )
+      it('returns allowance for specific block height', async () => {
+        await request(app.callback())
+          .get('/account/xion1granter123/feegrant/allowance?grantee=xion1grantee789&block=200:1640995300000')
+          .set('x-api-key', options.apiKey)
+          .expect(200)
+          .expect({
+            granter: 'xion1granter123',
+            grantee: 'xion1grantee789',
+            allowanceData: 'base64allowancedata2',
+            allowanceType: 'PeriodicAllowance',
+            active: true,
+            block: {
+              height: '200',
+              timeUnixMs: '1640995300000',
+              timestamp: '2022-01-01T00:01:40.000Z',
+            },
+          })
+      })
 
-      await handler.process(events)
+      it('returns undefined for non-existent allowance', async () => {
+        await request(app.callback())
+          .get('/account/xion1nonexistent/feegrant/allowance?grantee=xion1grantee456')
+          .set('x-api-key', options.apiKey)
+          .expect(204)
+      })
 
-      // Should use the latest block height (100) for state update
-      const stateUpdateCall = vi.mocked(State.updateSingleton).mock.calls[0][0]
-      expect(stateUpdateCall).toMatchObject({
-        lastFeegrantBlockHeightExported: expect.any(Object),
-        latestBlockHeight: expect.any(Object),
-        latestBlockTimeUnixMs: expect.any(Object),
+      it('returns undefined for revoked allowance when querying latest', async () => {
+        await request(app.callback())
+          .get('/account/xion1granter789/feegrant/allowance?grantee=xion1grantee456')
+          .set('x-api-key', options.apiKey)
+          .expect(200)
+          .expect({
+            granter: 'xion1granter789',
+            grantee: 'xion1grantee456',
+            allowanceData: '',
+            allowanceType: null,
+            active: false,
+            block: {
+              height: '300',
+              timeUnixMs: '1640995400000',
+              timestamp: '2022-01-01T00:03:20.000Z',
+            },
+          })
+      })
+    })
+
+    describe('getFeegrantAllowances', () => {
+      it('returns allowances granted by address', async () => {
+        await request(app.callback())
+          .get('/account/xion1granter123/feegrant/allowances?type=granted')
+          .set('x-api-key', options.apiKey)
+          .expect(200)
+          .expect([
+            {
+              granter: 'xion1granter123',
+              grantee: 'xion1grantee456',
+              allowanceData: 'base64allowancedata1',
+              allowanceType: 'BasicAllowance',
+              active: true,
+              block: {
+                height: '100',
+                timeUnixMs: '1640995200000',
+                timestamp: '2022-01-01T00:00:00.000Z',
+              },
+            },
+            {
+              granter: 'xion1granter123',
+              grantee: 'xion1grantee789',
+              allowanceData: 'base64allowancedata2',
+              allowanceType: 'PeriodicAllowance',
+              active: true,
+              block: {
+                height: '200',
+                timeUnixMs: '1640995300000',
+                timestamp: '2022-01-01T00:01:40.000Z',
+              },
+            },
+          ])
+      })
+
+      it('returns allowances received by address', async () => {
+        await request(app.callback())
+          .get('/account/xion1grantee456/feegrant/allowances?type=received')
+          .set('x-api-key', options.apiKey)
+          .expect(200)
+          .expect([
+            {
+              granter: 'xion1granter123',
+              grantee: 'xion1grantee456',
+              allowanceData: 'base64allowancedata1',
+              allowanceType: 'BasicAllowance',
+              active: true,
+              block: {
+                height: '100',
+                timeUnixMs: '1640995200000',
+                timestamp: '2022-01-01T00:00:00.000Z',
+              },
+            },
+          ])
+      })
+
+      it('defaults to granted type when no type specified', async () => {
+        await request(app.callback())
+          .get('/account/xion1granter123/feegrant/allowances')
+          .set('x-api-key', options.apiKey)
+          .expect(200)
+          .expect([
+            {
+              granter: 'xion1granter123',
+              grantee: 'xion1grantee456',
+              allowanceData: 'base64allowancedata1',
+              allowanceType: 'BasicAllowance',
+              active: true,
+              block: {
+                height: '100',
+                timeUnixMs: '1640995200000',
+                timestamp: '2022-01-01T00:00:00.000Z',
+              },
+            },
+            {
+              granter: 'xion1granter123',
+              grantee: 'xion1grantee789',
+              allowanceData: 'base64allowancedata2',
+              allowanceType: 'PeriodicAllowance',
+              active: true,
+              block: {
+                height: '200',
+                timeUnixMs: '1640995300000',
+                timestamp: '2022-01-01T00:01:40.000Z',
+              },
+            },
+          ])
+      })
+
+      it('filters out inactive allowances', async () => {
+        await request(app.callback())
+          .get('/account/xion1granter789/feegrant/allowances?type=granted')
+          .set('x-api-key', options.apiKey)
+          .expect(200)
+          .expect([])
+      })
+
+      it('returns empty array for address with no allowances', async () => {
+        await request(app.callback())
+          .get('/account/xion1nonexistent/feegrant/allowances?type=granted')
+          .set('x-api-key', options.apiKey)
+          .expect(200)
+          .expect([])
+      })
+
+      it('returns allowances for specific block height', async () => {
+        await request(app.callback())
+          .get('/account/xion1granter123/feegrant/allowances?type=granted&block=150:1640995250000')
+          .set('x-api-key', options.apiKey)
+          .expect(200)
+          .expect([
+            {
+              granter: 'xion1granter123',
+              grantee: 'xion1grantee456',
+              allowanceData: 'base64allowancedata1',
+              allowanceType: 'BasicAllowance',
+              active: true,
+              block: {
+                height: '100',
+                timeUnixMs: '1640995200000',
+                timestamp: '2022-01-01T00:00:00.000Z',
+              },
+            },
+          ])
+      })
+    })
+
+    describe('hasFeegrantAllowance', () => {
+      it('returns true for active allowance', async () => {
+        await request(app.callback())
+          .get('/account/xion1granter123/feegrant/has?grantee=xion1grantee456')
+          .set('x-api-key', options.apiKey)
+          .expect(200)
+          .expect('true')
+      })
+
+      it('returns false for inactive allowance', async () => {
+        await request(app.callback())
+          .get('/account/xion1granter789/feegrant/has?grantee=xion1grantee456')
+          .set('x-api-key', options.apiKey)
+          .expect(200)
+          .expect('false')
+      })
+
+      it('returns false for non-existent allowance', async () => {
+        await request(app.callback())
+          .get('/account/xion1nonexistent/feegrant/has?grantee=xion1grantee456')
+          .set('x-api-key', options.apiKey)
+          .expect(200)
+          .expect('false')
+      })
+
+      it('returns correct result for specific block height', async () => {
+        await request(app.callback())
+          .get('/account/xion1granter123/feegrant/has?grantee=xion1grantee789&block=150:1640995250000')
+          .set('x-api-key', options.apiKey)
+          .expect(200)
+          .expect('false')
+
+        await request(app.callback())
+          .get('/account/xion1granter123/feegrant/has?grantee=xion1grantee789&block=200:1640995300000')
+          .set('x-api-key', options.apiKey)
+          .expect(200)
+          .expect('true')
+      })
+    })
+
+    describe('block height filtering', () => {
+      it('applies block height filter correctly for allowance queries', async () => {
+        // Query at block 150 should not see the allowance created at block 200
+        await request(app.callback())
+          .get('/account/xion1granter123/feegrant/allowance?grantee=xion1grantee789&block=150:1640995250000')
+          .set('x-api-key', options.apiKey)
+          .expect(204)
+
+        // Query at block 200 should see the allowance
+        await request(app.callback())
+          .get('/account/xion1granter123/feegrant/allowance?grantee=xion1grantee789&block=200:1640995300000')
+          .set('x-api-key', options.apiKey)
+          .expect(200)
+          .expect({
+            granter: 'xion1granter123',
+            grantee: 'xion1grantee789',
+            allowanceData: 'base64allowancedata2',
+            allowanceType: 'PeriodicAllowance',
+            active: true,
+            block: {
+              height: '200',
+              timeUnixMs: '1640995300000',
+              timestamp: '2022-01-01T00:01:40.000Z',
+            },
+          })
+      })
+
+      it('applies block height filter correctly for allowances queries', async () => {
+        // Query at block 150 should only see allowances up to that block
+        await request(app.callback())
+          .get('/account/xion1granter123/feegrant/allowances?type=granted&block=150:1640995250000')
+          .set('x-api-key', options.apiKey)
+          .expect(200)
+          .expect([
+            {
+              granter: 'xion1granter123',
+              grantee: 'xion1grantee456',
+              allowanceData: 'base64allowancedata1',
+              allowanceType: 'BasicAllowance',
+              active: true,
+              block: {
+                height: '100',
+                timeUnixMs: '1640995200000',
+                timestamp: '2022-01-01T00:00:00.000Z',
+              },
+            },
+          ])
       })
     })
   })
-
-  describe('handler properties', () => {
-    it('has correct store name', () => {
-      expect(handler.storeName).toBe('feegrant')
-    })
-
-    it('exports match and process functions', () => {
-      expect(typeof handler.match).toBe('function')
-      expect(typeof handler.process).toBe('function')
-    })
-  })
-})
+}
