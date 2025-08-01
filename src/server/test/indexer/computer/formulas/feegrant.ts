@@ -83,7 +83,9 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
     describe('getFeegrantAllowance', () => {
       it('returns allowance for valid granter-grantee pair', async () => {
         await request(app.callback())
-          .get('/account/xion1granter123/feegrant/allowance?grantee=xion1grantee456')
+          .get(
+            '/account/xion1granter123/feegrant/allowance?grantee=xion1grantee456'
+          )
           .set('x-api-key', options.apiKey)
           .expect(200)
           .expect({
@@ -102,7 +104,9 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
 
       it('returns allowance for specific block height', async () => {
         await request(app.callback())
-          .get('/account/xion1granter123/feegrant/allowance?grantee=xion1grantee789&block=200:1640995300000')
+          .get(
+            '/account/xion1granter123/feegrant/allowance?grantee=xion1grantee789&block=200:1640995300000'
+          )
           .set('x-api-key', options.apiKey)
           .expect(200)
           .expect({
@@ -121,14 +125,18 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
 
       it('returns undefined for non-existent allowance', async () => {
         await request(app.callback())
-          .get('/account/xion1nonexistent/feegrant/allowance?grantee=xion1grantee456')
+          .get(
+            '/account/xion1nonexistent/feegrant/allowance?grantee=xion1grantee456'
+          )
           .set('x-api-key', options.apiKey)
           .expect(204)
       })
 
       it('returns undefined for revoked allowance when querying latest', async () => {
         await request(app.callback())
-          .get('/account/xion1granter789/feegrant/allowance?grantee=xion1grantee456')
+          .get(
+            '/account/xion1granter789/feegrant/allowance?grantee=xion1grantee456'
+          )
           .set('x-api-key', options.apiKey)
           .expect(200)
           .expect({
@@ -252,7 +260,9 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
 
       it('returns allowances for specific block height', async () => {
         await request(app.callback())
-          .get('/account/xion1granter123/feegrant/allowances?type=granted&block=150:1640995250000')
+          .get(
+            '/account/xion1granter123/feegrant/allowances?type=granted&block=150:1640995250000'
+          )
           .set('x-api-key', options.apiKey)
           .expect(200)
           .expect([
@@ -299,13 +309,17 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
 
       it('returns correct result for specific block height', async () => {
         await request(app.callback())
-          .get('/account/xion1granter123/feegrant/has?grantee=xion1grantee789&block=150:1640995250000')
+          .get(
+            '/account/xion1granter123/feegrant/has?grantee=xion1grantee789&block=150:1640995250000'
+          )
           .set('x-api-key', options.apiKey)
           .expect(200)
           .expect('false')
 
         await request(app.callback())
-          .get('/account/xion1granter123/feegrant/has?grantee=xion1grantee789&block=200:1640995300000')
+          .get(
+            '/account/xion1granter123/feegrant/has?grantee=xion1grantee789&block=200:1640995300000'
+          )
           .set('x-api-key', options.apiKey)
           .expect(200)
           .expect('true')
@@ -316,13 +330,17 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
       it('applies block height filter correctly for allowance queries', async () => {
         // Query at block 150 should not see the allowance created at block 200
         await request(app.callback())
-          .get('/account/xion1granter123/feegrant/allowance?grantee=xion1grantee789&block=150:1640995250000')
+          .get(
+            '/account/xion1granter123/feegrant/allowance?grantee=xion1grantee789&block=150:1640995250000'
+          )
           .set('x-api-key', options.apiKey)
           .expect(204)
 
         // Query at block 200 should see the allowance
         await request(app.callback())
-          .get('/account/xion1granter123/feegrant/allowance?grantee=xion1grantee789&block=200:1640995300000')
+          .get(
+            '/account/xion1granter123/feegrant/allowance?grantee=xion1grantee789&block=200:1640995300000'
+          )
           .set('x-api-key', options.apiKey)
           .expect(200)
           .expect({
@@ -342,7 +360,9 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
       it('applies block height filter correctly for allowances queries', async () => {
         // Query at block 150 should only see allowances up to that block
         await request(app.callback())
-          .get('/account/xion1granter123/feegrant/allowances?type=granted&block=150:1640995250000')
+          .get(
+            '/account/xion1granter123/feegrant/allowances?type=granted&block=150:1640995250000'
+          )
           .set('x-api-key', options.apiKey)
           .expect(200)
           .expect([

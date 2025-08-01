@@ -23,13 +23,17 @@ export const allowance: AccountFormula<any, { grantee: string }> = {
   },
 }
 
-export const allowances: AccountFormula<any[], { type?: 'granted' | 'received' }> = {
+export const allowances: AccountFormula<
+  any[],
+  { type?: 'granted' | 'received' }
+> = {
   docs: {
     description: 'retrieves all feegrant allowances for this account',
     args: [
       {
         name: 'type',
-        description: 'type of allowances to retrieve: "granted" (default) or "received"',
+        description:
+          'type of allowances to retrieve: "granted" (default) or "received"',
         required: false,
         schema: {
           type: 'string',
@@ -38,7 +42,11 @@ export const allowances: AccountFormula<any[], { type?: 'granted' | 'received' }
       },
     ],
   },
-  compute: async ({ address, getFeegrantAllowances, args: { type = 'granted' } }) => {
+  compute: async ({
+    address,
+    getFeegrantAllowances,
+    args: { type = 'granted' },
+  }) => {
     if (type !== 'granted' && type !== 'received') {
       throw new Error('type must be "granted" or "received"')
     }
@@ -49,7 +57,8 @@ export const allowances: AccountFormula<any[], { type?: 'granted' | 'received' }
 
 export const has: AccountFormula<boolean, { grantee: string }> = {
   docs: {
-    description: 'checks if there is an active feegrant allowance for a specific grantee',
+    description:
+      'checks if there is an active feegrant allowance for a specific grantee',
     args: [
       {
         name: 'grantee',
