@@ -6,8 +6,8 @@ toolchain go1.24.0
 
 require (
 	cosmossdk.io/log v1.6.0
-	cosmossdk.io/store v1.10.0-rc.2
-	github.com/cosmos/cosmos-db v1.1.3
+	cosmossdk.io/store v1.1.2
+	github.com/cosmos/cosmos-db v1.1.1
 )
 
 require (
@@ -16,11 +16,14 @@ require (
 	github.com/cloudwego/base64x v0.1.5 // indirect
 	github.com/cockroachdb/fifo v0.0.0-20240816210425-c5d0cb0b6fc0 // indirect
 	github.com/cockroachdb/tokenbucket v0.0.0-20250429170803-42689b6311bb // indirect
-	github.com/cometbft/cometbft/api v1.1.0-rc1 // indirect
-	github.com/cometbft/cometbft/v2 v2.0.0-rc1 // indirect
+	github.com/cometbft/cometbft v0.38.17 // indirect
 	github.com/cosmos/cosmos-proto v1.0.0-beta.5 // indirect
+	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/oasisprotocol/curve25519-voi v0.0.0-20220708102147-0a8a51822cae // indirect
+	github.com/petermattis/goid v0.0.0-20240813172612-4fcff4a6cae7 // indirect
+	github.com/sasha-s/go-deadlock v0.3.5 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	golang.org/x/arch v0.17.0 // indirect
 )
