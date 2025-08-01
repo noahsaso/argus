@@ -1,8 +1,10 @@
 import retry from 'async-await-retry'
 import { Job, Queue } from 'bullmq'
 
+import { ConfigManager } from '@/config'
+import { State } from '@/db'
 import { queueMeilisearchIndexUpdates } from '@/search'
-import { handlerMakers } from '@/tracer'
+import { makeHandlers } from '@/tracer'
 import { NamedHandler } from '@/types'
 import { AutoCosmWasmClient } from '@/utils'
 import { queueWebhooks } from '@/webhooks'
@@ -35,21 +37,21 @@ export class ExportQueue extends BaseQueue<ExportQueuePayload> {
   private handlers: NamedHandler[] = []
 
   async init(): Promise<void> {
+    const state = await State.getSingleton()
+    const config = ConfigManager.load()
+
     const autoCosmWasmClient = new AutoCosmWasmClient(
       this.options.config.remoteRpc
     )
     await autoCosmWasmClient.update()
 
     // Set up handlers.
-    const handlers = await Promise.all(
-      Object.entries(handlerMakers).map(async ([name, handlerMaker]) => ({
-        name,
-        handler: await handlerMaker({
-          ...this.options,
-          autoCosmWasmClient,
-        }),
-      }))
-    )
+    const handlers = await makeHandlers({
+      ...this.options,
+      autoCosmWasmClient,
+      chainId:
+        state?.chainId || autoCosmWasmClient.chainId || config.chainId || '',
+    })
 
     this.handlers = handlers
   }

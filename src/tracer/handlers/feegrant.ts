@@ -8,8 +8,13 @@ import { Handler, HandlerMaker, ParsedFeegrantStateEvent } from '@/types'
 const STORE_NAME = 'feegrant'
 
 export const feegrant: HandlerMaker<ParsedFeegrantStateEvent> = async ({
+  chainId,
   config: { bech32Prefix },
 }) => {
+  if (!chainId.startsWith('xion-')) {
+    throw new Error(`Feegrant handler not supported on chain ${chainId}`)
+  }
+
   const match: Handler<ParsedFeegrantStateEvent>['match'] = (trace) => {
     // FeeAllowanceKeyPrefix = 0x00
     // Key format: 0x00 || len(grantee) || grantee || len(granter) || granter

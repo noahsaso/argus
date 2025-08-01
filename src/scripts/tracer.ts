@@ -16,10 +16,10 @@ import {
 import {
   BatchedTraceExporter,
   TracerManager,
-  handlerMakers,
+  makeHandlers,
   setUpFifoJsonTracer,
 } from '@/tracer'
-import { DbType, NamedHandler, TracedEvent } from '@/types'
+import { DbType, TracedEvent } from '@/types'
 import { AutoCosmWasmClient, objectMatchesStructure } from '@/utils'
 
 // Parse arguments.
@@ -132,18 +132,13 @@ const main = async () => {
   console.log(`[${new Date().toISOString()}] Setting up handlers...`)
 
   // Set up handlers.
-  const handlers = await Promise.all(
-    Object.entries(handlerMakers).map(
-      async ([name, handlerMaker]): Promise<NamedHandler> => ({
-        name,
-        handler: await handlerMaker({
-          config,
-          autoCosmWasmClient,
-          sendWebhooks: false,
-        }),
-      })
-    )
-  )
+  const handlers = await makeHandlers({
+    chainId:
+      state.chainId || autoCosmWasmClient.chainId || config.chainId || '',
+    config,
+    autoCosmWasmClient,
+    sendWebhooks: false,
+  })
 
   console.log(`[${new Date().toISOString()}] Starting tracer...`)
 
