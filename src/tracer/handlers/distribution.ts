@@ -73,24 +73,25 @@ export const distribution: HandlerMaker<
 
   const process: Handler<ParsedDistributionCommunityPoolStateEvent>['process'] =
     async (events) => {
-      // Save blocks from events.
-      await Block.createMany(
-        [...new Set(events.map((e) => e.blockHeight))].map((height) => ({
-          height,
-          timeUnixMs: events.find((e) => e.blockHeight === height)!
-            .blockTimeUnixMs,
-        }))
-      )
+      const exportEvents = async () => {
+        // Save blocks from events.
+        await Block.createMany(
+          [...new Set(events.map((e) => e.blockHeight))].map((height) => ({
+            height,
+            timeUnixMs: events.find((e) => e.blockHeight === height)!
+              .blockTimeUnixMs,
+          }))
+        )
 
-      const exportEvents = async () =>
         // Unique index on [blockHeight] ensures that we don't insert duplicate
         // events. If we encounter a duplicate, we update the `balances` field
         // in case event processing for a block was batched separately.
-        events.length > 0
+        return events.length > 0
           ? await DistributionCommunityPoolStateEvent.bulkCreate(events, {
               updateOnDuplicate: ['balances'],
             })
           : []
+      }
 
       // Retry 3 times with exponential backoff starting at 100ms delay.
       const exportedEvents = (await retry(exportEvents, [], {

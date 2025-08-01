@@ -121,3 +121,14 @@ export type ParsedBankStateEvent = {
   denom: string
   balance: string
 }
+
+export type ParsedFeegrantStateEvent = {
+  granter: string
+  grantee: string
+  blockHeight: string
+  blockTimeUnixMs: string
+  blockTimestamp: Date
+  allowanceData: string
+  allowanceType: string | null
+  active: boolean
+}

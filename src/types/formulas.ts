@@ -9,7 +9,7 @@ import { BindOrReplacements, WhereOptions } from 'sequelize'
 import type { Contract, Extraction, StakingSlashEvent, WasmTxEvent } from '@/db'
 
 import { ComputationDependentKey } from './computation'
-import { ContractJson, DependableEventModel } from './db'
+import { ContractJson, DependableEventModel, FeegrantAllowanceJson } from './db'
 import { Block, NestedMap, RequireAtLeastOne } from './misc'
 
 export type KeyInput = string | number | Uint8Array
@@ -180,6 +180,21 @@ export type FormulaCommunityPoolBalancesGetter = () => Promise<
   Record<string, string> | undefined
 >
 
+export type FormulaFeegrantAllowanceGetter = (
+  granter: string,
+  grantee: string
+) => Promise<FeegrantAllowanceJson | undefined>
+
+export type FormulaFeegrantAllowancesGetter = (
+  address: string,
+  type?: 'granted' | 'received'
+) => Promise<FeegrantAllowanceJson[] | undefined>
+
+export type FormulaFeegrantHasAllowanceGetter = (
+  granter: string,
+  grantee: string
+) => Promise<boolean>
+
 export type FormulaProposalObject = {
   id: string
   data: string
@@ -299,6 +314,9 @@ export type Env<Args extends Record<string, string> = {}> = {
   getProposalVoteCount: FormulaProposalVoteCountGetter
   getCommunityPoolBalances: FormulaCommunityPoolBalancesGetter
   getExtraction: FormulaExtractionGetter
+  getFeegrantAllowance: FormulaFeegrantAllowanceGetter
+  getFeegrantAllowances: FormulaFeegrantAllowancesGetter
+  hasFeegrantAllowance: FormulaFeegrantHasAllowanceGetter
 
   /**
    * Raw database query. This cannot be cached, so any formula that uses this

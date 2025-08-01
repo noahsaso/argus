@@ -7,6 +7,7 @@ import { WasmCode, WasmCodeService } from '@/services/wasm-codes'
 import { app } from '../../app'
 import { ComputerTestOptions } from '../types'
 import { loadBankTests } from './bank'
+import { loadFeegrantTests } from './feegrant'
 import { loadGovTests } from './gov'
 // import { loadStakingTests } from './staking'
 import { loadWasmTests } from './wasm'
@@ -18,6 +19,7 @@ export const loadFormulasTests = (options: ComputerTestOptions) => {
     })
 
     loadBankTests(options)
+    loadFeegrantTests(options)
     loadGovTests(options)
     // loadStakingTests(options)
     loadWasmTests(options)

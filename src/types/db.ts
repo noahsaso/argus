@@ -24,6 +24,7 @@ export enum DependentKeyNamespace {
   GovProposalVote = 'gov_proposal_vote',
   DistributionCommunityPoolStateEvent = 'distribution_community_pool_state',
   Extraction = 'extraction',
+  FeegrantAllowance = 'feegrant_allowance',
 }
 
 // Interface that event models must implement to be depended on by computations.
@@ -61,9 +62,15 @@ export type ContractJson = {
   admin?: string | null
   creator?: string | null
   label?: string | null
-  instantiatedAt: {
-    block: SerializedBlock
-    timestamp: string
-  }
+  instantiatedAt: SerializedBlock
   txHash?: string | null
+}
+
+export type FeegrantAllowanceJson = {
+  granter: string
+  grantee: string
+  allowanceData: string
+  allowanceType: string | null
+  active: boolean
+  block: SerializedBlock
 }

@@ -6,6 +6,7 @@ import {
   Contract,
   DistributionCommunityPoolStateEvent,
   Extraction,
+  FeegrantAllowance,
   GovProposal,
   GovProposalVote,
   StakingSlashEvent,
@@ -17,38 +18,38 @@ import {
 import { WasmCodeService } from '@/services/wasm-codes'
 import { BANK_HISTORY_CODE_IDS_KEYS } from '@/tracer/handlers/bank'
 import {
-  Cache,
+  type Cache,
   DbType,
-  Env,
-  EnvOptions,
-  FormulaBalanceGetter,
-  FormulaBalancesGetter,
-  FormulaCodeIdKeyForContractGetter,
-  FormulaCommunityPoolBalancesGetter,
-  FormulaContractGetter,
-  FormulaContractMatchesCodeIdKeysGetter,
-  FormulaDateGetter,
-  FormulaDateWithValueMatchGetter,
-  FormulaExtractionGetter,
-  FormulaGetter,
-  FormulaMapGetter,
-  FormulaPrefetch,
-  FormulaPrefetchTransformations,
-  FormulaProposalCountGetter,
-  FormulaProposalGetter,
-  FormulaProposalObject,
-  FormulaProposalVoteCountGetter,
-  FormulaProposalVoteGetter,
-  FormulaProposalVoteObject,
-  FormulaProposalVotesGetter,
-  FormulaProposalsGetter,
-  FormulaQuerier,
-  FormulaSlashEventsGetter,
-  FormulaTransformationDateGetter,
-  FormulaTransformationMapGetter,
-  FormulaTransformationMatchGetter,
-  FormulaTransformationMatchesGetter,
-  FormulaTxEventsGetter,
+  type Env,
+  type EnvOptions,
+  type FormulaBalanceGetter,
+  type FormulaBalancesGetter,
+  type FormulaCodeIdKeyForContractGetter,
+  type FormulaCommunityPoolBalancesGetter,
+  type FormulaContractGetter,
+  type FormulaContractMatchesCodeIdKeysGetter,
+  type FormulaDateGetter,
+  type FormulaDateWithValueMatchGetter,
+  type FormulaExtractionGetter,
+  type FormulaGetter,
+  type FormulaMapGetter,
+  type FormulaPrefetch,
+  type FormulaPrefetchTransformations,
+  type FormulaProposalCountGetter,
+  type FormulaProposalGetter,
+  type FormulaProposalObject,
+  type FormulaProposalVoteCountGetter,
+  type FormulaProposalVoteGetter,
+  type FormulaProposalVoteObject,
+  type FormulaProposalVotesGetter,
+  type FormulaProposalsGetter,
+  type FormulaQuerier,
+  type FormulaSlashEventsGetter,
+  type FormulaTransformationDateGetter,
+  type FormulaTransformationMapGetter,
+  type FormulaTransformationMatchGetter,
+  type FormulaTransformationMatchesGetter,
+  type FormulaTxEventsGetter,
 } from '@/types'
 import { dbKeyForKeys, dbKeyToKeys, getDependentKey } from '@/utils'
 
@@ -1178,6 +1179,7 @@ export const getEnv = ({
 
     const dependentKey =
       getDependentKey(BankStateEvent.dependentKeyNamespace, address) + ':'
+
     dependentKeys?.push({
       key: dependentKey,
       prefix: true,
@@ -1760,6 +1762,136 @@ export const getEnv = ({
     return event.toJSON()
   }
 
+  const getFeegrantAllowance = async (granter: string, grantee: string) => {
+    const dependentKey = getDependentKey(
+      FeegrantAllowance.dependentKeyNamespace,
+      granter,
+      grantee
+    )
+    dependentKeys?.push({
+      key: dependentKey,
+      prefix: false,
+    })
+
+    // Check cache.
+    const cachedEvent = cache.events[dependentKey]
+    const event =
+      // If undefined, we haven't tried to fetch it yet. If not undefined,
+      // either it exists or it doesn't (null).
+      cachedEvent !== undefined
+        ? cachedEvent?.[0]
+        : await FeegrantAllowance.findOne({
+            where: {
+              granter,
+              grantee,
+              blockHeight: blockHeightFilter,
+            },
+            order: [['blockHeight', 'DESC']],
+          })
+
+    // Type-check. Should never happen assuming dependent key namespaces are
+    // unique across different event types.
+    if (event && !(event instanceof FeegrantAllowance)) {
+      throw new Error('Incorrect event type.')
+    }
+
+    // Cache event, null if nonexistent.
+    if (cachedEvent === undefined) {
+      cache.events[dependentKey] = event ? [event] : null
+    }
+
+    // If no event found, return undefined.
+    if (!event) {
+      return
+    }
+
+    // Call hook.
+    await onFetch?.([event])
+
+    return event.json
+  }
+
+  const getFeegrantAllowances = async (
+    address: string,
+    type: 'granted' | 'received' = 'granted'
+  ) => {
+    const dependentKey = getDependentKey(
+      FeegrantAllowance.dependentKeyNamespace,
+      type === 'granted' ? address : '*',
+      type === 'received' ? address : '*'
+    )
+    dependentKeys?.push({
+      key: dependentKey,
+      prefix: false,
+    })
+
+    // Check cache.
+    const cachedEvents = cache.events[dependentKey]
+    const events =
+      // If undefined, we haven't tried to fetch them yet. If not undefined,
+      // either they exist or they don't (null).
+      cachedEvents !== undefined
+        ? ((cachedEvents ?? []) as FeegrantAllowance[])
+        : await FeegrantAllowance.findAll({
+            attributes: [
+              // DISTINCT ON is not directly supported by Sequelize, so we need
+              // to cast to unknown and back to string to insert this at the
+              // beginning of the query. This ensures we use the most recent
+              // version of each granter-grantee pair.
+              Sequelize.literal(
+                'DISTINCT ON("granter", "grantee") \'\''
+              ) as unknown as string,
+              'granter',
+              'grantee',
+              'blockHeight',
+              'blockTimeUnixMs',
+              'blockTimestamp',
+              'allowanceData',
+              'allowanceType',
+              'active',
+            ],
+            where: {
+              ...(type === 'granted'
+                ? { granter: address }
+                : { grantee: address }),
+              blockHeight: blockHeightFilter,
+            },
+            order: [
+              // Needs to be first so we can use DISTINCT ON.
+              ['granter', 'ASC'],
+              ['grantee', 'ASC'],
+              ['blockHeight', 'DESC'],
+            ],
+          })
+
+    // Type-check. Should never happen assuming dependent key namespaces are
+    // unique across different event types.
+    if (events.some((event) => !(event instanceof FeegrantAllowance))) {
+      throw new Error('Incorrect event type.')
+    }
+
+    // Cache events, null if nonexistent.
+    if (cachedEvents === undefined) {
+      cache.events[dependentKey] = events.length ? events : null
+    }
+
+    // If no events found, return undefined.
+    if (!events.length) {
+      return undefined
+    }
+
+    // Call hook.
+    await onFetch?.(events)
+
+    // Filter only active allowances and return formatted objects.
+    return events.filter((event) => event.active).map((event) => event.json)
+  }
+
+  const hasFeegrantAllowance = async (granter: string, grantee: string) => {
+    const allowance = await getFeegrantAllowance(granter, grantee)
+    return allowance?.active ?? false
+  }
+
   const query: FormulaQuerier = async (query, bindParams) => {
     const db = await loadDb({
       type: DbType.Data,
@@ -1812,6 +1944,9 @@ export const getEnv = ({
     getCommunityPoolBalances,
 
     getExtraction,
+    getFeegrantAllowance,
+    getFeegrantAllowances,
+    hasFeegrantAllowance,
 
     query,
   }

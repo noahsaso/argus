@@ -58,10 +58,8 @@ export class Contract extends Model {
       creator: this.creator,
       label: this.label,
       instantiatedAt: {
-        block: {
-          height: this.instantiatedAtBlockHeight,
-          timeUnixMs: this.instantiatedAtBlockTimeUnixMs,
-        },
+        height: this.instantiatedAtBlockHeight,
+        timeUnixMs: this.instantiatedAtBlockTimeUnixMs,
         timestamp: this.instantiatedAtBlockTimestamp.toISOString(),
       },
       txHash: this.txHash,

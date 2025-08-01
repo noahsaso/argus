@@ -115,16 +115,16 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
   }
 
   const process: Handler<ParsedBankStateEvent>['process'] = async (events) => {
-    // Save blocks from events.
-    await Block.createMany(
-      [...new Set(events.map((e) => e.blockHeight))].map((height) => ({
-        height,
-        timeUnixMs: events.find((e) => e.blockHeight === height)!
-          .blockTimeUnixMs,
-      }))
-    )
-
     const exportEvents = async () => {
+      // Save blocks from events.
+      await Block.createMany(
+        [...new Set(events.map((e) => e.blockHeight))].map((height) => ({
+          height,
+          timeUnixMs: events.find((e) => e.blockHeight === height)!
+            .blockTimeUnixMs,
+        }))
+      )
+
       // Get unique addresses with balance updates.
       const uniqueAddresses = [...new Set(events.map((event) => event.address))]
 
