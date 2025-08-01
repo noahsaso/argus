@@ -4,6 +4,8 @@ go 1.23.5
 
 toolchain go1.24.0
 
+replace github.com/syndtr/goleveldb => github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
+
 require (
 	cosmossdk.io/log v1.6.0
 	cosmossdk.io/store v1.1.2
