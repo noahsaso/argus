@@ -12,6 +12,7 @@ export const memberOf: AccountFormula<
     dao: string
     info: ContractInfo
     votingModule: string
+    votingModuleInfo: ContractInfo
     config: any
     proposalCount: number
   }[]
@@ -192,7 +193,19 @@ export const memberOf: AccountFormula<
           Promise.all([
             info.compute({ ...env, contractAddress: daoAddress }),
             config.compute({ ...env, contractAddress: daoAddress }),
-            votingModule.compute({ ...env, contractAddress: daoAddress }),
+            votingModule
+              .compute({ ...env, contractAddress: daoAddress })
+              .then(async (address) =>
+                address
+                  ? {
+                      address,
+                      info: await info.compute({
+                        ...env,
+                        contractAddress: address,
+                      }),
+                    }
+                  : null
+              ),
             proposalCount.compute({ ...env, contractAddress: daoAddress }),
           ])
         )
@@ -206,7 +219,8 @@ export const memberOf: AccountFormula<
               dao: daos[index],
               info,
               config,
-              votingModule,
+              votingModule: votingModule.address,
+              votingModuleInfo: votingModule.info,
               proposalCount: proposalCount || 0,
             }
           : []
