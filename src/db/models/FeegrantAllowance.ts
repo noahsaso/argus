@@ -101,6 +101,23 @@ export class FeegrantAllowance extends DependableEventModel {
   @Column(DataType.BOOLEAN)
   declare active: boolean
 
+  // Parsed fields for efficient querying
+  @AllowNull(true)
+  @Column(DataType.TEXT)
+  declare parsedAmount: string | null
+
+  @AllowNull(true)
+  @Column(DataType.TEXT)
+  declare parsedDenom: string | null
+
+  @AllowNull(true)
+  @Column(DataType.TEXT)
+  declare parsedAllowanceType: string | null
+
+  @AllowNull(true)
+  @Column(DataType.BIGINT)
+  declare parsedExpirationUnixMs: string | null
+
   get json(): FeegrantAllowanceJson {
     return {
       granter: this.granter,

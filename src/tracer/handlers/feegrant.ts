@@ -4,6 +4,7 @@ import { Sequelize } from 'sequelize'
 
 import { Block, FeegrantAllowance, State } from '@/db'
 import { Handler, HandlerMaker, ParsedFeegrantStateEvent } from '@/types'
+import { parseAllowanceData } from '@/utils'
 
 const STORE_NAME = 'feegrant'
 
@@ -53,13 +54,26 @@ export const feegrant: HandlerMaker<ParsedFeegrantStateEvent> = async ({
       const active = trace.operation === 'write'
       const allowanceData = trace.value || ''
 
-      // Try to determine allowance type from protobuf data
-      let allowanceType: string | null = null
+      // Parse allowance data to extract structured information
+      let parsedData: {
+        amount: string | null
+        denom: string | null
+        allowanceType: string | null
+        expirationUnixMs: string | null
+      } = { amount: null, denom: null, allowanceType: null, expirationUnixMs: null }
+      
       if (active && allowanceData) {
-        // For MVP, we can leave this as null or add basic type detection later
-        // This would require protobuf parsing to determine the exact allowance type
-        allowanceType = null
+        const parsed = parseAllowanceData(allowanceData)
+        parsedData = {
+          amount: parsed.amount || null,
+          denom: parsed.denom || null,
+          allowanceType: parsed.allowanceType || null,
+          expirationUnixMs: parsed.expirationUnixMs || null,
+        }
       }
+
+      // Keep the original allowanceType field for backward compatibility
+      const allowanceType = parsedData.allowanceType
 
       return {
         id: [blockHeight, granter, grantee].join(':'),
@@ -71,6 +85,10 @@ export const feegrant: HandlerMaker<ParsedFeegrantStateEvent> = async ({
         allowanceData,
         allowanceType,
         active,
+        parsedAmount: parsedData.amount,
+        parsedDenom: parsedData.denom,
+        parsedAllowanceType: parsedData.allowanceType,
+        parsedExpirationUnixMs: parsedData.expirationUnixMs,
       }
     } catch (error) {
       // Ignore decoding errors
@@ -93,7 +111,15 @@ export const feegrant: HandlerMaker<ParsedFeegrantStateEvent> = async ({
 
       // Bulk create allowances.
       return FeegrantAllowance.bulkCreate(events, {
-        updateOnDuplicate: ['allowanceData', 'allowanceType', 'active'],
+        updateOnDuplicate: [
+          'allowanceData',
+          'allowanceType',
+          'active',
+          'parsedAmount',
+          'parsedDenom',
+          'parsedAllowanceType',
+          'parsedExpirationUnixMs',
+        ],
       })
     }
 
