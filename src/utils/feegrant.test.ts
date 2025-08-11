@@ -19,40 +19,40 @@ describe('feegrant utilities', () => {
     })
 
     it('handles basic allowance type detection', () => {
-      // Mock base64 data that contains "coin" pattern
-      const mockData = Buffer.from('test636f696etest').toString('base64')
+      // Mock base64 data that contains "coin" pattern in hex
+      const mockData = Buffer.from('testcointest').toString('base64')
       const result = parseAllowanceData(mockData)
       
       expect(result.allowanceType).toBe('BasicAllowance')
     })
 
     it('handles periodic allowance type detection', () => {
-      // Mock base64 data that contains "period" pattern
-      const mockData = Buffer.from('test706572696f64test').toString('base64')
+      // Mock base64 data that contains "period" pattern in hex
+      const mockData = Buffer.from('testperiodtest').toString('base64')
       const result = parseAllowanceData(mockData)
       
       expect(result.allowanceType).toBe('PeriodicAllowance')
     })
 
     it('handles allowed message allowance type detection', () => {
-      // Mock base64 data that contains "allowed" pattern
-      const mockData = Buffer.from('test616c6c6f776564test').toString('base64')
+      // Mock base64 data that contains "allowed" pattern in hex
+      const mockData = Buffer.from('testallowedtest').toString('base64')
       const result = parseAllowanceData(mockData)
       
       expect(result.allowanceType).toBe('AllowedMsgAllowance')
     })
 
     it('detects uxion denomination', () => {
-      // Mock base64 data that contains "uxion" pattern
-      const mockData = Buffer.from('test7578696f6etest').toString('base64')
+      // Mock base64 data that contains "uxion" pattern in hex
+      const mockData = Buffer.from('testuxiontest').toString('base64')
       const result = parseAllowanceData(mockData)
       
       expect(result.denom).toBe('uxion')
     })
 
     it('detects uusdc denomination', () => {
-      // Mock base64 data that contains "uusdc" pattern
-      const mockData = Buffer.from('test7575736463test').toString('base64')
+      // Mock base64 data that contains "uusdc" pattern in hex
+      const mockData = Buffer.from('testuusdctest').toString('base64')
       const result = parseAllowanceData(mockData)
       
       expect(result.denom).toBe('uusdc')
@@ -164,7 +164,7 @@ describe('feegrant utilities', () => {
   describe('integration scenarios', () => {
     it('handles complete allowance parsing workflow', () => {
       // Test a realistic scenario with multiple patterns
-      const mockComplexData = Buffer.from('636f696e7578696f6e').toString('base64') // "coinuxion"
+      const mockComplexData = Buffer.from('coinuxion').toString('base64') // "coinuxion"
       const result = parseAllowanceData(mockComplexData)
       
       expect(result.allowanceType).toBe('BasicAllowance')

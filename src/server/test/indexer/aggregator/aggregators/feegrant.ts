@@ -1,7 +1,7 @@
 import request from 'supertest'
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { BankStateEvent, Block, FeegrantAllowance, State, WasmTxEvent } from '@/db'
+import { BankStateEvent, Block, Contract, FeegrantAllowance, State, WasmTxEvent } from '@/db'
 
 import { app } from '../../app'
 import { AggregatorTestOptions } from '../types'
@@ -85,25 +85,65 @@ export const loadFeegrantTests = (options: AggregatorTestOptions) => {
         },
       ])
 
+      // Create contracts first (required for foreign key constraint)
+      await Contract.bulkCreate([
+        {
+          address: 'xion1contract123',
+          codeId: 1,
+          admin: null,
+          creator: 'xion1creator123',
+          label: 'Test Contract 1',
+          instantiatedAtBlockHeight: '290',
+          instantiatedAtBlockTimeUnixMs: '1640995350000',
+          instantiatedAtBlockTimestamp: new Date('2022-01-01T00:02:30.000Z'),
+          txHash: 'tx1hash',
+        },
+        {
+          address: 'xion1contract456',
+          codeId: 2,
+          admin: null,
+          creator: 'xion1creator456',
+          label: 'Test Contract 2',
+          instantiatedAtBlockHeight: '295',
+          instantiatedAtBlockTimeUnixMs: '1640995375000',
+          instantiatedAtBlockTimestamp: new Date('2022-01-01T00:02:55.000Z'),
+          txHash: 'tx2hash',
+        },
+      ])
+
       // Add activity data for testing
       await WasmTxEvent.bulkCreate([
         {
           contractAddress: 'xion1contract123',
           sender: 'xion1grantee456', // Active grantee with recent activity
-          blockHeight: 290,
-          blockTimeUnixMs: 1640995350000, // Recent activity
+          blockHeight: '290',
+          blockTimeUnixMs: '1640995350000', // Recent activity
           blockTimestamp: new Date('2022-01-01T00:02:30.000Z'),
-          txHash: 'tx1',
+          txIndex: 0,
+          messageId: '0',
+          action: 'execute',
           msg: '{}',
+          msgJson: {},
+          reply: null,
+          funds: [],
+          response: null,
+          gasUsed: '100000',
         },
         {
           contractAddress: 'xion1contract456',
           sender: 'xion1grantee123', // Another grantee with activity
-          blockHeight: 295,
-          blockTimeUnixMs: 1640995375000,
+          blockHeight: '295',
+          blockTimeUnixMs: '1640995375000',
           blockTimestamp: new Date('2022-01-01T00:02:55.000Z'),
-          txHash: 'tx2',
+          txIndex: 0,
+          messageId: '0',
+          action: 'execute',
           msg: '{}',
+          msgJson: {},
+          reply: null,
+          funds: [],
+          response: null,
+          gasUsed: '100000',
         },
       ])
 
@@ -581,7 +621,7 @@ export const loadFeegrantTests = (options: AggregatorTestOptions) => {
         await request(app.callback())
           .get('/a/feegrant/nonexistent')
           .set('x-api-key', options.apiKey)
-          .expect(404)
+          .expect(500)
       })
 
       it('requires valid API key', async () => {

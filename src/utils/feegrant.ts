@@ -113,6 +113,11 @@ export const isAllowanceExpired = (expirationUnixMs?: string): boolean => {
   const now = Date.now()
   const expiration = parseInt(expirationUnixMs, 10)
   
+  // If parsing failed (NaN), consider it expired for safety
+  if (isNaN(expiration)) {
+    return true
+  }
+  
   return now > expiration
 }
 
