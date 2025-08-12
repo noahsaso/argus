@@ -31,8 +31,12 @@ async function backfillFeegrantParsedData() {
     const batchSize = 100
     for (let i = 0; i < allowances.length; i += batchSize) {
       const batch = allowances.slice(i, i + batchSize)
-      
-      console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(allowances.length / batchSize)}`)
+
+      console.log(
+        `Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(
+          allowances.length / batchSize
+        )}`
+      )
 
       for (const allowance of batch) {
         try {
@@ -40,7 +44,12 @@ async function backfillFeegrantParsedData() {
           const parsed = parseAllowanceData(allowance.allowanceData)
 
           // Update the record if we got any parsed data
-          if (parsed.amount || parsed.denom || parsed.allowanceType || parsed.expirationUnixMs) {
+          if (
+            parsed.amount ||
+            parsed.denom ||
+            parsed.allowanceType ||
+            parsed.expirationUnixMs
+          ) {
             await allowance.update({
               parsedAmount: parsed.amount || null,
               parsedDenom: parsed.denom || null,
@@ -53,7 +62,9 @@ async function backfillFeegrantParsedData() {
           processed++
 
           if (processed % 50 === 0) {
-            console.log(`Processed ${processed}/${allowances.length} allowances (${updated} updated)`)
+            console.log(
+              `Processed ${processed}/${allowances.length} allowances (${updated} updated)`
+            )
           }
         } catch (error) {
           console.error(`Error processing allowance ${allowance.id}:`, error)
@@ -61,14 +72,13 @@ async function backfillFeegrantParsedData() {
       }
 
       // Small delay between batches to avoid overwhelming the database
-      await new Promise(resolve => setTimeout(resolve, 100))
+      await new Promise((resolve) => setTimeout(resolve, 100))
     }
 
     console.log(`Backfill completed!`)
     console.log(`- Total processed: ${processed}`)
     console.log(`- Total updated: ${updated}`)
     console.log(`- Skipped (no parseable data): ${processed - updated}`)
-
   } catch (error) {
     console.error('Error during backfill:', error)
     process.exit(1)

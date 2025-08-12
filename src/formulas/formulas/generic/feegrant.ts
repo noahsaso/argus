@@ -1,17 +1,15 @@
 import { GenericFormula } from '@/types'
 
-export const totals: GenericFormula<
-  {
-    totalActiveGrants: number
-    totalActiveGrantees: number
-    totalActiveGranters: number
-    totalRevokedGrants: number
-    totalBasicAllowances: number
-    totalPeriodicAllowances: number
-    totalAllowedMsgAllowances: number
-    totalUnknownAllowances: number
-  }
-> = {
+export const totals: GenericFormula<{
+  totalActiveGrants: number
+  totalActiveGrantees: number
+  totalActiveGranters: number
+  totalRevokedGrants: number
+  totalBasicAllowances: number
+  totalPeriodicAllowances: number
+  totalAllowedMsgAllowances: number
+  totalUnknownAllowances: number
+}> = {
   docs: {
     description: 'Get comprehensive feegrant totals and statistics',
     args: [],
@@ -54,14 +52,12 @@ export const totals: GenericFormula<
   },
 }
 
-export const amounts: GenericFormula<
-  {
-    totalXionGranted: string
-    totalUsdcGranted: string
-    totalGrantsWithAmounts: number
-    grantsByToken: { denom: string; total: string; count: number }[]
-  }
-> = {
+export const amounts: GenericFormula<{
+  totalXionGranted: string
+  totalUsdcGranted: string
+  totalGrantsWithAmounts: number
+  grantsByToken: { denom: string; total: string; count: number }[]
+}> = {
   docs: {
     description: 'Get feegrant amounts by token denomination',
     args: [],
@@ -95,10 +91,13 @@ export const amounts: GenericFormula<
     }))
 
     // Calculate totals for specific tokens
-    const xionGrant = grantsByToken.find(g => g.denom === 'uxion')
-    const usdcGrant = grantsByToken.find(g => g.denom === 'uusdc')
+    const xionGrant = grantsByToken.find((g) => g.denom === 'uxion')
+    const usdcGrant = grantsByToken.find((g) => g.denom === 'uusdc')
 
-    const totalGrantsWithAmounts = grantsByToken.reduce((sum, grant) => sum + grant.count, 0)
+    const totalGrantsWithAmounts = grantsByToken.reduce(
+      (sum, grant) => sum + grant.count,
+      0
+    )
 
     return {
       totalXionGranted: xionGrant?.total || '0',
@@ -141,9 +140,10 @@ export const activity: GenericFormula<
       throw new Error('daysAgo must be a positive number')
     }
 
-    const recentThreshold = date.getTime() - (daysAgo * 24 * 60 * 60 * 1000)
+    const recentThreshold = date.getTime() - daysAgo * 24 * 60 * 60 * 1000
 
-    const [result] = await query(`
+    const [result] = await query(
+      `
       WITH active_grantees AS (
         SELECT DISTINCT ON (granter, grantee) grantee 
         FROM "FeegrantAllowances" 
@@ -168,21 +168,28 @@ export const activity: GenericFormula<
       FROM active_grantees ag
       LEFT JOIN recent_tx_activity rta ON ag.grantee = rta.address
       LEFT JOIN recent_balance_activity rba ON ag.grantee = rba.address
-    `, {
-      recentThreshold,
-    })
+    `,
+      {
+        recentThreshold,
+      }
+    )
 
     const totalActiveGrantees = Number(result.totalActiveGrantees)
-    const granteesWithAnyRecentActivity = Number(result.granteesWithAnyRecentActivity)
-    
-    const activityRate = totalActiveGrantees > 0 
-      ? (granteesWithAnyRecentActivity / totalActiveGrantees) * 100 
-      : 0
+    const granteesWithAnyRecentActivity = Number(
+      result.granteesWithAnyRecentActivity
+    )
+
+    const activityRate =
+      totalActiveGrantees > 0
+        ? (granteesWithAnyRecentActivity / totalActiveGrantees) * 100
+        : 0
 
     return {
       totalActiveGrantees,
       granteesWithRecentTxActivity: Number(result.granteesWithRecentTxActivity),
-      granteesWithRecentBalanceActivity: Number(result.granteesWithRecentBalanceActivity),
+      granteesWithRecentBalanceActivity: Number(
+        result.granteesWithRecentBalanceActivity
+      ),
       granteesWithAnyRecentActivity,
       activityRate: Math.round(activityRate * 100) / 100, // Round to 2 decimal places
     }

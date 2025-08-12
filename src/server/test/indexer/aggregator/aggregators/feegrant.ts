@@ -1,7 +1,14 @@
 import request from 'supertest'
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { BankStateEvent, Block, Contract, FeegrantAllowance, State, WasmTxEvent } from '@/db'
+import {
+  BankStateEvent,
+  Block,
+  Contract,
+  FeegrantAllowance,
+  State,
+  WasmTxEvent,
+} from '@/db'
 
 import { app } from '../../app'
 import { AggregatorTestOptions } from '../types'
@@ -625,9 +632,7 @@ export const loadFeegrantTests = (options: AggregatorTestOptions) => {
       })
 
       it('requires valid API key', async () => {
-        await request(app.callback())
-          .get('/a/feegrant/totals')
-          .expect(401)
+        await request(app.callback()).get('/a/feegrant/totals').expect(401)
       })
     })
   })

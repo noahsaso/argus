@@ -22,7 +22,7 @@ describe('feegrant utilities', () => {
       // Mock base64 data that contains "coin" pattern in hex
       const mockData = Buffer.from('testcointest').toString('base64')
       const result = parseAllowanceData(mockData)
-      
+
       expect(result.allowanceType).toBe('BasicAllowance')
     })
 
@@ -30,7 +30,7 @@ describe('feegrant utilities', () => {
       // Mock base64 data that contains "period" pattern in hex
       const mockData = Buffer.from('testperiodtest').toString('base64')
       const result = parseAllowanceData(mockData)
-      
+
       expect(result.allowanceType).toBe('PeriodicAllowance')
     })
 
@@ -38,7 +38,7 @@ describe('feegrant utilities', () => {
       // Mock base64 data that contains "allowed" pattern in hex
       const mockData = Buffer.from('testallowedtest').toString('base64')
       const result = parseAllowanceData(mockData)
-      
+
       expect(result.allowanceType).toBe('AllowedMsgAllowance')
     })
 
@@ -46,7 +46,7 @@ describe('feegrant utilities', () => {
       // Mock base64 data that contains "uxion" pattern in hex
       const mockData = Buffer.from('testuxiontest').toString('base64')
       const result = parseAllowanceData(mockData)
-      
+
       expect(result.denom).toBe('uxion')
     })
 
@@ -54,7 +54,7 @@ describe('feegrant utilities', () => {
       // Mock base64 data that contains "uusdc" pattern in hex
       const mockData = Buffer.from('testuusdctest').toString('base64')
       const result = parseAllowanceData(mockData)
-      
+
       expect(result.denom).toBe('uusdc')
     })
 
@@ -62,7 +62,7 @@ describe('feegrant utilities', () => {
       // Test with data that will cause parsing errors
       const mockData = Buffer.from('malformed data').toString('base64')
       const result = parseAllowanceData(mockData)
-      
+
       // Should not throw and should return partial results
       expect(result).toBeDefined()
       expect(typeof result).toBe('object')
@@ -72,7 +72,7 @@ describe('feegrant utilities', () => {
       // Mock base64 data without recognizable patterns
       const mockData = Buffer.from('randomdata').toString('base64')
       const result = parseAllowanceData(mockData)
-      
+
       expect(result.allowanceType).toBeUndefined()
       expect(result.denom).toBeUndefined()
       expect(result.amount).toBeUndefined()
@@ -166,10 +166,10 @@ describe('feegrant utilities', () => {
       // Test a realistic scenario with multiple patterns
       const mockComplexData = Buffer.from('coinuxion').toString('base64') // "coinuxion"
       const result = parseAllowanceData(mockComplexData)
-      
+
       expect(result.allowanceType).toBe('BasicAllowance')
       expect(result.denom).toBe('uxion')
-      
+
       // Test formatting if amount was parsed
       if (result.amount) {
         const formatted = formatAllowanceAmount(result.amount, result.denom!)
@@ -180,7 +180,7 @@ describe('feegrant utilities', () => {
     it('handles edge cases gracefully', () => {
       // Test with minimal valid data
       const result = parseAllowanceData('dGVzdA==') // "test" in base64
-      
+
       // Should not throw and should return safe defaults
       expect(result).toBeDefined()
       expect(typeof result).toBe('object')
@@ -189,7 +189,7 @@ describe('feegrant utilities', () => {
     it('validates expiration workflow', () => {
       const mockData = Buffer.from('test').toString('base64')
       const result = parseAllowanceData(mockData)
-      
+
       // Test expiration checking
       if (result.expirationUnixMs) {
         const isExpired = isAllowanceExpired(result.expirationUnixMs)

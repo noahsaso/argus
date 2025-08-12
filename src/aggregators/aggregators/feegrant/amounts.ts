@@ -3,14 +3,12 @@ import { Aggregator, FormulaType } from '@/types'
 /**
  * Get feegrant amounts by token denomination
  */
-export const amounts: Aggregator<
-  {
-    totalXionGranted: string
-    totalUsdcGranted: string
-    totalGrantsWithAmounts: number
-    grantsByToken: { denom: string; total: string; count: number }[]
-  }
-> = {
+export const amounts: Aggregator<{
+  totalXionGranted: string
+  totalUsdcGranted: string
+  totalGrantsWithAmounts: number
+  grantsByToken: { denom: string; total: string; count: number }[]
+}> = {
   compute: async (env) => {
     // Use the generic feegrant amounts formula
     return await env.compute({

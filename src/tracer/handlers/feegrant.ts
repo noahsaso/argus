@@ -60,8 +60,13 @@ export const feegrant: HandlerMaker<ParsedFeegrantStateEvent> = async ({
         denom: string | null
         allowanceType: string | null
         expirationUnixMs: string | null
-      } = { amount: null, denom: null, allowanceType: null, expirationUnixMs: null }
-      
+      } = {
+        amount: null,
+        denom: null,
+        allowanceType: null,
+        expirationUnixMs: null,
+      }
+
       if (active && allowanceData) {
         const parsed = parseAllowanceData(allowanceData)
         parsedData = {

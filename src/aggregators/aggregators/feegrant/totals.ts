@@ -3,18 +3,16 @@ import { Aggregator, FormulaType } from '@/types'
 /**
  * Get feegrant totals and statistics
  */
-export const totals: Aggregator<
-  {
-    totalActiveGrants: number
-    totalActiveGrantees: number
-    totalActiveGranters: number
-    totalRevokedGrants: number
-    totalBasicAllowances: number
-    totalPeriodicAllowances: number
-    totalAllowedMsgAllowances: number
-    totalUnknownAllowances: number
-  }
-> = {
+export const totals: Aggregator<{
+  totalActiveGrants: number
+  totalActiveGrantees: number
+  totalActiveGranters: number
+  totalRevokedGrants: number
+  totalBasicAllowances: number
+  totalPeriodicAllowances: number
+  totalAllowedMsgAllowances: number
+  totalUnknownAllowances: number
+}> = {
   compute: async (env) => {
     // Use the generic feegrant totals formula
     return await env.compute({

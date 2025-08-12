@@ -13440,6 +13440,93 @@
         }
       }
     },
+    "/{chainId}/generic/_/feegrant/activity": {
+      "get": {
+        "tags": [
+          "generic"
+        ],
+        "summary": "Get feegrant grantee activity statistics",
+        "operationId": "feegrant_activity_fee51ff",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "daysAgo",
+            "description": "Number of days to look back for activity (default: 30)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          },
+          "400": {
+            "description": "missing required arguments"
+          }
+        }
+      }
+    },
+    "/{chainId}/generic/_/feegrant/amounts": {
+      "get": {
+        "tags": [
+          "generic"
+        ],
+        "summary": "Get feegrant amounts by token denomination",
+        "operationId": "feegrant_amounts_00f996d",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          }
+        }
+      }
+    },
+    "/{chainId}/generic/_/feegrant/totals": {
+      "get": {
+        "tags": [
+          "generic"
+        ],
+        "summary": "Get comprehensive feegrant totals and statistics",
+        "operationId": "feegrant_totals_294c61f",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          }
+        }
+      }
+    },
     "/{chainId}/generic/_/gov/decodedProposal": {
       "get": {
         "tags": [
@@ -14062,6 +14149,93 @@
           },
           "400": {
             "description": "missing required arguments"
+          }
+        }
+      }
+    },
+    "/{chainId}/a/feegrant/activity/activity": {
+      "get": {
+        "tags": [
+          "aggregator"
+        ],
+        "summary": "Get feegrant grantee activity statistics",
+        "operationId": "feegrant_activity_activity_78ca25b",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "daysAgo",
+            "description": "Number of days to look back for activity (default: 30)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          },
+          "400": {
+            "description": "missing required arguments"
+          }
+        }
+      }
+    },
+    "/{chainId}/a/feegrant/amounts/amounts": {
+      "get": {
+        "tags": [
+          "aggregator"
+        ],
+        "summary": "Get feegrant amounts by token denomination",
+        "operationId": "feegrant_amounts_amounts_f8134f4",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          }
+        }
+      }
+    },
+    "/{chainId}/a/feegrant/totals/totals": {
+      "get": {
+        "tags": [
+          "aggregator"
+        ],
+        "summary": "Get comprehensive feegrant totals and statistics",
+        "operationId": "feegrant_totals_totals_5832b17",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
           }
         }
       }

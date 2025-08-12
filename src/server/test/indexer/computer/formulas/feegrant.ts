@@ -1,7 +1,14 @@
 import request from 'supertest'
 import { beforeEach, describe, it } from 'vitest'
 
-import { BankStateEvent, Block, Contract, FeegrantAllowance, State, WasmTxEvent } from '@/db'
+import {
+  BankStateEvent,
+  Block,
+  Contract,
+  FeegrantAllowance,
+  State,
+  WasmTxEvent,
+} from '@/db'
 
 import { app } from '../../app'
 import { ComputerTestOptions } from '../types'
@@ -428,10 +435,10 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
 
         // Add activity data for testing - using recent timestamps
         const now = Date.now()
-        const recentTime1 = now - (2 * 60 * 60 * 1000) // 2 hours ago (within 1 day)
-        const recentTime2 = now - (6 * 60 * 60 * 1000) // 6 hours ago (within 1 day)
-        const recentTime3 = now - (12 * 60 * 60 * 1000) // 12 hours ago (within 1 day)
-        const recentTime4 = now - (10 * 24 * 60 * 60 * 1000) // 10 days ago (outside 1 day, within 30 days)
+        const recentTime1 = now - 2 * 60 * 60 * 1000 // 2 hours ago (within 1 day)
+        const recentTime2 = now - 6 * 60 * 60 * 1000 // 6 hours ago (within 1 day)
+        const recentTime3 = now - 12 * 60 * 60 * 1000 // 12 hours ago (within 1 day)
+        const _recentTime4 = now - 10 * 24 * 60 * 60 * 1000 // 10 days ago (outside 1 day, within 30 days)
 
         await WasmTxEvent.bulkCreate([
           {
@@ -603,8 +610,8 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
 
         it('handles very short time window with no activity', async () => {
           // Use a very short time window that excludes all activity
-          const veryRecentTime = Date.now() - 1000 // 1 second ago
-          
+          const _veryRecentTime = Date.now() - 1000 // 1 second ago
+
           // Mock the date to be very recent
           await request(app.callback())
             .get('/generic/_/feegrant/activity?daysAgo=0.00001') // ~1 second
