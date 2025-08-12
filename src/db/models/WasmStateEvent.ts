@@ -39,18 +39,6 @@ import { Contract } from './Contract'
       ],
     },
     {
-      fields: [
-        {
-          name: 'key',
-          operator: 'text_pattern_ops',
-        },
-        {
-          name: 'blockHeight',
-          order: 'DESC',
-        },
-      ],
-    },
-    {
       name: 'wasm_state_events_key_trgm_idx',
       // Speeds up queries. Use trigram index for string key to speed up partial
       // matches (LIKE).
