@@ -107,8 +107,8 @@ export class BlockIterator {
   private chainWebSocketListener: ChainWebSocketListener | null = null
 
   /**
-   * Interval to check the latest block height. Used as fallback when the
-   * websocket is not connected.
+   * Interval to check the latest block height. Used in addition to WebSocket,
+   * in case it disconnects or stops working.
    */
   private latestBlockHeightInterval: NodeJS.Timeout | null = null
 
@@ -387,6 +387,20 @@ export class BlockIterator {
 
     this.trackingLatestBlockHeight = true
 
+    // Start polling the latest block height.
+    if (!this.latestBlockHeightInterval) {
+      this.latestBlockHeightInterval = setInterval(async () => {
+        if (!this.autoCosmWasmClient.client) {
+          await this.autoCosmWasmClient.update()
+        }
+
+        const height = await this.autoCosmWasmClient.client?.getHeight()
+        if (height) {
+          this.latestBlockHeight = height
+        }
+      }, 1_000)
+    }
+
     // Attempt to connect to the websocket, resolving on success. If it fails on
     // the first connection attempt, resolve. It will keep trying to reconnect
     // while interval polling is active.
@@ -405,14 +419,6 @@ export class BlockIterator {
       this.chainWebSocketListener.onConnectionStateChange(
         async ({ state, attempt }) => {
           switch (state) {
-            case 'connected': {
-              // Stop polling if the websocket is connected.
-              if (this.latestBlockHeightInterval) {
-                clearInterval(this.latestBlockHeightInterval)
-                this.latestBlockHeightInterval = null
-              }
-              break
-            }
             case 'error':
             case 'disconnected': {
               // If this is the first connection attempt and it failed, resolve.
@@ -422,24 +428,6 @@ export class BlockIterator {
                 resolve()
               }
 
-              // Start polling if the websocket is disconnected and we're
-              // supposed to be tracking the latest block height.
-              if (
-                this.trackingLatestBlockHeight &&
-                !this.latestBlockHeightInterval
-              ) {
-                this.latestBlockHeightInterval = setInterval(async () => {
-                  if (!this.autoCosmWasmClient.client) {
-                    await this.autoCosmWasmClient.update()
-                  }
-
-                  const height =
-                    await this.autoCosmWasmClient.client?.getHeight()
-                  if (height) {
-                    this.latestBlockHeight = height
-                  }
-                }, 1_000)
-              }
               break
             }
           }
