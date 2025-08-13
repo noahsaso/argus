@@ -166,6 +166,9 @@ export const getEnv = ({
               // beginning of the query. This ensures we use the most recent
               // version of the key.
               Sequelize.literal('DISTINCT ON("key") \'\'') as unknown as string,
+              // Include `id` so that Sequelize doesn't prepend it to the query
+              // before the DISTINCT ON, which must come first.
+              'id',
               'key',
               'contractAddress',
               'blockHeight',
@@ -421,6 +424,9 @@ export const getEnv = ({
         // cast to unknown and back to string to insert this at the beginning of
         // the query. This ensures we use the most recent version of the key.
         Sequelize.literal('DISTINCT ON("key") \'\'') as unknown as string,
+        // Include `id` so that Sequelize doesn't prepend it to the query before
+        // the DISTINCT ON, which must come first.
+        'id',
         'key',
         'contractAddress',
         'blockHeight',
@@ -527,6 +533,9 @@ export const getEnv = ({
               Sequelize.literal(
                 `DISTINCT ON("${distinctOn.join('", "')}") ''`
               ) as unknown as string,
+              // Include `id` so that Sequelize doesn't prepend it to the query
+              // before the DISTINCT ON, which must come first.
+              'id',
               'name',
               'contractAddress',
               'blockHeight',
@@ -645,6 +654,9 @@ export const getEnv = ({
               Sequelize.literal(
                 'DISTINCT ON("name") \'\''
               ) as unknown as string,
+              // Include `id` so that Sequelize doesn't prepend it to the query
+              // before the DISTINCT ON, which must come first.
+              'id',
               'name',
               'contractAddress',
               'blockHeight',
@@ -761,6 +773,9 @@ export const getEnv = ({
         // the query. This ensures we use the most recent version of the name
         // for each contract.
         Sequelize.literal('DISTINCT ON("name") \'\'') as unknown as string,
+        // Include `id` so that Sequelize doesn't prepend it to the query before
+        // the DISTINCT ON, which must come first.
+        'id',
         'name',
         'contractAddress',
         'blockHeight',
@@ -1202,6 +1217,9 @@ export const getEnv = ({
               Sequelize.literal(
                 'DISTINCT ON("denom") \'\''
               ) as unknown as string,
+              // Include `id` so that Sequelize doesn't prepend it to the query
+              // before the DISTINCT ON, which must come first.
+              'id',
               'denom',
               'address',
               'blockHeight',
@@ -1330,6 +1348,9 @@ export const getEnv = ({
               Sequelize.literal(
                 'DISTINCT ON("proposalId") \'\''
               ) as unknown as string,
+              // Include `id` so that Sequelize doesn't prepend it to the query
+              // before the DISTINCT ON, which must come first.
+              'id',
               'proposalId',
               'blockHeight',
               'blockTimeUnixMs',
@@ -1418,6 +1439,9 @@ export const getEnv = ({
               Sequelize.literal(
                 'DISTINCT ON("proposalId") \'\''
               ) as unknown as string,
+              // Include `id` so that Sequelize doesn't prepend it to the query
+              // before the DISTINCT ON, which must come first.
+              'id',
               'proposalId',
               'blockHeight',
               'blockTimeUnixMs',
@@ -1538,6 +1562,9 @@ export const getEnv = ({
               Sequelize.literal(
                 'DISTINCT ON("voterAddress", "proposalId") \'\''
               ) as unknown as string,
+              // Include `id` so that Sequelize doesn't prepend it to the query
+              // before the DISTINCT ON, which must come first.
+              'id',
               'proposalId',
               'voterAddress',
               'blockHeight',
@@ -1633,6 +1660,9 @@ export const getEnv = ({
               Sequelize.literal(
                 'DISTINCT ON("voterAddress", "proposalId") \'\''
               ) as unknown as string,
+              // Include `id` so that Sequelize doesn't prepend it to the query
+              // before the DISTINCT ON, which must come first.
+              'id',
               'proposalId',
               'voterAddress',
               'blockHeight',
@@ -1841,6 +1871,9 @@ export const getEnv = ({
               Sequelize.literal(
                 'DISTINCT ON("granter", "grantee") \'\''
               ) as unknown as string,
+              // Include `id` so that Sequelize doesn't prepend it to the query
+              // before the DISTINCT ON, which must come first.
+              'id',
               'granter',
               'grantee',
               'blockHeight',
