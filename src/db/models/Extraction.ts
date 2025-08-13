@@ -1,6 +1,7 @@
 import { Op, WhereOptions } from 'sequelize'
 import {
   AllowNull,
+  AutoIncrement,
   Column,
   DataType,
   PrimaryKey,
@@ -21,6 +22,7 @@ import { Contract } from './Contract'
   timestamps: true,
   indexes: [
     {
+      unique: true,
       fields: [
         'address',
         {
@@ -61,12 +63,16 @@ import { Contract } from './Contract'
   ],
 })
 export class Extraction extends DependableEventModel {
+  @PrimaryKey
+  @AutoIncrement
+  @Column(DataType.BIGINT)
+  declare id: string
+
   /**
    * The relevant address for this extraction. This may be a contract, a wallet,
    * etc. If no relevant address, this will be an empty string (since primary
    * keys cannot contain null).
    */
-  @PrimaryKey
   @AllowNull(false)
   @Column(DataType.TEXT)
   declare address: string
@@ -74,7 +80,6 @@ export class Extraction extends DependableEventModel {
   /**
    * The name of the extraction.
    */
-  @PrimaryKey
   @AllowNull(false)
   @Column(DataType.TEXT)
   declare name: string
@@ -82,7 +87,6 @@ export class Extraction extends DependableEventModel {
   /**
    * The block height.
    */
-  @PrimaryKey
   @AllowNull(false)
   @Column(DataType.BIGINT)
   declare blockHeight: string

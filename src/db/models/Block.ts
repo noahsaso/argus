@@ -79,6 +79,7 @@ export class Block extends Model {
       })),
       {
         updateOnDuplicate: ['timeUnixMs', 'timestamp'],
+        conflictAttributes: ['height'],
       }
     )
   }

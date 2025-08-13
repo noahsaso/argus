@@ -164,12 +164,14 @@ export const dao: ExtractorMaker<DaoExtractorData> = async ({
         })),
         {
           updateOnDuplicate: ['codeId', 'admin', 'creator', 'label', 'txHash'],
+          conflictAttributes: ['address'],
         }
       ),
       Extraction.bulkCreate(
         extractions.flatMap(([, ...extractions]) => extractions),
         {
           updateOnDuplicate: ['blockTimeUnixMs', 'txHash', 'data'],
+          conflictAttributes: ['address', 'name', 'blockHeight'],
           returning: true,
         }
       ),

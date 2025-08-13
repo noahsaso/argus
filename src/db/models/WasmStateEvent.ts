@@ -1,6 +1,7 @@
 import { Op, WhereOptions } from 'sequelize'
 import {
   AllowNull,
+  AutoIncrement,
   BelongsTo,
   Column,
   DataType,
@@ -23,23 +24,11 @@ import { Contract } from './Contract'
 @Table({
   timestamps: true,
   indexes: [
-    // Take advantage of TimescaleDB SkipScan. No need for a unique index since
-    // the primary key is a composite key of these fields already.
+    // Take advantage of TimescaleDB SkipScan.
     {
+      unique: true,
       fields: [
         'contractAddress',
-        {
-          name: 'key',
-          operator: 'text_pattern_ops',
-        },
-        {
-          name: 'blockHeight',
-          order: 'DESC',
-        },
-      ],
-    },
-    {
-      fields: [
         {
           name: 'key',
           operator: 'text_pattern_ops',
@@ -72,6 +61,10 @@ import { Contract } from './Contract'
 })
 export class WasmStateEvent extends DependableEventModel {
   @PrimaryKey
+  @AutoIncrement
+  @Column(DataType.BIGINT)
+  declare id: string
+
   @AllowNull(false)
   @ForeignKey(() => Contract)
   @Column(DataType.STRING)
@@ -85,12 +78,10 @@ export class WasmStateEvent extends DependableEventModel {
   // have to manually encode binary data in a format that allows for
   // database-level prefix queries (i.e. LIKE prefix%). We want database-level
   // prefixing so we can efficiently query for all values in a map.
-  @PrimaryKey
   @AllowNull(false)
   @Column(DataType.TEXT)
   declare key: string
 
-  @PrimaryKey
   @AllowNull(false)
   @Column(DataType.BIGINT)
   declare blockHeight: string

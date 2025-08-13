@@ -1,6 +1,7 @@
 import { Op, WhereOptions } from 'sequelize'
 import {
   AllowNull,
+  AutoIncrement,
   Column,
   DataType,
   PrimaryKey,
@@ -18,9 +19,9 @@ import { getDependentKey } from '@/utils'
 @Table({
   timestamps: true,
   indexes: [
-    // Take advantage of TimescaleDB SkipScan. No need for a unique index since
-    // the primary key is a composite key of these fields already.
+    // Take advantage of TimescaleDB SkipScan.
     {
+      unique: true,
       fields: [
         'proposalId',
         {
@@ -33,11 +34,14 @@ import { getDependentKey } from '@/utils'
 })
 export class GovProposal extends DependableEventModel {
   @PrimaryKey
+  @AutoIncrement
+  @Column(DataType.BIGINT)
+  declare id: string
+
   @AllowNull(false)
   @Column(DataType.BIGINT)
   declare proposalId: string
 
-  @PrimaryKey
   @AllowNull(false)
   @Column(DataType.BIGINT)
   declare blockHeight: string

@@ -1,6 +1,7 @@
 import { Op, WhereOptions } from 'sequelize'
 import {
   AllowNull,
+  AutoIncrement,
   Column,
   DataType,
   PrimaryKey,
@@ -18,9 +19,9 @@ import { getDependentKey } from '@/utils'
 @Table({
   timestamps: true,
   indexes: [
-    // Take advantage of TimescaleDB SkipScan. No need for a unique index since
-    // the primary key is a composite key of these fields already.
+    // Take advantage of TimescaleDB SkipScan.
     {
+      unique: true,
       fields: [
         'address',
         'denom',
@@ -39,23 +40,22 @@ import { getDependentKey } from '@/utils'
         },
       ],
     },
-    {
-      fields: ['address'],
-    },
   ],
 })
 export class BankStateEvent extends DependableEventModel {
   @PrimaryKey
+  @AutoIncrement
+  @Column(DataType.BIGINT)
+  declare id: string
+
   @AllowNull(false)
   @Column(DataType.TEXT)
   declare address: string
 
-  @PrimaryKey
   @AllowNull(false)
   @Column(DataType.TEXT)
   declare denom: string
 
-  @PrimaryKey
   @AllowNull(false)
   @Column(DataType.BIGINT)
   declare blockHeight: string

@@ -494,6 +494,7 @@ describe('DAO Extractor', () => {
       // Should only have extractions for the successful contract
       expect(result.map((r) => r.toJSON())).toEqual([
         {
+          id: '1',
           address: 'juno1dao123contract456',
           name: 'dao-dao-core/info',
           blockHeight: '1000',
@@ -504,6 +505,7 @@ describe('DAO Extractor', () => {
           updatedAt: expect.any(Date),
         },
         {
+          id: '2',
           address: 'juno1dao123contract456',
           name: 'dao-dao-core/dump_state',
           blockHeight: '1000',

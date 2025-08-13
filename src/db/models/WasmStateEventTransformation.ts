@@ -1,6 +1,7 @@
 import { Op, WhereOptions } from 'sequelize'
 import {
   AllowNull,
+  AutoIncrement,
   BelongsTo,
   Column,
   DataType,
@@ -22,9 +23,9 @@ import { Contract } from './Contract'
 @Table({
   timestamps: true,
   indexes: [
-    // Take advantage of TimescaleDB SkipScan. No need for a unique index since
-    // the primary key is a composite key of these fields already.
+    // Take advantage of TimescaleDB SkipScan.
     {
+      unique: true,
       fields: [
         'contractAddress',
         {
@@ -66,6 +67,10 @@ import { Contract } from './Contract'
 })
 export class WasmStateEventTransformation extends DependableEventModel {
   @PrimaryKey
+  @AutoIncrement
+  @Column(DataType.BIGINT)
+  declare id: string
+
   @AllowNull(false)
   @ForeignKey(() => Contract)
   @Column(DataType.STRING)
@@ -74,12 +79,10 @@ export class WasmStateEventTransformation extends DependableEventModel {
   @BelongsTo(() => Contract)
   declare contract: Contract
 
-  @PrimaryKey
   @AllowNull(false)
   @Column(DataType.TEXT)
   declare name: string
 
-  @PrimaryKey
   @AllowNull(false)
   @Column(DataType.BIGINT)
   declare blockHeight: string
