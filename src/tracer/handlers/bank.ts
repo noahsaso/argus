@@ -15,8 +15,21 @@ export const BANK_HISTORY_CODE_IDS_KEYS = [
   'xion-treasury',
   'valence-account',
 ]
+// Exclude these addresses from bank balance history, even if they match a code
+// ID key.
+export const BANK_HISTORY_EXCLUDED_ADDRESSES = new Set(
+  [
+    // Neutron DAO (constant balance updates)
+    {
+      chainId: 'neutron-1',
+      address:
+        'neutron1suhgf5svhu4usrurvxzlgn54ksxmn8gljarjtxqnapv8kjnp4nrstdxvff',
+    },
+  ].map(({ chainId, address }) => `${chainId}:${address}`)
+)
 
 export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
+  chainId,
   config: { bech32Prefix },
 }) => {
   const match: Handler<ParsedBankStateEvent>['match'] = (trace) => {
@@ -210,7 +223,12 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
         ? (
             await Contract.findAll({
               where: {
-                address: uniqueAddresses,
+                address: uniqueAddresses.filter(
+                  (address) =>
+                    !BANK_HISTORY_EXCLUDED_ADDRESSES.has(
+                      `${chainId}:${address}`
+                    )
+                ),
                 codeId: codeIds,
               },
             })
