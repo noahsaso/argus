@@ -1,11 +1,5 @@
 import { Op, WhereOptions } from 'sequelize'
-import {
-  AllowNull,
-  Column,
-  DataType,
-  PrimaryKey,
-  Table,
-} from 'sequelize-typescript'
+import { AllowNull, Column, DataType, Table } from 'sequelize-typescript'
 
 import {
   Block,
@@ -21,6 +15,7 @@ import { Contract } from './Contract'
   timestamps: true,
   indexes: [
     {
+      unique: true,
       fields: [
         'address',
         {
@@ -66,7 +61,6 @@ export class Extraction extends DependableEventModel {
    * etc. If no relevant address, this will be an empty string (since primary
    * keys cannot contain null).
    */
-  @PrimaryKey
   @AllowNull(false)
   @Column(DataType.TEXT)
   declare address: string
@@ -74,7 +68,6 @@ export class Extraction extends DependableEventModel {
   /**
    * The name of the extraction.
    */
-  @PrimaryKey
   @AllowNull(false)
   @Column(DataType.TEXT)
   declare name: string
@@ -82,7 +75,6 @@ export class Extraction extends DependableEventModel {
   /**
    * The block height.
    */
-  @PrimaryKey
   @AllowNull(false)
   @Column(DataType.BIGINT)
   declare blockHeight: string
