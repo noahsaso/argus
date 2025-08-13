@@ -91,7 +91,7 @@ export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
           ).reduce((acc, q) => acc + q, 0)
 
           if (queued > 0) {
-            console.log(
+            log(
               `[${new Date().toISOString()}] Queued ${queued.toLocaleString()} search index update(s).`
             )
           }
@@ -106,7 +106,7 @@ export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
             })
 
             if (queued > 0) {
-              console.log(
+              log(
                 `[${new Date().toISOString()}] Queued ${queued.toLocaleString()} webhook(s).`
               )
             }
@@ -127,7 +127,8 @@ export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
                 : ''
             }`.trim()
           )
-          reject(err)
+          // Convert non-error objects to errors so Bull can display it.
+          reject(err instanceof Error ? err : new Error(String(err)))
         }
       } finally {
         if (timeout !== null) {

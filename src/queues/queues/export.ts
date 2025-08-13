@@ -56,7 +56,7 @@ export class ExportQueue extends BaseQueue<ExportQueuePayload> {
     this.handlers = handlers
   }
 
-  process({ data }: Job<ExportQueuePayload>): Promise<void> {
+  process({ data, log }: Job<ExportQueuePayload>): Promise<void> {
     return new Promise<void>(async (resolve, reject) => {
       // Time out if takes more than 30 seconds.
       let timeout: NodeJS.Timeout | null = setTimeout(() => {
@@ -130,7 +130,17 @@ export class ExportQueue extends BaseQueue<ExportQueuePayload> {
         }
       } catch (err) {
         if (timeout !== null) {
-          reject(err)
+          log(
+            `${err instanceof Error ? err.name : 'Error'}: ${
+              err instanceof Error ? err.message : err
+            } ${
+              err && typeof err === 'object' && 'parent' in err
+                ? err.parent
+                : ''
+            }`.trim()
+          )
+          // Convert non-error objects to errors so Bull can display it.
+          reject(err instanceof Error ? err : new Error(String(err)))
         }
       } finally {
         if (timeout !== null) {
