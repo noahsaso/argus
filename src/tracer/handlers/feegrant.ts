@@ -94,6 +94,7 @@ export const feegrant: HandlerMaker<ParsedFeegrantStateEvent> = async ({
       // Bulk create allowances.
       return FeegrantAllowance.bulkCreate(events, {
         updateOnDuplicate: ['allowanceData', 'allowanceType', 'active'],
+        conflictAttributes: ['granter', 'grantee', 'blockHeight'],
       })
     }
 

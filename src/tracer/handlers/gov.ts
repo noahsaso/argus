@@ -129,6 +129,7 @@ export const gov: HandlerMaker<ParsedGovStateEvent> = async ({
                   // If we encounter a duplicate, we update the `data` field in
                   // case event processing for a block was batched separately.
                   updateOnDuplicate: ['data'],
+                  conflictAttributes: ['proposalId', 'blockHeight'],
                 }),
               ]
             : []),
@@ -139,6 +140,11 @@ export const gov: HandlerMaker<ParsedGovStateEvent> = async ({
                   // If we encounter a duplicate, we update the `data` field in
                   // case event processing for a block was batched separately.
                   updateOnDuplicate: ['data'],
+                  conflictAttributes: [
+                    'proposalId',
+                    'voterAddress',
+                    'blockHeight',
+                  ],
                 }),
               ]
             : []),

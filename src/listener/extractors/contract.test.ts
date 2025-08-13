@@ -289,6 +289,7 @@ describe('Contracts Extractor', () => {
       // Should only have extractions for the successful contract
       expect(result.map((r) => r.toJSON())).toEqual([
         {
+          id: '1',
           address: 'juno123contract456',
           name: 'info',
           blockHeight: '1000',

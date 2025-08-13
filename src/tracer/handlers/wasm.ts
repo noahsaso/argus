@@ -318,6 +318,7 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
         ),
         {
           updateOnDuplicate: ['codeId', 'admin', 'creator', 'label'],
+          conflictAttributes: ['address'],
         }
       )
     }
@@ -418,6 +419,7 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
             .filter(({ codeId }) => codeId > 0),
           {
             updateOnDuplicate: ['codeId'],
+            conflictAttributes: ['address'],
           }
         )
 
@@ -462,6 +464,7 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
       // for a block was batched separately.
       const events = await WasmStateEvent.bulkCreate(stateEvents, {
         updateOnDuplicate: ['value', 'valueJson', 'delete'],
+        conflictAttributes: ['contractAddress', 'key', 'blockHeight'],
       })
 
       return {

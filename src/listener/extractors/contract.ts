@@ -115,6 +115,7 @@ export const contract: ExtractorMaker<ContractsExtractorData> = async ({
         })),
         {
           updateOnDuplicate: ['codeId', 'admin', 'creator', 'label', 'txHash'],
+          conflictAttributes: ['address'],
         }
       ),
       Extraction.bulkCreate(
@@ -123,6 +124,7 @@ export const contract: ExtractorMaker<ContractsExtractorData> = async ({
         ),
         {
           updateOnDuplicate: ['blockTimeUnixMs', 'txHash', 'data'],
+          conflictAttributes: ['address', 'name', 'blockHeight'],
           returning: true,
         }
       ),

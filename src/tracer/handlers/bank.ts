@@ -227,6 +227,7 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
       const bankStateEvents = keepHistoryEvents.length
         ? await BankStateEvent.bulkCreate(keepHistoryEvents, {
             updateOnDuplicate: ['balance'],
+            conflictAttributes: ['address', 'denom', 'blockHeight'],
           })
         : []
 

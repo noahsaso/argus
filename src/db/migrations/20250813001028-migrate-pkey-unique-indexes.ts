@@ -5,9 +5,8 @@ module.exports = {
   async up(queryInterface: QueryInterface) {
     const migrateBankStateEvents = async () => {
       // Remove primary key constraint and add auto-incrementing id column.
-      await queryInterface.removeConstraint(
-        'BankStateEvents',
-        'BankStateEvents_pkey'
+      await queryInterface.sequelize.query(
+        'ALTER TABLE "BankStateEvents" DROP CONSTRAINT IF EXISTS "BankStateEvents_pkey"'
       )
       await queryInterface.addColumn('BankStateEvents', 'id', {
         type: DataType.BIGINT,
@@ -38,7 +37,9 @@ module.exports = {
 
     const migrateExtractions = async () => {
       // Remove primary key constraint and add auto-incrementing id column.
-      await queryInterface.removeConstraint('Extractions', 'Extractions_pkey')
+      await queryInterface.sequelize.query(
+        'ALTER TABLE "Extractions" DROP CONSTRAINT IF EXISTS "Extractions_pkey"'
+      )
       await queryInterface.addColumn('Extractions', 'id', {
         type: DataType.BIGINT,
         primaryKey: true,
@@ -71,9 +72,8 @@ module.exports = {
 
     const migrateFeegrantAllowances = async () => {
       // Remove primary key constraint and add auto-incrementing id column.
-      await queryInterface.removeConstraint(
-        'FeegrantAllowances',
-        'FeegrantAllowances_pkey'
+      await queryInterface.sequelize.query(
+        'ALTER TABLE "FeegrantAllowances" DROP CONSTRAINT IF EXISTS "FeegrantAllowances_pkey"'
       )
       await queryInterface.addColumn('FeegrantAllowances', 'id', {
         type: DataType.BIGINT,
@@ -104,7 +104,9 @@ module.exports = {
 
     const migrateGovProposals = async () => {
       // Remove primary key constraint and add auto-incrementing id column.
-      await queryInterface.removeConstraint('GovProposals', 'GovProposals_pkey')
+      await queryInterface.sequelize.query(
+        'ALTER TABLE "GovProposals" DROP CONSTRAINT IF EXISTS "GovProposals_pkey"'
+      )
       await queryInterface.addColumn('GovProposals', 'id', {
         type: DataType.BIGINT,
         primaryKey: true,
@@ -133,9 +135,8 @@ module.exports = {
 
     const migrateGovProposalVotes = async () => {
       // Remove primary key constraint and add auto-incrementing id column.
-      await queryInterface.removeConstraint(
-        'GovProposalVotes',
-        'GovProposalVotes_pkey'
+      await queryInterface.sequelize.query(
+        'ALTER TABLE "GovProposalVotes" DROP CONSTRAINT IF EXISTS "GovProposalVotes_pkey"'
       )
       await queryInterface.addColumn('GovProposalVotes', 'id', {
         type: DataType.BIGINT,
@@ -166,9 +167,8 @@ module.exports = {
 
     const migrateWasmStateEvents = async () => {
       // Remove primary key constraint and add auto-incrementing id column.
-      await queryInterface.removeConstraint(
-        'WasmStateEvents',
-        'WasmStateEvents_pkey'
+      await queryInterface.sequelize.query(
+        'ALTER TABLE "WasmStateEvents" DROP CONSTRAINT IF EXISTS "WasmStateEvents_pkey"'
       )
       await queryInterface.addColumn('WasmStateEvents', 'id', {
         type: DataType.BIGINT,
@@ -202,9 +202,8 @@ module.exports = {
 
     const migrateWasmStateEventTransformations = async () => {
       // Remove primary key constraint and add auto-incrementing id column.
-      await queryInterface.removeConstraint(
-        'WasmStateEventTransformations',
-        'WasmStateEventTransformations_pkey'
+      await queryInterface.sequelize.query(
+        'ALTER TABLE "WasmStateEventTransformations" DROP CONSTRAINT IF EXISTS "WasmStateEventTransformations_pkey"'
       )
       await queryInterface.addColumn('WasmStateEventTransformations', 'id', {
         type: DataType.BIGINT,

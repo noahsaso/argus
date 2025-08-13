@@ -89,6 +89,7 @@ export const distribution: HandlerMaker<
         return events.length > 0
           ? await DistributionCommunityPoolStateEvent.bulkCreate(events, {
               updateOnDuplicate: ['balances'],
+              conflictAttributes: ['blockHeight'],
             })
           : []
       }

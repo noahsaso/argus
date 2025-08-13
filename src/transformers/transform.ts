@@ -182,6 +182,7 @@ export const transformParsedStateEvents = async (
     evaluatedTransformations,
     {
       updateOnDuplicate: ['value'],
+      conflictAttributes: ['contractAddress', 'name', 'blockHeight'],
     }
   )
 }
