@@ -1,5 +1,12 @@
 import { Op, WhereOptions } from 'sequelize'
-import { AllowNull, Column, DataType, Table } from 'sequelize-typescript'
+import {
+  AllowNull,
+  AutoIncrement,
+  Column,
+  DataType,
+  PrimaryKey,
+  Table,
+} from 'sequelize-typescript'
 
 import {
   Block,
@@ -27,6 +34,11 @@ import { getDependentKey } from '@/utils'
   ],
 })
 export class GovProposalVote extends DependableEventModel {
+  @PrimaryKey
+  @AutoIncrement
+  @Column(DataType.BIGINT)
+  declare id: string
+
   @AllowNull(false)
   @Column(DataType.STRING)
   declare voterAddress: string

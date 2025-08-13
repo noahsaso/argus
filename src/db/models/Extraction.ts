@@ -1,5 +1,12 @@
 import { Op, WhereOptions } from 'sequelize'
-import { AllowNull, Column, DataType, Table } from 'sequelize-typescript'
+import {
+  AllowNull,
+  AutoIncrement,
+  Column,
+  DataType,
+  PrimaryKey,
+  Table,
+} from 'sequelize-typescript'
 
 import {
   Block,
@@ -56,6 +63,11 @@ import { Contract } from './Contract'
   ],
 })
 export class Extraction extends DependableEventModel {
+  @PrimaryKey
+  @AutoIncrement
+  @Column(DataType.BIGINT)
+  declare id: string
+
   /**
    * The relevant address for this extraction. This may be a contract, a wallet,
    * etc. If no relevant address, this will be an empty string (since primary

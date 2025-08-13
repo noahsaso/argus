@@ -1,10 +1,12 @@
 import { Op, WhereOptions } from 'sequelize'
 import {
   AllowNull,
+  AutoIncrement,
   BelongsTo,
   Column,
   DataType,
   ForeignKey,
+  PrimaryKey,
   Table,
 } from 'sequelize-typescript'
 
@@ -64,6 +66,11 @@ import { Contract } from './Contract'
   ],
 })
 export class WasmStateEventTransformation extends DependableEventModel {
+  @PrimaryKey
+  @AutoIncrement
+  @Column(DataType.BIGINT)
+  declare id: string
+
   @AllowNull(false)
   @ForeignKey(() => Contract)
   @Column(DataType.STRING)
