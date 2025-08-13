@@ -2,6 +2,16 @@
 
 SET client_min_messages TO NOTICE;
 
+-- Create temp table with only the contracts we want to keep
+
+CREATE TEMPORARY TABLE contracts_to_keep AS
+SELECT
+  "address"
+FROM
+  "Contracts"
+WHERE
+  "codeId" IN (...CODE IDS...);
+
 -- Rename indexes to avoid conflicts
 
 ALTER INDEX wasm_state_events_block_height RENAME TO wasm_state_events_block_height_old;
@@ -37,15 +47,6 @@ CREATE INDEX "wasm_state_events_block_height" ON "WasmStateEvents_new" ("blockHe
 
 CREATE INDEX CONCURRENTLY "wasm_state_events_key_trgm_idx" ON "WasmStateEvents_new" USING gin ("key" gin_trgm_ops);
 
--- Create temp table with only the contracts we want to keep
-
-CREATE TEMPORARY TABLE contracts_to_keep AS
-SELECT
-  "address"
-FROM
-  "Contracts"
-WHERE
-  "codeId" IN (...CODE IDS...);
 
 -- Create procedure to migrate the data
 

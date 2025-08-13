@@ -128,7 +128,7 @@ export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
             }`.trim()
           )
           // Convert non-error objects to errors so Bull can display it.
-          reject(err instanceof Error ? err : new Error(String(err)))
+          reject(new Error(err instanceof Error ? err.message : String(err)))
         }
       } finally {
         if (timeout !== null) {
