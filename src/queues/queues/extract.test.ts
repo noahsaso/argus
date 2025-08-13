@@ -1,5 +1,5 @@
 import { Job } from 'bullmq'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { Mock, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ConfigManager } from '@/config'
 import { Extraction } from '@/db'
@@ -13,12 +13,12 @@ describe('ExtractQueue', () => {
   let extractQueue: ExtractQueue
   let mockExtractor: any
   let mockJob: Job<ExtractQueuePayload>
-  let consoleSpy: ReturnType<typeof vi.spyOn>
+  let logSpy: Mock
 
   beforeEach(async () => {
     vi.clearAllMocks()
 
-    consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    logSpy = vi.fn().mockImplementation(async () => 0)
 
     vi.spyOn(search, 'queueMeilisearchIndexUpdates').mockResolvedValue(1)
     vi.spyOn(webhooks, 'queueWebhooks').mockResolvedValue(1)
@@ -64,7 +64,7 @@ describe('ExtractQueue', () => {
           },
         },
       },
-      log: async (_) => 0,
+      log: logSpy as (message: string) => Promise<number>,
     } as Job<ExtractQueuePayload>
   })
 
@@ -109,10 +109,10 @@ describe('ExtractQueue', () => {
         },
       })
 
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(logSpy).toHaveBeenCalledWith(
         expect.stringContaining('Queued 1 search index update(s)')
       )
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(logSpy).toHaveBeenCalledWith(
         expect.stringContaining('Queued 1 webhook(s)')
       )
     })
@@ -249,11 +249,9 @@ describe('ExtractQueue', () => {
     it('should log search index updates when queued', async () => {
       vi.mocked(search.queueMeilisearchIndexUpdates).mockResolvedValue(5) // Multiple updates
 
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
-
       await extractQueue.process(mockJob)
 
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(logSpy).toHaveBeenCalledWith(
         expect.stringContaining('Queued 5 search index update(s)')
       )
     })
@@ -261,11 +259,9 @@ describe('ExtractQueue', () => {
     it('should log webhooks when queued', async () => {
       vi.mocked(webhooks.queueWebhooks).mockResolvedValue(3) // Multiple webhooks
 
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
-
       await extractQueue.process(mockJob)
 
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(logSpy).toHaveBeenCalledWith(
         expect.stringContaining('Queued 3 webhook(s)')
       )
     })
@@ -274,13 +270,9 @@ describe('ExtractQueue', () => {
       vi.mocked(search.queueMeilisearchIndexUpdates).mockResolvedValue(0)
       vi.mocked(webhooks.queueWebhooks).mockResolvedValue(0)
 
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
-
       await extractQueue.process(mockJob)
 
-      expect(consoleSpy).not.toHaveBeenCalledWith(
-        expect.stringContaining('Queued')
-      )
+      expect(logSpy).not.toHaveBeenCalledWith(expect.stringContaining('Queued'))
     })
 
     it('should process multiple extractors', async () => {
@@ -317,6 +309,7 @@ describe('ExtractQueue', () => {
             data: { test: 'payload' },
           },
         },
+        log: logSpy as (message: string) => Promise<number>,
       } as Job<ExtractQueuePayload>
 
       await testQueue.process(testJob)

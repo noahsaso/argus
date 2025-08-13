@@ -170,6 +170,9 @@ export const daoProposals: MeilisearchIndexer = {
         Sequelize.literal(
           'DISTINCT ON("name", "contractAddress") \'\''
         ) as unknown as string,
+        // Include `id` so that Sequelize doesn't prepend it to the query before
+        // the DISTINCT ON, which must come first.
+        'id',
         'name',
         'contractAddress',
         'blockHeight',

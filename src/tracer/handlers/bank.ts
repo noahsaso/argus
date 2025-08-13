@@ -176,6 +176,9 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
           ) {
             existingBalance.balances[denom] = balance
             existingBalance.denomUpdateBlockHeights[denom] = blockHeight
+            // Explicitly mark the nested JSONB fields as changed.
+            existingBalance.changed('balances', true)
+            existingBalance.changed('denomUpdateBlockHeights', true)
             existingBalance.blockHeight = BigInt(
               Math.max(Number(existingBalance.blockHeight), Number(blockHeight))
             ).toString()
