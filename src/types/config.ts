@@ -49,6 +49,11 @@ export type Config = {
    */
   codeIds?: Partial<Record<string, number[]>>
 
+  /**
+   * Whether to only export wasm state events for code IDs that are known.
+   */
+  onlyExportKnownCodeIds?: boolean
+
   // If present, sets up Sentry error reporting.
   sentryDsn?: string
   // Payment info.

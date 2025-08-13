@@ -28,7 +28,7 @@ export class WasmCodeService implements WasmCodeAdapter {
    * List of all active wasm codes, including the defaults and those loaded from
    * the DB.
    */
-  private wasmCodes: WasmCode[] = []
+  private _wasmCodes: WasmCode[] = []
 
   /**
    * Interval that updates the list of wasm codes from the DB.
@@ -123,7 +123,7 @@ export class WasmCodeService implements WasmCodeAdapter {
     )
 
     // Merge new default wasm codes into existing list.
-    this.mergeWasmCodes(this.defaultWasmCodes, this.wasmCodes)
+    this.mergeWasmCodes(this.defaultWasmCodes, this._wasmCodes)
   }
 
   /**
@@ -158,14 +158,21 @@ export class WasmCodeService implements WasmCodeAdapter {
     // DB updates.
     this.mergeWasmCodes(wasmCodes, this.defaultWasmCodes)
     // Then merge into existing list.
-    this.mergeWasmCodes(wasmCodes, this.wasmCodes)
+    this.mergeWasmCodes(wasmCodes, this._wasmCodes)
+  }
+
+  /**
+   * Return a list of all wasm codes currently loaded.
+   */
+  get wasmCodes(): readonly WasmCode[] {
+    return this._wasmCodes
   }
 
   /**
    * Return a sorted list of wasm codes with sorted IDs.
    */
   getWasmCodes(): WasmCode[] {
-    return this.wasmCodes
+    return this._wasmCodes
       .map(
         (wasmCode: WasmCode) =>
           new WasmCode(wasmCode.codeKey, wasmCode.codeIds.sort())
@@ -178,7 +185,7 @@ export class WasmCodeService implements WasmCodeAdapter {
    */
   exportWasmCodes(): Record<string, number[]> {
     return Object.fromEntries(
-      this.wasmCodes.map((wasmCode: WasmCode) => [
+      this._wasmCodes.map((wasmCode: WasmCode) => [
         wasmCode.codeKey,
         wasmCode.codeIds,
       ])
@@ -193,7 +200,7 @@ export class WasmCodeService implements WasmCodeAdapter {
       ? []
       : keys.flatMap(
           (key: string) =>
-            this.wasmCodes.find(
+            this._wasmCodes.find(
               (wasmCode: WasmCode) => wasmCode.codeKey === key
             )?.codeIds ?? []
         )
@@ -203,7 +210,7 @@ export class WasmCodeService implements WasmCodeAdapter {
    * Find all keys that contain the given code ID.
    */
   findWasmCodeKeysById(codeId: number): string[] {
-    return this.wasmCodes
+    return this._wasmCodes
       .filter((wasmCode: WasmCode) => wasmCode.codeIds.includes(codeId))
       .map((wasmCode: WasmCode) => wasmCode.codeKey)
   }
@@ -226,10 +233,10 @@ export class WasmCodeService implements WasmCodeAdapter {
     )
 
     // Reset to defaults.
-    this.wasmCodes = [...this.defaultWasmCodes]
+    this._wasmCodes = [...this.defaultWasmCodes]
 
     // Merge DB codes into list with defaults.
-    this.mergeWasmCodes(dbWasmCodes, this.wasmCodes)
+    this.mergeWasmCodes(dbWasmCodes, this._wasmCodes)
   }
 
   /**

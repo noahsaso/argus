@@ -59,7 +59,7 @@ const CONTRACT_STATE_EVENT_KEY_ALLOWLIST: Partial<
 }
 
 export const wasm: HandlerMaker<WasmExportData> = async ({
-  config: { bech32Prefix },
+  config: { bech32Prefix, onlyExportKnownCodeIds },
   sendWebhooks,
   autoCosmWasmClient,
 }) => {
@@ -349,11 +349,6 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
       })
     )
 
-    const state = await State.getSingleton()
-    if (!state) {
-      throw new Error('State not found while exporting.')
-    }
-
     const uniqueContracts = [
       ...new Set(stateEvents.map((stateEvent) => stateEvent.contractAddress)),
     ]
@@ -431,6 +426,11 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
         })
       }
 
+      const contractMap: Record<string, Contract | undefined> =
+        Object.fromEntries(
+          contracts.map((contract) => [contract.address, contract])
+        )
+
       const allowlist = stateEventAllowlist
         ?.map(({ codeIdsKeys, ...rest }) => ({
           ...rest,
@@ -444,9 +444,7 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
       // state keys are not in the allowlist.
       if (allowlist?.length) {
         stateEvents = stateEvents.filter((event) => {
-          const codeId = contracts.find(
-            (contract) => contract.address === event.contractAddress
-          )?.codeId
+          const codeId = contractMap[event.contractAddress]?.codeId
 
           return (
             !codeId ||
@@ -455,6 +453,18 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
                 codeIds.includes(codeId) && !stateKeys.includes(event.key)
             )
           )
+        })
+      }
+
+      // If only exporting known code IDs, filter out events for code IDs that
+      // are unknown.
+      if (onlyExportKnownCodeIds) {
+        const knownCodeIds = new Set(
+          WasmCodeService.getInstance().wasmCodes.flatMap((c) => c.codeIds)
+        )
+        stateEvents = stateEvents.filter((event) => {
+          const codeId = contractMap[event.contractAddress]?.codeId
+          return codeId && knownCodeIds.has(codeId)
         })
       }
 
@@ -567,6 +577,8 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
 
     // Queue webhooks as needed.
     if (sendWebhooks) {
+      const { lastWasmBlockHeightExported } = await State.mustGetSingleton()
+
       // Don't queue webhooks for events before `lastWasmBlockHeightExported` to
       // ensure that webhooks aren't sent more than once if we're catching up
       // from a block we already processed. This happens when  restoring from an
@@ -576,7 +588,7 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
           // Include events on the last block we exported in case events from
           // the same block were exported in separate batches and thus processed
           // separately.
-          e.block.height >= BigInt(state.lastWasmBlockHeightExported || '0')
+          e.block.height >= BigInt(lastWasmBlockHeightExported || '0')
       )
       if (potentialUnsentWebhookEvents.length > 0) {
         await AccountWebhook.queueWebhooks(potentialUnsentWebhookEvents)
