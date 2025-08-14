@@ -1,6 +1,5 @@
 import { CosmWasmClient } from '@cosmjs/cosmwasm-stargate'
 
-import { getCosmWasmClient } from './chain'
 import { retry } from './misc'
 
 /**
@@ -62,13 +61,15 @@ export class AutoCosmWasmClient {
 
     // If the client is not connected, attempt to create it.
     if (!this._cosmWasmClient) {
-      this._cosmWasmClient = await getCosmWasmClient(this.rpc).catch((err) => {
-        console.error(
-          `Failed to create CosmWasm client for RPC ${this.rpc}.`,
-          err
-        )
-        return undefined
-      })
+      this._cosmWasmClient = await CosmWasmClient.connect(this.rpc).catch(
+        (err) => {
+          console.error(
+            `Failed to create CosmWasm client for RPC ${this.rpc}.`,
+            err
+          )
+          return undefined
+        }
+      )
       if (this._cosmWasmClient) {
         this._chainId = await this._cosmWasmClient.getChainId()
       }
