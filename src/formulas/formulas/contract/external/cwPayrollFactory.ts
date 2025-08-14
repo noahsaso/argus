@@ -329,7 +329,7 @@ export const ownership: ContractFormula = {
     description: 'retrieves the ownership information of the contract',
   },
   compute: async ({ contractAddress, get }) =>
-    await get(contractAddress, 'ownership'),
+    (await get(contractAddress, 'ownership'))?.valueJson,
 }
 
 export const codeId: ContractFormula = {
@@ -338,5 +338,5 @@ export const codeId: ContractFormula = {
       'retrieves the code ID of the cw-vesting contract that gets created by this factory',
   },
   compute: async ({ contractAddress, get }) =>
-    await get(contractAddress, 'pci'),
+    (await get(contractAddress, 'pci'))?.valueJson,
 }

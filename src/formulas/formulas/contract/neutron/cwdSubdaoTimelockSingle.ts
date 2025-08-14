@@ -28,7 +28,8 @@ export const proposal: ContractFormula<any, { id: string }> = {
       throw new Error('missing `id`')
     }
 
-    const proposal = await get(contractAddress, 'proposals', Number(id))
+    const proposal = (await get(contractAddress, 'proposals', Number(id)))
+      ?.valueJson
 
     if (!proposal) {
       throw new Error('proposal not found')
@@ -113,8 +114,8 @@ export const proposalExecutionError: ContractFormula<any, { id: string }> = {
     }
 
     return (
-      (await get(contractAddress, 'proposal_execution_errors', Number(id))) ??
-      null
+      (await get(contractAddress, 'proposal_execution_errors', Number(id)))
+        ?.valueJson ?? null
     )
   },
 }

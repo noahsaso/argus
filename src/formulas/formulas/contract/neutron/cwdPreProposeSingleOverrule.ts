@@ -43,12 +43,14 @@ export const overruleProposalId: ContractFormula<
       throw new Error('missing `subdaoProposalId`')
     }
 
-    const id = await get(
-      contractAddress,
-      'overrule_proposals',
-      Number(subdaoProposalId),
-      timelockAddress
-    )
+    const id = (
+      await get(
+        contractAddress,
+        'overrule_proposals',
+        Number(subdaoProposalId),
+        timelockAddress
+      )
+    )?.valueJson
 
     if (typeof id !== 'number') {
       throw new Error('faled to get overrule proposal id')

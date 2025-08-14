@@ -92,6 +92,7 @@ export const proposal: ContractFormula<
       )?.value ??
       // Fallback to events.
       (await get<MultipleChoiceProposal>(contractAddress, 'proposals', idNum))
+        ?.valueJson
 
     if (!proposal) {
       return null
@@ -336,12 +337,9 @@ export const vote: ContractFormula<
 
     // Falback to events.
     if (!voteCast) {
-      const ballot = await get<Ballot>(
-        contractAddress,
-        'ballots',
-        Number(proposalId),
-        voter
-      )
+      const ballot = (
+        await get<Ballot>(contractAddress, 'ballots', Number(proposalId), voter)
+      )?.valueJson
 
       if (ballot) {
         const votedAt = (

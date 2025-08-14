@@ -38,11 +38,9 @@ export const rebalancerConfig: ContractFormula<
   },
   compute: async ({ contractAddress: accountAddr, get }) => {
     // TODO: modify to transformer
-    const config = await get<RebalancerConfig>(
-      REBALANCER_ADDR,
-      'configs',
-      accountAddr
-    )
+    const config = (
+      await get<RebalancerConfig>(REBALANCER_ADDR, 'configs', accountAddr)
+    )?.valueJson
 
     if (config) {
       return {
@@ -50,11 +48,13 @@ export const rebalancerConfig: ContractFormula<
         is_paused: false,
       }
     } else {
-      const config = await get<RebalancerConfig>(
-        REBALANCER_ADDR,
-        'paused_configs',
-        accountAddr
-      )
+      const config = (
+        await get<RebalancerConfig>(
+          REBALANCER_ADDR,
+          'paused_configs',
+          accountAddr
+        )
+      )?.valueJson
       if (config) {
         return {
           ...config,
@@ -73,11 +73,9 @@ export const rebalancerTargets: ContractFormula<ParsedTarget[] | undefined> = {
   },
   compute: async ({ contractAddress: accountAddr, get }) => {
     // TODO: modify to transformer
-    const config = await get<RebalancerConfig>(
-      REBALANCER_ADDR,
-      'configs',
-      accountAddr
-    )
+    const config = (
+      await get<RebalancerConfig>(REBALANCER_ADDR, 'configs', accountAddr)
+    )?.valueJson
 
     return config?.targets
   },
@@ -103,19 +101,16 @@ export const fundsInAuction: ContractFormula<
         // get the current id of the auction
         const auctionCurrId = (
           await get<AuctionIds>(auctionAddr, 'auction_ids')
-        )?.curr
+        )?.valueJson?.curr
 
         if (auctionCurrId === undefined) {
           return undefined
         }
 
         // get the funds amount
-        const funds = await get<string>(
-          auctionAddr,
-          'funds',
-          auctionCurrId,
-          accountAddr
-        )
+        const funds = (
+          await get<string>(auctionAddr, 'funds', auctionCurrId, accountAddr)
+        )?.valueJson
 
         if (funds) {
           return {

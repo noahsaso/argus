@@ -16,28 +16,32 @@ export const summary: ContractFormula = {
     const { contractAddress, get } = env
 
     const [{ token1, token1Cw20 }, { token2, token2Cw20 }] = await Promise.all([
-      get<Token>(contractAddress, 'token1').then(async (token1) => ({
-        token1,
-        // Get CW20 token info if available.
-        token1Cw20:
-          token1 && 'cw20' in token1.denom
-            ? await tokenInfo.compute({
-                ...env,
-                contractAddress: token1.denom.cw20,
-              })
-            : undefined,
-      })),
-      get<Token>(contractAddress, 'token2').then(async (token2) => ({
-        token2,
-        // Get CW20 token info if available.
-        token2Cw20:
-          token2 && 'cw20' in token2.denom
-            ? await tokenInfo.compute({
-                ...env,
-                contractAddress: token2.denom.cw20,
-              })
-            : undefined,
-      })),
+      get<Token>(contractAddress, 'token1')
+        .then((event) => event?.valueJson)
+        .then(async (token1) => ({
+          token1,
+          // Get CW20 token info if available.
+          token1Cw20:
+            token1 && 'cw20' in token1.denom
+              ? await tokenInfo.compute({
+                  ...env,
+                  contractAddress: token1.denom.cw20,
+                })
+              : undefined,
+        })),
+      get<Token>(contractAddress, 'token2')
+        .then((event) => event?.valueJson)
+        .then(async (token2) => ({
+          token2,
+          // Get CW20 token info if available.
+          token2Cw20:
+            token2 && 'cw20' in token2.denom
+              ? await tokenInfo.compute({
+                  ...env,
+                  contractAddress: token2.denom.cw20,
+                })
+              : undefined,
+        })),
     ])
 
     if (!token1 || !token2) {
@@ -77,8 +81,8 @@ export const price: ContractFormula = {
     const { contractAddress, get } = env
 
     const [token1, token2] = await Promise.all([
-      get<Token>(contractAddress, 'token1'),
-      get<Token>(contractAddress, 'token2'),
+      get<Token>(contractAddress, 'token1').then((event) => event?.valueJson),
+      get<Token>(contractAddress, 'token2').then((event) => event?.valueJson),
     ])
 
     if (!token1 || !token2) {

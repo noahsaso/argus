@@ -47,12 +47,9 @@ export const price: ContractFormula<
     }
 
     const pair = args.pair.split(',') as Pair
-    const priceAndTime = await get<Price>(
-      contractAddress,
-      'prices',
-      pair[0],
-      pair[1]
-    )
+    const priceAndTime =
+      (await get<Price>(contractAddress, 'prices', pair[0], pair[1]))
+        ?.valueJson ?? undefined
 
     return (
       priceAndTime && {

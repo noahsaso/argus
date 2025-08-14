@@ -126,9 +126,7 @@ export const getEnv = ({
       return
     }
 
-    const value = JSON.parse(event.value ?? 'null')
-
-    return value
+    return event
   }
 
   const getMap: FormulaMapGetter = async (
