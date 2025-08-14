@@ -332,7 +332,9 @@ export const claims: ContractFormula<any[], { address: string }> = {
       throw new Error('missing `address`')
     }
 
-    return (await get<any[]>(contractAddress, 'claims', address)) ?? []
+    return (
+      (await get<any[]>(contractAddress, 'claims', address))?.valueJson ?? []
+    )
   },
 }
 

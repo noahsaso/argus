@@ -83,7 +83,7 @@ export const proposal: ContractFormula<
     )
 
     const idNum = Number(id)
-    let proposal = (
+    let proposal: SingleChoiceProposal | undefined | null = (
       await getTransformationMatch<SingleChoiceProposal>(
         contractAddress,
         `proposal:${id}`
@@ -94,21 +94,17 @@ export const proposal: ContractFormula<
     let v2 = false
     if (!proposal) {
       // V2.
-      const proposalV2 = await get<SingleChoiceProposal>(
-        contractAddress,
-        'proposals_v2',
-        idNum
-      )
+      const proposalV2 = (
+        await get<SingleChoiceProposal>(contractAddress, 'proposals_v2', idNum)
+      )?.valueJson
       if (proposalV2) {
         proposal = proposalV2
         v2 = true
       } else {
         // V1.
-        proposal = await get<SingleChoiceProposal>(
-          contractAddress,
-          'proposals',
-          idNum
-        )
+        proposal = (
+          await get<SingleChoiceProposal>(contractAddress, 'proposals', idNum)
+        )?.valueJson
       }
     }
 
@@ -391,12 +387,9 @@ export const vote: ContractFormula<
 
     // Falback to events.
     if (!voteCast) {
-      const ballot = await get<Ballot>(
-        contractAddress,
-        'ballots',
-        Number(proposalId),
-        voter
-      )
+      const ballot = (
+        await get<Ballot>(contractAddress, 'ballots', Number(proposalId), voter)
+      )?.valueJson
 
       if (ballot) {
         const votedAt = (

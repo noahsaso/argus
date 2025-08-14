@@ -76,8 +76,8 @@ export const treasuries: ContractFormula<
         },
         codeId,
         params:
-          (await get<Params>(contractAddress, TreasuryStorageKeys.PARAMS)) ??
-          {},
+          (await get<Params>(contractAddress, TreasuryStorageKeys.PARAMS))
+            ?.valueJson ?? {},
       })) ?? []
     )
   },

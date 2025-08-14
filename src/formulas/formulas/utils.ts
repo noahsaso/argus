@@ -117,7 +117,7 @@ export const makeSimpleContractFormula = <
   }) => {
     const value =
       'key' in source
-        ? await get<T>(contractAddress, ...[source.key].flat())
+        ? (await get<T>(contractAddress, ...[source.key].flat()))?.valueJson
         : (
             await getTransformationMatch<T>(
               contractAddress,
@@ -132,7 +132,10 @@ export const makeSimpleContractFormula = <
                 if (value !== undefined) {
                   return value
                 } else {
-                  return await get<T>(contractAddress, fallbackKey)
+                  return (
+                    (await get<T>(contractAddress, fallbackKey))?.valueJson ??
+                    undefined
+                  )
                 }
               }, Promise.resolve<T | undefined>(undefined) as Promise<T | undefined>)
             : undefined)
@@ -145,7 +148,7 @@ export const makeSimpleContractFormula = <
       throw new Error('failed to load')
     }
 
-    return transform(value, {
+    return transform(value as T, {
       args,
       block,
     })

@@ -67,7 +67,8 @@ export const loadCreditsTests = (options: ComputerTestOptions) => {
       })
 
       options.mockFormula({
-        compute: (env) => env.get(env.contractAddress, 'some_state'),
+        compute: (env) =>
+          env.get(env.contractAddress, 'some_state').then((e) => e?.valueJson),
       })
     })
 

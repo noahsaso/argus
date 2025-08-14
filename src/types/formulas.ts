@@ -6,7 +6,13 @@ import {
 import { OpenAPIV3_1 } from 'openapi-types'
 import { BindOrReplacements, WhereOptions } from 'sequelize'
 
-import type { Contract, Extraction, StakingSlashEvent, WasmTxEvent } from '@/db'
+import type {
+  Contract,
+  Extraction,
+  StakingSlashEvent,
+  WasmStateEvent,
+  WasmTxEvent,
+} from '@/db'
 
 import { ComputationDependentKey } from './computation'
 import { ContractJson, DependableEventModel, FeegrantAllowanceJson } from './db'
@@ -15,10 +21,10 @@ import { Block, NestedMap, RequireAtLeastOne } from './misc'
 export type KeyInput = string | number | Uint8Array
 export type KeyInputType = 'string' | 'number' | 'bytes'
 
-export type FormulaGetter = <T>(
+export type FormulaGetter = <T = any>(
   contractAddress: string,
   ...keys: KeyInput[]
-) => Promise<T | undefined>
+) => Promise<WasmStateEvent<T> | undefined>
 
 export type FormulaPrefetch = (
   contractAddress: string,
@@ -81,7 +87,13 @@ export type FormulaTransformationMatchesGetter = <T>(
 export type FormulaTransformationMatchGetter = <T>(
   ...args: Parameters<FormulaTransformationMatchesGetter>
 ) => Promise<
-  | { contractAddress: string; codeId: number; name: string; value: T }
+  | {
+      block: Block
+      contractAddress: string
+      codeId: number
+      name: string
+      value: T
+    }
   | undefined
 >
 

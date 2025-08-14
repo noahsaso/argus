@@ -165,8 +165,10 @@ export const proposal: ContractFormula<Proposal, { id: string }> = {
           `pendingProposal:${id}`
         )
       )?.value ||
-      (await get<Proposal>(contractAddress, 'completed_proposals', idNum)) ||
+      (await get<Proposal>(contractAddress, 'completed_proposals', idNum))
+        ?.valueJson ||
       (await get<Proposal>(contractAddress, 'pending_proposals', idNum))
+        ?.valueJson
 
     if (!proposal) {
       throw new Error('proposal not found')
@@ -482,11 +484,13 @@ export const completedProposalIdForCreatedProposalId: ContractFormula<
         )
       )?.value ||
       // Fallback to events.
-      (await get<number>(
-        contractAddress,
-        'created_to_completed_proposal',
-        Number(id)
-      ))
+      (
+        await get<number>(
+          contractAddress,
+          'created_to_completed_proposal',
+          Number(id)
+        )
+      )?.valueJson
 
     if (typeof proposalId !== 'number') {
       throw new Error('failed to get proposal ID')

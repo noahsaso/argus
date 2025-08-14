@@ -49,12 +49,8 @@ export const result: ContractFormula<
     }
 
     return (
-      (await get<string>(
-        contractAddress,
-        'results',
-        initiator,
-        initiatorMsg
-      )) ??
+      (await get<string>(contractAddress, 'results', initiator, initiatorMsg))
+        ?.valueJson ??
       // Return null if no result found.
       null
     )

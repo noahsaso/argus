@@ -33,11 +33,9 @@ export const preProposeApprovalIdForApproverProposalId: ContractFormula<
       throw new Error('missing `id`')
     }
 
-    const proposalId = await get(
-      contractAddress,
-      'proposal_to_pre_propose',
-      Number(id)
-    )
+    const proposalId = (
+      await get(contractAddress, 'proposal_to_pre_propose', Number(id))
+    )?.valueJson
 
     if (typeof proposalId !== 'number') {
       throw new Error('proposal not found')
@@ -69,11 +67,9 @@ export const approverProposalIdForPreProposeApprovalId: ContractFormula<
       throw new Error('missing `id`')
     }
 
-    const proposalId = await get(
-      contractAddress,
-      'pre_propose_to_proposal',
-      Number(id)
-    )
+    const proposalId = (
+      await get(contractAddress, 'pre_propose_to_proposal', Number(id))
+    )?.valueJson
 
     if (typeof proposalId !== 'number') {
       throw new Error('proposal not found')
