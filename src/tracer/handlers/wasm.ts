@@ -22,7 +22,7 @@ import {
   ParsedWasmStateEvent,
   WasmExportData,
 } from '@/types'
-import { dbKeyForKeys } from '@/utils'
+import { QueryProfiler, dbKeyForKeys } from '@/utils'
 
 const STORE_NAME = 'wasm'
 const DEFAULT_CONTRACT_BYTE_LENGTH = 32
@@ -282,12 +282,17 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
 
   const process: Handler<WasmExportData>['process'] = async (events) => {
     // Save blocks from events.
-    await Block.createMany(
-      [...new Set(events.map((e) => e.data.blockHeight))].map((height) => ({
-        height,
-        timeUnixMs: events.find((e) => e.data.blockHeight === height)!.data
-          .blockTimeUnixMs,
-      }))
+    await QueryProfiler.profileQuery(
+      () =>
+        Block.createMany(
+          [...new Set(events.map((e) => e.data.blockHeight))].map((height) => ({
+            height,
+            timeUnixMs: events.find((e) => e.data.blockHeight === height)!.data
+              .blockTimeUnixMs,
+          }))
+        ),
+      'Block.createMany',
+      'wasm-handler-blocks'
     )
 
     // Export contracts.
@@ -295,31 +300,36 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
       event.type === 'contract' ? event.data : []
     )
     if (contractEvents.length > 0) {
-      await Contract.bulkCreate(
-        contractEvents.map(
-          ({
-            address,
-            codeId,
-            admin,
-            creator,
-            label,
-            blockHeight,
-            blockTimeUnixMs,
-          }) => ({
-            address,
-            codeId,
-            admin,
-            creator,
-            label,
-            instantiatedAtBlockHeight: blockHeight,
-            instantiatedAtBlockTimeUnixMs: blockTimeUnixMs,
-            instantiatedAtBlockTimestamp: new Date(Number(blockTimeUnixMs)),
-          })
-        ),
-        {
-          updateOnDuplicate: ['codeId', 'admin', 'creator', 'label'],
-          conflictAttributes: ['address'],
-        }
+      await QueryProfiler.profileQuery(
+        () =>
+          Contract.bulkCreate(
+            contractEvents.map(
+              ({
+                address,
+                codeId,
+                admin,
+                creator,
+                label,
+                blockHeight,
+                blockTimeUnixMs,
+              }) => ({
+                address,
+                codeId,
+                admin,
+                creator,
+                label,
+                instantiatedAtBlockHeight: blockHeight,
+                instantiatedAtBlockTimeUnixMs: blockTimeUnixMs,
+                instantiatedAtBlockTimestamp: new Date(Number(blockTimeUnixMs)),
+              })
+            ),
+            {
+              updateOnDuplicate: ['codeId', 'admin', 'creator', 'label'],
+              conflictAttributes: ['address'],
+            }
+          ),
+        `Contract.bulkCreate (${contractEvents.length} contracts)`,
+        'wasm-handler-contracts'
       )
     }
 
@@ -355,45 +365,55 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
 
     const exportContractsAndEvents = async () => {
       // Ensure contract exists before creating events. `address` is unique.
-      await Contract.bulkCreate(
-        uniqueContracts.map((address) => {
-          const event = stateEvents.find(
-            (event) => event.contractAddress === address
-          )
-          // Should never happen since `uniqueContracts` is derived from
-          // `parsedEvents`.
-          if (!event) {
-            throw new Error('Event not found when creating contract.')
-          }
+      await QueryProfiler.profileQuery(
+        () =>
+          Contract.bulkCreate(
+            uniqueContracts.map((address) => {
+              const event = stateEvents.find(
+                (event) => event.contractAddress === address
+              )
+              // Should never happen since `uniqueContracts` is derived from
+              // `parsedEvents`.
+              if (!event) {
+                throw new Error('Event not found when creating contract.')
+              }
 
-          return {
-            address,
-            // Initialize the code ID to 0 since we don't know it here. It will
-            // be retrieved below if it doesn't already exist in the database.
-            codeId: 0,
-            // Set the contract instantiation block to the first event found in
-            // the list of parsed events. Events are sorted in ascending order
-            // by creation block. These won't get updated if the contract
-            // already exists, so it's safe to always attempt creation with the
-            // first event's block.
-            instantiatedAtBlockHeight: event.blockHeight,
-            instantiatedAtBlockTimeUnixMs: event.blockTimeUnixMs,
-            instantiatedAtBlockTimestamp: new Date(
-              Number(event.blockTimeUnixMs)
-            ),
-          }
-        }),
-        {
-          // Do nothing if contract already exists.
-          ignoreDuplicates: true,
-        }
+              return {
+                address,
+                // Initialize the code ID to 0 since we don't know it here. It will
+                // be retrieved below if it doesn't already exist in the database.
+                codeId: 0,
+                // Set the contract instantiation block to the first event found in
+                // the list of parsed events. Events are sorted in ascending order
+                // by creation block. These won't get updated if the contract
+                // already exists, so it's safe to always attempt creation with the
+                // first event's block.
+                instantiatedAtBlockHeight: event.blockHeight,
+                instantiatedAtBlockTimeUnixMs: event.blockTimeUnixMs,
+                instantiatedAtBlockTimestamp: new Date(
+                  Number(event.blockTimeUnixMs)
+                ),
+              }
+            }),
+            {
+              // Do nothing if contract already exists.
+              ignoreDuplicates: true,
+            }
+          ),
+        `Contract.bulkCreate for state events (${uniqueContracts.length} contracts)`,
+        'wasm-handler-state-contracts'
       )
 
-      let contracts = await Contract.findAll({
-        where: {
-          address: uniqueContracts,
-        },
-      })
+      let contracts = await QueryProfiler.profileQuery(
+        () =>
+          Contract.findAll({
+            where: {
+              address: uniqueContracts,
+            },
+          }),
+        `Contract.findAll (${uniqueContracts.length} addresses)`,
+        'wasm-handler-find-contracts'
+      )
 
       // Try to retrieve code IDs for contracts with 0 or -1 code IDs.
       const contractsToGetCodeId = contracts.filter(
@@ -401,29 +421,46 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
       )
       // Update code IDs for contracts with missing code IDs.
       if (contractsToGetCodeId.length > 0) {
-        const codeIds = await Promise.all(
-          contractsToGetCodeId.map((contract) => getCodeId(contract.address))
+        const codeIds = await QueryProfiler.profileQuery(
+          () =>
+            Promise.all(
+              contractsToGetCodeId.map((contract) =>
+                getCodeId(contract.address)
+              )
+            ),
+          `getCodeId (${contractsToGetCodeId.length} contracts)`,
+          'wasm-handler-get-code-ids'
         )
 
-        await Contract.bulkCreate(
-          contractsToGetCodeId
-            .map((contract, index) => ({
-              ...contract.toJSON(),
-              codeId: codeIds[index],
-            }))
-            .filter(({ codeId }) => codeId > 0),
-          {
-            updateOnDuplicate: ['codeId'],
-            conflictAttributes: ['address'],
-          }
+        await QueryProfiler.profileQuery(
+          () =>
+            Contract.bulkCreate(
+              contractsToGetCodeId
+                .map((contract, index) => ({
+                  ...contract.toJSON(),
+                  codeId: codeIds[index],
+                }))
+                .filter(({ codeId }) => codeId > 0),
+              {
+                updateOnDuplicate: ['codeId'],
+                conflictAttributes: ['address'],
+              }
+            ),
+          `Contract.bulkCreate code ID update (${contractsToGetCodeId.length} contracts)`,
+          'wasm-handler-update-code-ids'
         )
 
         // Get updated contracts.
-        contracts = await Contract.findAll({
-          where: {
-            address: uniqueContracts,
-          },
-        })
+        contracts = await QueryProfiler.profileQuery(
+          () =>
+            Contract.findAll({
+              where: {
+                address: uniqueContracts,
+              },
+            }),
+          `Contract.findAll updated (${uniqueContracts.length} addresses)`,
+          'wasm-handler-find-updated-contracts'
+        )
       }
 
       const contractMap: Record<string, Contract | undefined> =
@@ -472,10 +509,15 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
       // don't insert duplicate events. If we encounter a duplicate, we update
       // the `value`, `valueJson`, and `delete` fields in case event processing
       // for a block was batched separately.
-      const events = await WasmStateEvent.bulkCreate(stateEvents, {
-        updateOnDuplicate: ['value', 'valueJson', 'delete'],
-        conflictAttributes: ['contractAddress', 'key', 'blockHeight'],
-      })
+      const events = await QueryProfiler.profileQuery(
+        () =>
+          WasmStateEvent.bulkCreate(stateEvents, {
+            updateOnDuplicate: ['value', 'valueJson', 'delete'],
+            conflictAttributes: ['contractAddress', 'key', 'blockHeight'],
+          }),
+        `WasmStateEvent.bulkCreate (${stateEvents.length} events)`,
+        'wasm-handler-state-events'
+      )
 
       return {
         contracts,
@@ -603,24 +645,29 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
     )[events.length - 1]
     const lastBlockHeightExported = lastEvent.data.blockHeight
     const lastBlockTimeUnixMsExported = lastEvent.data.blockTimeUnixMs
-    await State.updateSingleton({
-      lastWasmBlockHeightExported: Sequelize.fn(
-        'GREATEST',
-        Sequelize.col('lastWasmBlockHeightExported'),
-        lastBlockHeightExported
-      ),
+    await QueryProfiler.profileQuery(
+      () =>
+        State.updateSingleton({
+          lastWasmBlockHeightExported: Sequelize.fn(
+            'GREATEST',
+            Sequelize.col('lastWasmBlockHeightExported'),
+            lastBlockHeightExported
+          ),
 
-      latestBlockHeight: Sequelize.fn(
-        'GREATEST',
-        Sequelize.col('latestBlockHeight'),
-        lastBlockHeightExported
-      ),
-      latestBlockTimeUnixMs: Sequelize.fn(
-        'GREATEST',
-        Sequelize.col('latestBlockTimeUnixMs'),
-        lastBlockTimeUnixMsExported
-      ),
-    })
+          latestBlockHeight: Sequelize.fn(
+            'GREATEST',
+            Sequelize.col('latestBlockHeight'),
+            lastBlockHeightExported
+          ),
+          latestBlockTimeUnixMs: Sequelize.fn(
+            'GREATEST',
+            Sequelize.col('latestBlockTimeUnixMs'),
+            lastBlockTimeUnixMsExported
+          ),
+        }),
+      'State.updateSingleton',
+      'wasm-handler-state-update'
+    )
 
     return createdEvents
   }

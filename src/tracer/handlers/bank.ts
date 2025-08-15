@@ -6,7 +6,7 @@ import { QueryTypes, Sequelize } from 'sequelize'
 import { BankBalance, BankStateEvent, Block, Contract, State } from '@/db'
 import { WasmCodeService } from '@/services'
 import { Handler, HandlerMaker, ParsedBankStateEvent } from '@/types'
-import { batch } from '@/utils'
+import { QueryProfiler, batch } from '@/utils'
 
 const STORE_NAME = 'bank'
 // Keep all bank balance history for contracts matching these code IDs keys.
@@ -130,12 +130,17 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
   const process: Handler<ParsedBankStateEvent>['process'] = async (events) => {
     const exportEvents = async () => {
       // Save blocks from events.
-      await Block.createMany(
-        [...new Set(events.map((e) => e.blockHeight))].map((height) => ({
-          height,
-          timeUnixMs: events.find((e) => e.blockHeight === height)!
-            .blockTimeUnixMs,
-        }))
+      await QueryProfiler.profileQuery(
+        () =>
+          Block.createMany(
+            [...new Set(events.map((e) => e.blockHeight))].map((height) => ({
+              height,
+              timeUnixMs: events.find((e) => e.blockHeight === height)!
+                .blockTimeUnixMs,
+            }))
+          ),
+        'Block.createMany',
+        'bank-handler-blocks'
       )
 
       // Get unique addresses with balance updates.
@@ -146,17 +151,22 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
       const existingBalances: Pick<
         BankBalance,
         'address' | 'blockHeight' | 'blockTimeUnixMs' | 'blockTimestamp'
-      >[] = await BankBalance.findAll({
-        attributes: [
-          'address',
-          'blockHeight',
-          'blockTimeUnixMs',
-          'blockTimestamp',
-        ],
-        where: {
-          address: uniqueAddresses,
-        },
-      })
+      >[] = await QueryProfiler.profileQuery(
+        () =>
+          BankBalance.findAll({
+            attributes: [
+              'address',
+              'blockHeight',
+              'blockTimeUnixMs',
+              'blockTimestamp',
+            ],
+            where: {
+              address: uniqueAddresses,
+            },
+          }),
+        `BankBalance.findAll (${uniqueAddresses.length} addresses)`,
+        'bank-handler-find-balances'
+      )
       // Map address to existing BankBalance record.
       const addressToExistingBalance = Object.fromEntries(
         existingBalances.map((balance) => [balance.address, balance])
@@ -257,45 +267,59 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
         batchSize: 100,
         task: async ({ isNew, ...update }) => {
           if (isNew) {
-            await BankBalance.create(update)
+            await QueryProfiler.profileQuery(
+              () => BankBalance.create(update),
+              `BankBalance.create`,
+              'bank-balance-create'
+            )
           } else {
             // Partial updates.
             await Promise.all([
               // Balance and denom update block height updates.
               ...Object.entries(update.balances).map(([denom, balance]) =>
-                BankBalance.sequelize!.query(
-                  `
-                  UPDATE "BankBalances"
-                  SET
-                    "balances" = jsonb_set("balances", :denom, :balance),
-                    "denomUpdateBlockHeights" = jsonb_set("denomUpdateBlockHeights", :denom, :blockHeight)
-                  WHERE "address" = :address
-                  `,
-                  {
-                    replacements: {
-                      denom: `{"${denom.replace(/"/g, '\\"')}"}`,
-                      balance: JSON.stringify(balance),
-                      blockHeight: JSON.stringify(
-                        update.denomUpdateBlockHeights[denom]
-                      ),
-                      address: update.address,
-                    },
-                    type: QueryTypes.UPDATE,
-                  }
+                QueryProfiler.profileQuery(
+                  () =>
+                    BankBalance.sequelize!.query(
+                      `
+                    UPDATE "BankBalances"
+                    SET
+                      "balances" = jsonb_set("balances", :denom, :balance),
+                      "denomUpdateBlockHeights" = jsonb_set("denomUpdateBlockHeights", :denom, :blockHeight)
+                    WHERE "address" = :address
+                    `,
+                      {
+                        replacements: {
+                          denom: `{"${denom.replace(/"/g, '\\"')}"}`,
+                          balance: JSON.stringify(balance),
+                          blockHeight: JSON.stringify(
+                            update.denomUpdateBlockHeights[denom]
+                          ),
+                          address: update.address,
+                        },
+                        type: QueryTypes.UPDATE,
+                      }
+                    ),
+                  `BankBalance.sequelize!.query`,
+                  'bank-balance-partial-update-' + denom
                 )
               ),
               // Metadata updates.
-              BankBalance.update(
-                {
-                  blockHeight: update.blockHeight,
-                  blockTimeUnixMs: update.blockTimeUnixMs,
-                  blockTimestamp: update.blockTimestamp,
-                },
-                {
-                  where: {
-                    address: update.address,
-                  },
-                }
+              QueryProfiler.profileQuery(
+                () =>
+                  BankBalance.update(
+                    {
+                      blockHeight: update.blockHeight,
+                      blockTimeUnixMs: update.blockTimeUnixMs,
+                      blockTimestamp: update.blockTimestamp,
+                    },
+                    {
+                      where: {
+                        address: update.address,
+                      },
+                    }
+                  ),
+                `BankBalance.update`,
+                'bank-balance-metadata-update'
               ),
             ])
           }
@@ -309,17 +333,22 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
       )
       const addressesToKeepHistoryFor = codeIds.length
         ? (
-            await Contract.findAll({
-              where: {
-                address: uniqueAddresses.filter(
-                  (address) =>
-                    !BANK_HISTORY_EXCLUDED_ADDRESSES.has(
-                      `${chainId}:${address}`
-                    )
-                ),
-                codeId: codeIds,
-              },
-            })
+            await QueryProfiler.profileQuery(
+              () =>
+                Contract.findAll({
+                  where: {
+                    address: uniqueAddresses.filter(
+                      (address) =>
+                        !BANK_HISTORY_EXCLUDED_ADDRESSES.has(
+                          `${chainId}:${address}`
+                        )
+                    ),
+                    codeId: codeIds,
+                  },
+                }),
+              `Contract.findAll for history (${uniqueAddresses.length} addresses, ${codeIds.length} codeIds)`,
+              'bank-handler-find-contracts-for-history'
+            )
           ).map((contract) => contract.address)
         : []
 
@@ -358,24 +387,29 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
     )[events.length - 1]
     const lastBlockHeightExported = lastEvent.blockHeight
     const lastBlockTimeUnixMsExported = lastEvent.blockTimeUnixMs
-    await State.updateSingleton({
-      lastBankBlockHeightExported: Sequelize.fn(
-        'GREATEST',
-        Sequelize.col('lastBankBlockHeightExported'),
-        lastBlockHeightExported
-      ),
+    await QueryProfiler.profileQuery(
+      () =>
+        State.updateSingleton({
+          lastBankBlockHeightExported: Sequelize.fn(
+            'GREATEST',
+            Sequelize.col('lastBankBlockHeightExported'),
+            lastBlockHeightExported
+          ),
 
-      latestBlockHeight: Sequelize.fn(
-        'GREATEST',
-        Sequelize.col('latestBlockHeight'),
-        lastBlockHeightExported
-      ),
-      latestBlockTimeUnixMs: Sequelize.fn(
-        'GREATEST',
-        Sequelize.col('latestBlockTimeUnixMs'),
-        lastBlockTimeUnixMsExported
-      ),
-    })
+          latestBlockHeight: Sequelize.fn(
+            'GREATEST',
+            Sequelize.col('latestBlockHeight'),
+            lastBlockHeightExported
+          ),
+          latestBlockTimeUnixMs: Sequelize.fn(
+            'GREATEST',
+            Sequelize.col('latestBlockTimeUnixMs'),
+            lastBlockTimeUnixMsExported
+          ),
+        }),
+      'State.updateSingleton',
+      'bank-handler-state-update'
+    )
 
     return exportedEvents
   }
