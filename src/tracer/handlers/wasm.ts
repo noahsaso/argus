@@ -497,12 +497,15 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
       events: WasmStateEvent[]
     }
 
+    const contractMap: Record<string, Contract | undefined> =
+      Object.fromEntries(
+        contracts.map((contract) => [contract.address, contract])
+      )
+
     // Add contract to events.
     await Promise.all(
       exportedEvents.map(async (event) => {
-        let contract = contracts.find(
-          (contract) => contract.address === event.contractAddress
-        )
+        let contract = contractMap[event.contractAddress]
         // Fetch contract if it wasn't found.
         let missingContract = false
         if (!contract) {
@@ -514,6 +517,7 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
           if (missingContract) {
             // Save for other events.
             contracts.push(contract)
+            contractMap[contract.address] = contract
           }
 
           event.contract = contract
@@ -523,9 +527,7 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
 
     // Add code ID to parsed events.
     stateEvents.forEach((stateEvent) => {
-      const contract = contracts.find(
-        (contract) => contract.address === stateEvent.contractAddress
-      )
+      const contract = contractMap[stateEvent.contractAddress]
       if (contract) {
         stateEvent.codeId = contract.codeId
       }
@@ -552,9 +554,7 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
     // Add contract to transformations.
     await Promise.all(
       transformations.map(async (transformation) => {
-        let contract = contracts.find(
-          (contract) => contract.address === transformation.contractAddress
-        )
+        let contract = contractMap[transformation.contractAddress]
         // Fetch contract if it wasn't found.
         let missingContract = false
         if (!contract) {
@@ -566,6 +566,7 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
           if (missingContract) {
             // Save for other transformations.
             contracts.push(contract)
+            contractMap[contract.address] = contract
           }
 
           transformation.contract = contract
