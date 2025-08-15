@@ -475,7 +475,7 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
     }
 
     // Retry 3 times with exponential backoff starting at 100ms delay.
-    let { contracts, events: exportedEvents } = (await retry(
+    let { events: exportedEvents } = (await retry(
       exportContractsAndEvents,
       [],
       {
@@ -488,38 +488,38 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
       events: WasmStateEvent[]
     }
 
-    const contractMap: Record<string, Contract | undefined> =
-      Object.fromEntries(
-        contracts.map((contract) => [contract.address, contract])
-      )
+    // const contractMap: Record<string, Contract | undefined> =
+    //   Object.fromEntries(
+    //     contracts.map((contract) => [contract.address, contract])
+    //   )
 
-    // Add contract to events.
-    await Promise.all(
-      exportedEvents.map(async (event) => {
-        let contract = contractMap[event.contractAddress]
-        // Fetch contract if it wasn't found.
-        let missingContract = false
-        if (!contract) {
-          contract = (await event.$get('contract')) ?? undefined
-          missingContract = true
-        }
+    // // Add contract to events.
+    // await Promise.all(
+    //   exportedEvents.map(async (event) => {
+    //     let contract = contractMap[event.contractAddress]
+    //     // Fetch contract if it wasn't found.
+    //     let missingContract = false
+    //     if (!contract) {
+    //       contract = (await event.$get('contract')) ?? undefined
+    //       missingContract = true
+    //     }
 
-        if (contract) {
-          if (missingContract) {
-            // Save for other events.
-            contracts.push(contract)
-            contractMap[contract.address] = contract
-          }
+    //     if (contract) {
+    //       if (missingContract) {
+    //         // Save for other events.
+    //         contracts.push(contract)
+    //         contractMap[contract.address] = contract
+    //       }
 
-          event.contract = contract
-        }
-      })
-    )
+    //       event.contract = contract
+    //     }
+    //   })
+    // )
 
-    // Remove events that don't have a contract or code ID.
-    exportedEvents = exportedEvents.filter(
-      (event) => event.contract !== undefined
-    )
+    // // Remove events that don't have a contract or code ID.
+    // exportedEvents = exportedEvents.filter(
+    //   (event) => event.contract !== undefined
+    // )
 
     // Queue transformations.
     if (exportedEvents.length > 0) {
@@ -574,7 +574,9 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
       ),
     })
 
-    return exportedEvents
+    // Let transform queue handle webhooks.
+    return []
+    // return exportedEvents
   }
 
   return {
