@@ -1,7 +1,7 @@
 import { fromBase64, fromUtf8, toBech32 } from '@cosmjs/encoding'
 import { Coin } from '@dao-dao/types/protobuf/codegen/cosmos/base/v1beta1/coin'
 import retry from 'async-await-retry'
-import { Sequelize } from 'sequelize'
+import { QueryTypes, Sequelize } from 'sequelize'
 
 import { BankBalance, BankStateEvent, Block, Contract, State } from '@/db'
 import { WasmCodeService } from '@/services'
@@ -158,6 +158,20 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
       )
 
       // Update or build BankBalance records for each event.
+      const bankBalanceUpdates: Record<
+        string,
+        Pick<
+          BankBalance,
+          | 'address'
+          | 'balances'
+          | 'denomUpdateBlockHeights'
+          | 'blockHeight'
+          | 'blockTimeUnixMs'
+          | 'blockTimestamp'
+        > & {
+          isNew: boolean
+        }
+      > = {}
       for (const {
         address,
         denom,
@@ -166,35 +180,63 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
         blockTimeUnixMs,
         blockTimestamp,
       } of events) {
-        const existingBalance = addressToExistingBalance[address]
-        if (existingBalance) {
+        const existingUpdate = bankBalanceUpdates[address]
+        if (existingUpdate) {
           // Only update if the current block height is greater than or equal to
           // the last block height at which the denom's balance was updated.
           if (
             BigInt(blockHeight) >=
-            BigInt(existingBalance.denomUpdateBlockHeights[denom] || 0)
+            BigInt(existingUpdate.denomUpdateBlockHeights[denom] || 0)
           ) {
-            existingBalance.balances[denom] = balance
-            existingBalance.denomUpdateBlockHeights[denom] = blockHeight
-            // Explicitly mark the nested JSONB fields as changed.
-            existingBalance.changed('balances', true)
-            existingBalance.changed('denomUpdateBlockHeights', true)
-            existingBalance.blockHeight = BigInt(
-              Math.max(Number(existingBalance.blockHeight), Number(blockHeight))
+            existingUpdate.balances[denom] = balance
+            existingUpdate.denomUpdateBlockHeights[denom] = blockHeight
+            existingUpdate.blockHeight = BigInt(
+              Math.max(Number(existingUpdate.blockHeight), Number(blockHeight))
             ).toString()
-            existingBalance.blockTimeUnixMs = BigInt(
+            existingUpdate.blockTimeUnixMs = BigInt(
               Math.max(
-                Number(existingBalance.blockTimeUnixMs),
+                Number(existingUpdate.blockTimeUnixMs),
                 Number(blockTimeUnixMs)
               )
             ).toString()
-            existingBalance.blockTimestamp =
-              blockTimestamp > existingBalance.blockTimestamp
+            existingUpdate.blockTimestamp =
+              blockTimestamp > existingUpdate.blockTimestamp
                 ? blockTimestamp
-                : existingBalance.blockTimestamp
+                : existingUpdate.blockTimestamp
+          }
+        } else if (addressToExistingBalance[address]) {
+          const preExisting = addressToExistingBalance[address]
+          if (
+            BigInt(blockHeight) >=
+            BigInt(preExisting.denomUpdateBlockHeights[denom] || 0)
+          ) {
+            bankBalanceUpdates[address] = {
+              isNew: false,
+              address,
+              balances: {
+                [denom]: balance,
+              },
+              denomUpdateBlockHeights: {
+                [denom]: blockHeight,
+              },
+              blockHeight: BigInt(
+                Math.max(Number(preExisting.blockHeight), Number(blockHeight))
+              ).toString(),
+              blockTimeUnixMs: BigInt(
+                Math.max(
+                  Number(preExisting.blockTimeUnixMs),
+                  Number(blockTimeUnixMs)
+                )
+              ).toString(),
+              blockTimestamp:
+                blockTimestamp > preExisting.blockTimestamp
+                  ? blockTimestamp
+                  : preExisting.blockTimestamp,
+            }
           }
         } else {
-          addressToExistingBalance[address] = BankBalance.build({
+          bankBalanceUpdates[address] = {
+            isNew: true,
             address,
             balances: {
               [denom]: balance,
@@ -205,16 +247,59 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
             blockHeight,
             blockTimeUnixMs,
             blockTimestamp,
-          })
+          }
         }
       }
 
-      const bankBalances = Object.values(addressToExistingBalance)
       // Save all BankBalance records in batches of 100.
       await batch({
-        list: bankBalances,
+        list: Object.values(bankBalanceUpdates),
         batchSize: 100,
-        task: (balance) => balance.save(),
+        task: async ({ isNew, ...update }) => {
+          if (isNew) {
+            await BankBalance.create(update)
+          } else {
+            // Partial updates.
+            await Promise.all([
+              // Balance and denom update block height updates.
+              ...Object.entries(update.balances).map(([denom, balance]) =>
+                BankBalance.sequelize!.query(
+                  `
+                  UPDATE "BankBalances"
+                  SET
+                    "balances" = jsonb_set("balances", :denom, :balance),
+                    "denomUpdateBlockHeights" = jsonb_set("denomUpdateBlockHeights", :denom, :blockHeight)
+                  WHERE "address" = :address
+                  `,
+                  {
+                    replacements: {
+                      denom: `{"${denom.replace(/"/g, '\\"')}"}`,
+                      balance: JSON.stringify(balance),
+                      blockHeight: JSON.stringify(
+                        update.denomUpdateBlockHeights[denom]
+                      ),
+                      address: update.address,
+                    },
+                    type: QueryTypes.UPDATE,
+                  }
+                )
+              ),
+              // Metadata updates.
+              BankBalance.update(
+                {
+                  blockHeight: update.blockHeight,
+                  blockTimeUnixMs: update.blockTimeUnixMs,
+                  blockTimestamp: update.blockTimestamp,
+                },
+                {
+                  where: {
+                    address: update.address,
+                  },
+                }
+              ),
+            ])
+          }
+        },
       })
 
       // Find contracts for all addresses matching code IDs so we know which
@@ -252,7 +337,7 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
           })
         : []
 
-      return [...bankBalances, ...bankStateEvents].sort(
+      return bankStateEvents.sort(
         (a, b) => Number(a.blockHeight) - Number(b.blockHeight)
       )
     }
