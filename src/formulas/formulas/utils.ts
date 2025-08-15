@@ -68,7 +68,7 @@ export const makeSimpleContractFormula = <
       /**
        * State key to load from WasmStateEvents table.
        */
-      key: KeyInput | KeyInput[]
+      key: KeyInput
     }
   | {
       /**
@@ -117,7 +117,7 @@ export const makeSimpleContractFormula = <
   }) => {
     const value =
       'key' in source
-        ? (await get<T>(contractAddress, ...[source.key].flat()))?.valueJson
+        ? (await get<T>(contractAddress, source.key))?.valueJson
         : (
             await getTransformationMatch<T>(
               contractAddress,
