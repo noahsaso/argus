@@ -1,6 +1,6 @@
-import { Block, Contract, Extraction } from '@/db'
+import { Contract, Extraction } from '@/db'
 import { WasmCodeService } from '@/services'
-import { Extractor, ExtractorMaker } from '@/types'
+import { ExtractionJson, Extractor, ExtractorMaker } from '@/types'
 import { retry } from '@/utils'
 
 export type DaoExtractorData = {
@@ -79,7 +79,7 @@ export const dao: ExtractorMaker<DaoExtractorData> = async ({
 
   const extract: Extractor<DaoExtractorData>['extract'] = async ({
     txHash,
-    height,
+    block: { height, timeUnixMs },
     data: { addresses },
   }) => {
     await autoCosmWasmClient.update()
@@ -87,23 +87,6 @@ export const dao: ExtractorMaker<DaoExtractorData> = async ({
     if (!client) {
       throw new Error('CosmWasm client not connected')
     }
-
-    // Get block time from the DB or RPC.
-    const blockTimeUnixMs = await retry(
-      3,
-      () =>
-        Block.findByPk(height).then((block) =>
-          block
-            ? Number(block.timeUnixMs)
-            : client
-                .getBlock(Number(height))
-                .then((b) => Date.parse(b.header.time))
-        ),
-      1_000
-    ).catch((err) => {
-      console.error(`Error getting block time for height ${height}:`, err)
-      return 0
-    })
 
     // Get contract data, info, and dump state, and create extractions.
     const extractions = (
@@ -128,18 +111,18 @@ export const dao: ExtractorMaker<DaoExtractorData> = async ({
                       address: contract.address,
                       name: 'dao-dao-core/info',
                       blockHeight: height,
-                      blockTimeUnixMs,
+                      blockTimeUnixMs: timeUnixMs,
                       txHash,
                       data: info,
-                    },
+                    } satisfies ExtractionJson,
                     {
                       address: contract.address,
                       name: 'dao-dao-core/dump_state',
                       blockHeight: height,
-                      blockTimeUnixMs,
+                      blockTimeUnixMs: timeUnixMs,
                       txHash,
                       data: dumpState,
-                    },
+                    } satisfies ExtractionJson,
                   ] as const
               ),
             1_000
@@ -158,8 +141,8 @@ export const dao: ExtractorMaker<DaoExtractorData> = async ({
           creator: contract.creator,
           label: contract.label,
           instantiatedAtBlockHeight: height,
-          instantiatedAtBlockTimeUnixMs: blockTimeUnixMs,
-          instantiatedAtBlockTimestamp: new Date(Number(blockTimeUnixMs)),
+          instantiatedAtBlockTimeUnixMs: timeUnixMs,
+          instantiatedAtBlockTimestamp: new Date(Number(timeUnixMs)),
           txHash,
         })),
         {

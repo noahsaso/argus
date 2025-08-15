@@ -1,6 +1,6 @@
 import { fromUtf8, toUtf8 } from '@cosmjs/encoding'
 
-import { Block, Contract, Extraction } from '@/db'
+import { Contract, Extraction } from '@/db'
 import { Extractor, ExtractorMaker } from '@/types'
 import { retry } from '@/utils'
 
@@ -16,8 +16,8 @@ export const contract: ExtractorMaker<ContractsExtractorData> = async ({
     const addresses = events
       .filter(
         (e) =>
-          e.type === 'instantiate' &&
-          e.attributes.some((a) => a.key === 'code_id') &&
+          (e.type === 'instantiate' || e.type === 'migrate') &&
+          e.attributes.some((a) => a.key.includes('code_id')) &&
           e.attributes.some((a) => a.key === '_contract_address')
       )
       .flatMap((e) =>
@@ -37,7 +37,7 @@ export const contract: ExtractorMaker<ContractsExtractorData> = async ({
 
   const extract: Extractor<ContractsExtractorData>['extract'] = async ({
     txHash,
-    height,
+    block: { height, timeUnixMs, timestamp },
     data: { addresses },
   }) => {
     await autoCosmWasmClient.update()
@@ -45,23 +45,6 @@ export const contract: ExtractorMaker<ContractsExtractorData> = async ({
     if (!client) {
       throw new Error('CosmWasm client not connected')
     }
-
-    // Get block time from the DB or RPC.
-    const blockTimeUnixMs = await retry(
-      3,
-      () =>
-        Block.findByPk(height).then((block) =>
-          block
-            ? Number(block.timeUnixMs)
-            : client
-                .getBlock(Number(height))
-                .then((b) => Date.parse(b.header.time))
-        ),
-      1_000
-    ).catch((err) => {
-      console.error(`Error getting block time for height ${height}:`, err)
-      return 0
-    })
 
     // Get contract data and info, and create extractions.
     const extractions = (
@@ -86,7 +69,7 @@ export const contract: ExtractorMaker<ContractsExtractorData> = async ({
                           address: contract.address,
                           name: 'info',
                           blockHeight: height,
-                          blockTimeUnixMs,
+                          blockTimeUnixMs: timeUnixMs,
                           txHash,
                           data: JSON.parse(fromUtf8(response.data)),
                         }
@@ -109,12 +92,12 @@ export const contract: ExtractorMaker<ContractsExtractorData> = async ({
           creator: contract.creator,
           label: contract.label,
           instantiatedAtBlockHeight: height,
-          instantiatedAtBlockTimeUnixMs: blockTimeUnixMs,
-          instantiatedAtBlockTimestamp: new Date(Number(blockTimeUnixMs)),
+          instantiatedAtBlockTimeUnixMs: timeUnixMs,
+          instantiatedAtBlockTimestamp: timestamp,
           txHash,
         })),
         {
-          updateOnDuplicate: ['codeId', 'admin', 'creator', 'label', 'txHash'],
+          updateOnDuplicate: ['codeId', 'admin', 'creator', 'label'],
           conflictAttributes: ['address'],
         }
       ),

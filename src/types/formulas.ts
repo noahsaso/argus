@@ -281,6 +281,11 @@ export type FormulaExtractionGetter = (
   name: string
 ) => Promise<Extraction | undefined>
 
+export type FormulaExtractionMapGetter = <V = any>(
+  contractAddress: string,
+  namePrefix: string
+) => Promise<Record<string, V> | undefined>
+
 export type FormulaQuerier = (
   query: string,
   bindParams?: BindOrReplacements
@@ -326,6 +331,7 @@ export type Env<Args extends Record<string, string> = {}> = {
   getProposalVoteCount: FormulaProposalVoteCountGetter
   getCommunityPoolBalances: FormulaCommunityPoolBalancesGetter
   getExtraction: FormulaExtractionGetter
+  getExtractionMap: FormulaExtractionMapGetter
   getFeegrantAllowance: FormulaFeegrantAllowanceGetter
   getFeegrantAllowances: FormulaFeegrantAllowancesGetter
   hasFeegrantAllowance: FormulaFeegrantHasAllowanceGetter

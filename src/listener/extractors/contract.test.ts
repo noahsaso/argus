@@ -5,7 +5,7 @@ import { Tx } from '@dao-dao/types/protobuf/codegen/cosmos/tx/v1beta1/tx'
 import { MockInstance, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ConfigManager } from '@/config'
-import { Block, Contract, Extraction } from '@/db'
+import { Contract, Extraction } from '@/db'
 import { AutoCosmWasmClient } from '@/utils'
 
 import { ContractsExtractorData, contract } from './contract'
@@ -145,12 +145,10 @@ describe('Contracts Extractor', () => {
       version: '2.3.4',
     }
 
-    beforeEach(async () => {
-      // Create a test block in the database
-      await Block.createOne({
-        height: 1000,
-        timeUnixMs: 1640995200000,
-      })
+    it('should extract contract information successfully', async () => {
+      const data: ContractsExtractorData = {
+        addresses: ['juno123contract456'],
+      }
 
       // Mock the client methods
       vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockResolvedValue({
@@ -165,16 +163,14 @@ describe('Contracts Extractor', () => {
       queryContractRawMock.mockResolvedValueOnce({
         data: toUtf8(JSON.stringify(mockContractInfo)),
       })
-    })
-
-    it('should extract contract information successfully', async () => {
-      const data: ContractsExtractorData = {
-        addresses: ['juno123contract456'],
-      }
 
       const result = (await extractor.extract({
         txHash: 'test-hash-123',
-        height: '1000',
+        block: {
+          height: '1000',
+          timeUnixMs: '1640995200000',
+          timestamp: '2022-01-01T01:00:00Z',
+        },
         data,
       })) as Extraction[]
 
@@ -233,7 +229,11 @@ describe('Contracts Extractor', () => {
 
       const result = (await extractor.extract({
         txHash: 'test-hash-456',
-        height: '1000',
+        block: {
+          height: '1000',
+          timeUnixMs: '1640995200000',
+          timestamp: '2022-01-01T01:00:00Z',
+        },
         data,
       })) as Extraction[]
 
@@ -250,23 +250,30 @@ describe('Contracts Extractor', () => {
       }
 
       // Mock one successful and one failing contract
-      vi.mocked(mockAutoCosmWasmClient.client!.getContract)
-        .mockResolvedValueOnce({
-          address: 'juno123contract456',
-          codeId: 4862,
-          admin: 'juno1admin123',
-          creator: 'juno1creator123',
-          label: 'Test Contract 1',
-          ibcPortId: undefined,
-        })
-        .mockResolvedValueOnce({
-          address: 'juno789contract012',
-          codeId: 4862,
-          admin: 'juno1admin456',
-          creator: 'juno1creator456',
-          label: 'Test Contract 2',
-          ibcPortId: undefined,
-        })
+      vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockImplementation(
+        async (address: string) => {
+          if (address === 'juno123contract456') {
+            return {
+              address: 'juno123contract456',
+              codeId: 4862,
+              admin: 'juno1admin123',
+              creator: 'juno1creator123',
+              label: 'Test Contract 1',
+              ibcPortId: undefined,
+            }
+          } else if (address === 'juno789contract012') {
+            return {
+              address: 'juno789contract012',
+              codeId: 4862,
+              admin: 'juno1admin456',
+              creator: 'juno1creator456',
+              label: 'Test Contract 2',
+              ibcPortId: undefined,
+            }
+          }
+          throw new Error('Unknown contract')
+        }
+      )
 
       // Mock successful queries for first contract, failed for second
       queryContractRawMock.mockImplementation((address: string) => {
@@ -282,7 +289,11 @@ describe('Contracts Extractor', () => {
 
       const result = (await extractor.extract({
         txHash: 'test-hash-789',
-        height: '1000',
+        block: {
+          height: '1000',
+          timeUnixMs: '1640995200000',
+          timestamp: '2022-01-01T01:00:00Z',
+        },
         data,
       })) as Extraction[]
 
@@ -302,39 +313,32 @@ describe('Contracts Extractor', () => {
       ])
     })
 
-    it('should get block time from RPC when not in database', async () => {
-      const data: ContractsExtractorData = {
-        addresses: ['juno123contract456'],
-      }
-
-      // Mock getBlock to return block info
-      vi.mocked(mockAutoCosmWasmClient.client!.getBlock).mockResolvedValue({
-        header: {
-          time: '2022-01-01T01:00:00Z', // Different from DB time
-        },
-      } as any)
-
-      const result = (await extractor.extract({
-        txHash: 'test-hash-rpc',
-        height: '2000', // Height not in database
-        data,
-      })) as Extraction[]
-
-      expect(mockAutoCosmWasmClient.client!.getBlock).toHaveBeenCalledWith(2000)
-      expect(result).toHaveLength(1)
-      expect(result[0].blockTimeUnixMs).toBe(
-        Date.parse('2022-01-01T01:00:00Z').toString()
-      )
-    })
-
     it('should create contracts in database with correct information', async () => {
       const data: ContractsExtractorData = {
         addresses: ['juno123contract456'],
       }
 
+      // Mock the client methods
+      vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockResolvedValue({
+        address: 'juno123contract456',
+        codeId: 4862,
+        admin: 'juno1admin123',
+        creator: 'juno1creator123',
+        label: 'Test Contract',
+        ibcPortId: 'juno1ibc123',
+      })
+
+      queryContractRawMock.mockResolvedValueOnce({
+        data: toUtf8(JSON.stringify(mockContractInfo)),
+      })
+
       await extractor.extract({
         txHash: 'test-hash-contract',
-        height: '1000',
+        block: {
+          height: '1000',
+          timeUnixMs: '1640995200000',
+          timestamp: '2022-01-01T01:00:00Z',
+        },
         data,
       })
 
@@ -369,7 +373,11 @@ describe('Contracts Extractor', () => {
       await expect(
         brokenExtractor.extract({
           txHash: 'test-hash-error',
-          height: '1000',
+          block: {
+            height: '1000',
+            timeUnixMs: '1640995200000',
+            timestamp: '2022-01-01T01:00:00Z',
+          },
           data,
         })
       ).rejects.toThrow('CosmWasm client not connected')

@@ -207,12 +207,24 @@ export const totalPowerAtHeight: ContractFormula<
     const height = env.args.height
       ? Number(env.args.height)
       : Number(env.block.height)
-    const power =
-      (await snapshotItemMayLoadAtHeight<string>({
-        env,
-        name: 'totalStakedNfts',
-        height,
-      })) ?? '0'
+
+    let power = await snapshotItemMayLoadAtHeight<string>({
+      env,
+      name: 'totalStakedNfts',
+      height,
+    })
+
+    // If power not found, try extraction.
+    if (!power) {
+      power = (
+        await env.getExtraction(
+          env.contractAddress,
+          `total_power_at_height:${BigInt(height).toString()}`
+        )
+      )?.data as string | undefined
+    }
+
+    power ??= '0'
 
     return {
       power,
@@ -361,14 +373,36 @@ export const topStakers: ContractFormula<
     const {
       contractAddress,
       getTransformationMap,
+      getExtractionMap,
       args: { limit },
     } = env
 
     const limitNum = limit ? Math.max(0, Number(limit)) : Infinity
 
-    const nftBalancesMap =
-      (await getTransformationMap<string>(contractAddress, 'nftBalances')) ?? {}
-    const nftBalances = Object.entries(nftBalancesMap)
+    const [nftBalancesMap, stakerExtractions] = await Promise.all([
+      // State
+      getTransformationMap<string>(contractAddress, 'nftBalances').then(
+        (map) => map ?? {}
+      ),
+      // TX extractions
+      getExtractionMap<{
+        votingPower: string
+      }>(contractAddress, 'staker').then((map) => map ?? {}),
+    ])
+
+    // Combine.
+    const allBalances = {
+      ...nftBalancesMap,
+      // Override state with extractions.
+      ...Object.fromEntries(
+        Object.entries(stakerExtractions).map(([address, { votingPower }]) => [
+          address,
+          votingPower,
+        ])
+      ),
+    }
+
+    const nftBalances = Object.entries(allBalances)
       // Remove zero balances.
       .filter(([, balance]) => Number(balance) > 0)
       // Descending by balance.

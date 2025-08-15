@@ -74,3 +74,12 @@ export type FeegrantAllowanceJson = {
   active: boolean
   block: SerializedBlock
 }
+
+export type ExtractionJson = {
+  address: string
+  name: string
+  blockHeight: string
+  blockTimeUnixMs: string
+  txHash: string
+  data: unknown
+}

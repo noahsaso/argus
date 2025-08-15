@@ -4,7 +4,7 @@ import { Tx } from '@dao-dao/types/protobuf/codegen/cosmos/tx/v1beta1/tx'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ConfigManager } from '@/config'
-import { Block, Contract, Extraction } from '@/db'
+import { Contract, Extraction } from '@/db'
 import { WasmCodeService } from '@/services'
 import { AutoCosmWasmClient } from '@/utils'
 
@@ -331,12 +331,10 @@ describe('DAO Extractor', () => {
       voting_module: 'juno1voting123',
     }
 
-    beforeEach(async () => {
-      // Create a test block in the database
-      await Block.createOne({
-        height: 1000,
-        timeUnixMs: 1640995200000,
-      })
+    it('should extract DAO information successfully', async () => {
+      const data: DaoExtractorData = {
+        addresses: ['juno1dao123contract456'],
+      }
 
       // Mock the client methods
       vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockResolvedValue({
@@ -351,16 +349,14 @@ describe('DAO Extractor', () => {
       vi.mocked(mockAutoCosmWasmClient.client!.queryContractSmart)
         .mockResolvedValueOnce(mockContractInfo) // First call for info
         .mockResolvedValueOnce(mockDumpState) // Second call for dump_state
-    })
-
-    it('should extract DAO information successfully', async () => {
-      const data: DaoExtractorData = {
-        addresses: ['juno1dao123contract456'],
-      }
 
       const result = (await extractor.extract({
         txHash: 'test-hash-123',
-        height: '1000',
+        block: {
+          height: '1000',
+          timeUnixMs: '1640995200000',
+          timestamp: '2022-01-01T01:00:00Z',
+        },
         data,
       })) as Extraction[]
 
@@ -432,7 +428,11 @@ describe('DAO Extractor', () => {
 
       const result = (await extractor.extract({
         txHash: 'test-hash-456',
-        height: '1000',
+        block: {
+          height: '1000',
+          timeUnixMs: '1640995200000',
+          timestamp: '2022-01-01T01:00:00Z',
+        },
         data,
       })) as Extraction[]
 
@@ -487,7 +487,11 @@ describe('DAO Extractor', () => {
 
       const result = (await extractor.extract({
         txHash: 'test-hash-789',
-        height: '1000',
+        block: {
+          height: '1000',
+          timeUnixMs: '1640995200000',
+          timestamp: '2022-01-01T01:00:00Z',
+        },
         data,
       })) as Extraction[]
 
@@ -518,39 +522,32 @@ describe('DAO Extractor', () => {
       ])
     })
 
-    it('should get block time from RPC when not in database', async () => {
-      const data: DaoExtractorData = {
-        addresses: ['juno1dao123contract456'],
-      }
-
-      // Mock getBlock to return block info
-      vi.mocked(mockAutoCosmWasmClient.client!.getBlock).mockResolvedValue({
-        header: {
-          time: '2022-01-01T01:00:00Z', // Different from DB time
-        },
-      } as any)
-
-      const result = (await extractor.extract({
-        txHash: 'test-hash-rpc',
-        height: '2000', // Height not in database
-        data,
-      })) as Extraction[]
-
-      expect(mockAutoCosmWasmClient.client!.getBlock).toHaveBeenCalledWith(2000)
-      expect(result).toHaveLength(2)
-      expect(result[0].blockTimeUnixMs).toBe(
-        Date.parse('2022-01-01T01:00:00Z').toString()
-      )
-    })
-
     it('should create contracts in database with correct information', async () => {
       const data: DaoExtractorData = {
         addresses: ['juno1dao123contract456'],
       }
 
+      // Mock the client methods
+      vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockResolvedValue({
+        address: 'juno1dao123contract456',
+        codeId: 4862,
+        admin: 'juno1admin123',
+        creator: 'juno1creator123',
+        label: 'Test DAO',
+        ibcPortId: 'juno1ibc123',
+      })
+
+      vi.mocked(mockAutoCosmWasmClient.client!.queryContractSmart)
+        .mockResolvedValueOnce(mockContractInfo) // First call for info
+        .mockResolvedValueOnce(mockDumpState) // Second call for dump_state
+
       await extractor.extract({
         txHash: 'test-hash-contract',
-        height: '1000',
+        block: {
+          height: '1000',
+          timeUnixMs: '1640995200000',
+          timestamp: '2022-01-01T01:00:00Z',
+        },
         data,
       })
 
@@ -585,7 +582,11 @@ describe('DAO Extractor', () => {
       await expect(
         brokenExtractor.extract({
           txHash: 'test-hash-error',
-          height: '1000',
+          block: {
+            height: '1000',
+            timeUnixMs: '1640995200000',
+            timestamp: '2022-01-01T01:00:00Z',
+          },
           data,
         })
       ).rejects.toThrow('CosmWasm client not connected')

@@ -186,7 +186,7 @@ const main = async () => {
         }),
       ])
     },
-    onTx: async ({ hash, tx: rawTx, height, events }) => {
+    onTx: async ({ hash, tx: rawTx, height, events }, { header: { time } }) => {
       let tx
       try {
         tx = Tx.decode(rawTx)
@@ -220,11 +220,16 @@ const main = async () => {
         })
 
         if (data) {
+          const timeUnixMs = Date.parse(time)
           await ExtractQueue.add(`${hash}-${name}`, {
             extractor: name,
             data: {
               txHash: hash,
-              height: BigInt(height).toString(),
+              block: {
+                height: BigInt(height).toString(),
+                timeUnixMs: BigInt(timeUnixMs).toString(),
+                timestamp: new Date(timeUnixMs).toISOString(),
+              },
               data,
             },
           })

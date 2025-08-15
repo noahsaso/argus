@@ -145,7 +145,7 @@ export class BlockIterator {
     onError,
   }: {
     onBlock?: (block: Block) => void | Promise<void>
-    onTx?: (tx: IndexedTx) => void | Promise<void>
+    onTx?: (tx: IndexedTx, block: Block) => void | Promise<void>
     onError?: (error: BlockIteratorError) => void | Promise<void>
   }) {
     if (!onBlock && !onTx) {
@@ -222,7 +222,7 @@ export class BlockIterator {
           if (tx instanceof BlockIteratorError) {
             await onError?.(tx)
           } else {
-            await onTx?.(tx)
+            await onTx?.(tx, item.block)
           }
         }
       }
