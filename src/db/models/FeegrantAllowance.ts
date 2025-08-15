@@ -61,6 +61,28 @@ import { getDependentKey, serializeBlock } from '@/utils'
     {
       fields: ['blockHeight'],
     },
+    {
+      fields: ['active', 'parsedDenom'],
+      where: {
+        active: true,
+      },
+      name: 'feegrant_allowances_active_parsed_denom',
+    },
+    {
+      fields: ['active', 'parsedAllowanceType'],
+      where: {
+        active: true,
+      },
+      name: 'feegrant_allowances_active_parsed_allowance_type',
+    },
+    {
+      fields: ['parsedDenom'],
+      name: 'feegrant_allowances_parsed_denom',
+    },
+    {
+      fields: ['parsedAllowanceType'],
+      name: 'feegrant_allowances_parsed_allowance_type',
+    },
   ],
 })
 export class FeegrantAllowance extends DependableEventModel {

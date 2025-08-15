@@ -38,7 +38,7 @@ module.exports = {
       where: {
         active: true,
       },
-      name: 'feegrant_allowances_active_denom_idx',
+      name: 'feegrant_allowances_active_parsed_denom',
     })
 
     await queryInterface.addIndex('FeegrantAllowances', {
@@ -46,36 +46,36 @@ module.exports = {
       where: {
         active: true,
       },
-      name: 'feegrant_allowances_active_type_idx',
+      name: 'feegrant_allowances_active_parsed_allowance_type',
     })
 
     await queryInterface.addIndex('FeegrantAllowances', {
       fields: ['parsedDenom'],
-      name: 'feegrant_allowances_parsed_denom_idx',
+      name: 'feegrant_allowances_parsed_denom',
     })
 
     await queryInterface.addIndex('FeegrantAllowances', {
       fields: ['parsedAllowanceType'],
-      name: 'feegrant_allowances_parsed_type_idx',
+      name: 'feegrant_allowances_parsed_allowance_type',
     })
   },
   async down(queryInterface: QueryInterface) {
     // Remove indexes
     await queryInterface.removeIndex(
       'FeegrantAllowances',
-      'feegrant_allowances_active_denom_idx'
+      'feegrant_allowances_active_parsed_denom'
     )
     await queryInterface.removeIndex(
       'FeegrantAllowances',
-      'feegrant_allowances_active_type_idx'
+      'feegrant_allowances_active_parsed_allowance_type'
     )
     await queryInterface.removeIndex(
       'FeegrantAllowances',
-      'feegrant_allowances_parsed_denom_idx'
+      'feegrant_allowances_parsed_denom'
     )
     await queryInterface.removeIndex(
       'FeegrantAllowances',
-      'feegrant_allowances_parsed_type_idx'
+      'feegrant_allowances_parsed_allowance_type'
     )
 
     // Remove columns
