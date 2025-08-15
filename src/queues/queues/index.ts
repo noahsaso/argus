@@ -1,7 +1,6 @@
 export { ExportQueue } from './export'
 export { ExtractQueue } from './extract'
 export { SearchQueue } from './search'
-export { TransformQueue } from './transform'
 export { TransformationsQueue } from './transformations'
 export { WasmCodeTrackersQueue } from './wasm-code-trackers'
 export { WebhooksQueue } from './webhooks'
