@@ -143,18 +143,23 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
 
       // Find existing BankBalance records for all addresses and update by
       // adding the denoms.
-      const existingBalances = await BankBalance.findAll({
+      const existingBalances: Pick<
+        BankBalance,
+        'address' | 'blockHeight' | 'blockTimeUnixMs' | 'blockTimestamp'
+      >[] = await BankBalance.findAll({
+        attributes: [
+          'address',
+          'blockHeight',
+          'blockTimeUnixMs',
+          'blockTimestamp',
+        ],
         where: {
           address: uniqueAddresses,
         },
       })
       // Map address to existing BankBalance record.
-      const addressToExistingBalance = existingBalances.reduce(
-        (acc, balance) => {
-          acc[balance.address] = balance
-          return acc
-        },
-        {} as Record<string, BankBalance>
+      const addressToExistingBalance = Object.fromEntries(
+        existingBalances.map((balance) => [balance.address, balance])
       )
 
       // Update or build BankBalance records for each event.
@@ -206,33 +211,28 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
           }
         } else if (addressToExistingBalance[address]) {
           const preExisting = addressToExistingBalance[address]
-          if (
-            BigInt(blockHeight) >=
-            BigInt(preExisting.denomUpdateBlockHeights[denom] || 0)
-          ) {
-            bankBalanceUpdates[address] = {
-              isNew: false,
-              address,
-              balances: {
-                [denom]: balance,
-              },
-              denomUpdateBlockHeights: {
-                [denom]: blockHeight,
-              },
-              blockHeight: BigInt(
-                Math.max(Number(preExisting.blockHeight), Number(blockHeight))
-              ).toString(),
-              blockTimeUnixMs: BigInt(
-                Math.max(
-                  Number(preExisting.blockTimeUnixMs),
-                  Number(blockTimeUnixMs)
-                )
-              ).toString(),
-              blockTimestamp:
-                blockTimestamp > preExisting.blockTimestamp
-                  ? blockTimestamp
-                  : preExisting.blockTimestamp,
-            }
+          bankBalanceUpdates[address] = {
+            isNew: false,
+            address,
+            balances: {
+              [denom]: balance,
+            },
+            denomUpdateBlockHeights: {
+              [denom]: blockHeight,
+            },
+            blockHeight: BigInt(
+              Math.max(Number(preExisting.blockHeight), Number(blockHeight))
+            ).toString(),
+            blockTimeUnixMs: BigInt(
+              Math.max(
+                Number(preExisting.blockTimeUnixMs),
+                Number(blockTimeUnixMs)
+              )
+            ).toString(),
+            blockTimestamp:
+              blockTimestamp > preExisting.blockTimestamp
+                ? blockTimestamp
+                : preExisting.blockTimestamp,
           }
         } else {
           bankBalanceUpdates[address] = {
