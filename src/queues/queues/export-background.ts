@@ -23,7 +23,7 @@ export type ExportBackgroundQueuePayload = {
 
 export class ExportBackgroundQueue extends BaseQueue<ExportBackgroundQueuePayload> {
   static queueName = 'export-background'
-  static concurrency = 10
+  static concurrency = 1
 
   static getQueue = () =>
     getBullQueue<ExportBackgroundQueuePayload>(this.queueName)
