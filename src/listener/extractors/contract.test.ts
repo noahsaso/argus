@@ -276,7 +276,7 @@ describe('Contracts Extractor', () => {
       )
 
       // Mock successful queries for first contract, failed for second
-      queryContractRawMock.mockImplementation((address: string) => {
+      queryContractRawMock.mockImplementation(async (address: string) => {
         // First contract
         if (address === 'juno123contract456') {
           return {

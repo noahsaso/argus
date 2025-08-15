@@ -34,7 +34,7 @@ describe('NFT Stake Update Extractor', () => {
         getContract: vi.fn(),
         queryContractSmart: vi.fn(),
         getBlock: vi.fn(),
-        getHeight: vi.fn(),
+        getHeight: vi.fn().mockResolvedValue(1001),
       },
     } as any
 
@@ -194,16 +194,13 @@ describe('NFT Stake Update Extractor', () => {
       expect(
         mockAutoCosmWasmClient.client!.queryContractSmart
       ).toHaveBeenCalledWith('juno1nftvoting123contract456', {
-        total_power_at_height: {
-          height: 1000,
-        },
+        total_power_at_height: {},
       })
       expect(
         mockAutoCosmWasmClient.client!.queryContractSmart
       ).toHaveBeenCalledWith('juno1nftvoting123contract456', {
         voting_power_at_height: {
           address: 'juno1staker123',
-          height: 1000,
         },
       })
       expect(
@@ -239,6 +236,28 @@ describe('NFT Stake Update Extractor', () => {
             votingPower: '200',
             stakedTokenIds: ['123', '789'],
           },
+          createdAt: expect.any(Date),
+          updatedAt: expect.any(Date),
+        },
+        {
+          id: '3',
+          address: 'juno1nftvoting123contract456',
+          name: 'stakedNftOwner:123',
+          blockHeight: '1000',
+          blockTimeUnixMs: '1640995200000',
+          txHash: 'test-hash-123',
+          data: 'juno1staker123',
+          createdAt: expect.any(Date),
+          updatedAt: expect.any(Date),
+        },
+        {
+          id: '4',
+          address: 'juno1nftvoting123contract456',
+          name: 'stakedNftOwner:789',
+          blockHeight: '1000',
+          blockTimeUnixMs: '1640995200000',
+          txHash: 'test-hash-123',
+          data: 'juno1staker123',
           createdAt: expect.any(Date),
           updatedAt: expect.any(Date),
         },
@@ -363,6 +382,28 @@ describe('NFT Stake Update Extractor', () => {
         },
         {
           id: expect.any(String),
+          address: 'juno1nftvoting123contract456',
+          name: 'stakedNftOwner:789',
+          blockHeight: '1000',
+          blockTimeUnixMs: '1640995200000',
+          txHash: 'test-hash-456',
+          data: 'juno1staker123',
+          createdAt: expect.any(Date),
+          updatedAt: expect.any(Date),
+        },
+        {
+          id: expect.any(String),
+          address: 'juno1nftvoting123contract456',
+          name: 'stakedNftOwner:123',
+          blockHeight: '1000',
+          blockTimeUnixMs: '1640995200000',
+          txHash: 'test-hash-456',
+          data: 'juno1staker123',
+          createdAt: expect.any(Date),
+          updatedAt: expect.any(Date),
+        },
+        {
+          id: expect.any(String),
           address: 'juno1nftvoting789contract012',
           name: 'total_power_at_height:1000',
           blockHeight: '1000',
@@ -383,6 +424,17 @@ describe('NFT Stake Update Extractor', () => {
             votingPower: '100',
             stakedTokenIds: ['999'],
           },
+          createdAt: expect.any(Date),
+          updatedAt: expect.any(Date),
+        },
+        {
+          id: expect.any(String),
+          address: 'juno1nftvoting789contract012',
+          name: 'stakedNftOwner:999',
+          blockHeight: '1000',
+          blockTimeUnixMs: '1640995200000',
+          txHash: 'test-hash-456',
+          data: 'juno1staker456',
           createdAt: expect.any(Date),
           updatedAt: expect.any(Date),
         },
@@ -487,6 +539,28 @@ describe('NFT Stake Update Extractor', () => {
           createdAt: expect.any(Date),
           updatedAt: expect.any(Date),
         },
+        {
+          id: '3',
+          address: 'juno1nftvoting123contract456',
+          name: 'stakedNftOwner:123',
+          blockHeight: '1000',
+          blockTimeUnixMs: '1640995200000',
+          txHash: 'test-hash-789',
+          data: 'juno1staker123',
+          createdAt: expect.any(Date),
+          updatedAt: expect.any(Date),
+        },
+        {
+          id: '4',
+          address: 'juno1nftvoting123contract456',
+          name: 'stakedNftOwner:789',
+          blockHeight: '1000',
+          blockTimeUnixMs: '1640995200000',
+          txHash: 'test-hash-789',
+          data: 'juno1staker123',
+          createdAt: expect.any(Date),
+          updatedAt: expect.any(Date),
+        },
       ])
     })
 
@@ -583,6 +657,28 @@ describe('NFT Stake Update Extractor', () => {
             votingPower: '200',
             stakedTokenIds: ['123', '789'],
           },
+          createdAt: expect.any(Date),
+          updatedAt: expect.any(Date),
+        },
+        {
+          id: '3',
+          address: 'juno1nftvoting123contract456',
+          name: 'stakedNftOwner:123',
+          blockHeight: '1000',
+          blockTimeUnixMs: '1640995200000',
+          txHash: 'test-hash-789',
+          data: 'juno1staker123',
+          createdAt: expect.any(Date),
+          updatedAt: expect.any(Date),
+        },
+        {
+          id: '4',
+          address: 'juno1nftvoting123contract456',
+          name: 'stakedNftOwner:789',
+          blockHeight: '1000',
+          blockTimeUnixMs: '1640995200000',
+          txHash: 'test-hash-789',
+          data: 'juno1staker123',
           createdAt: expect.any(Date),
           updatedAt: expect.any(Date),
         },
