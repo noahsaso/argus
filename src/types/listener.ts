@@ -22,15 +22,24 @@ export type ExtractorExtractInput<Data extends unknown = unknown> = {
 }
 
 export type Extractor<Data extends unknown = unknown> = {
-  // The function that will be called for each TX which determines if it will be
-  // queued for extraction. If returns an object, it will be queued. If returns
-  // undefined, it will not be queued.
+  /**
+   * The function that will be called for each TX which determines if it will be
+   * queued for extraction. If returns an object, it will be queued. If returns
+   * undefined, it will not be queued.
+   */
   match: (input: ExtractorMatchInput) => Data | undefined
-  // The function that will be called with queued objects. Returns created
-  // events.
+  /**
+   * The function that will be called with queued objects. Returns created
+   * events.
+   */
   extract: (
     input: ExtractorExtractInput<Data>
   ) => Promise<DependableEventModel[]>
+  /**
+   * Optional function to sync extractions. This is useful to fill in missing
+   * extractions.
+   */
+  sync?: () => Promise<Data[]>
 }
 
 export type ExtractorMakerOptions = {

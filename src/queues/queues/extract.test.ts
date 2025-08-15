@@ -29,7 +29,7 @@ describe('ExtractQueue', () => {
       extract: vi.fn().mockResolvedValue([
         await Extraction.build({
           address: 'juno1test123',
-          name: 'dao-dao-core/info',
+          name: 'info',
           blockHeight: '1000',
           blockTimeUnixMs: '1640995200000',
           txHash: 'test-hash',
@@ -157,7 +157,7 @@ describe('ExtractQueue', () => {
         return Promise.resolve([
           Extraction.build({
             address: 'juno1test123',
-            name: 'dao-dao-core/info',
+            name: 'info',
             blockHeight: '1000',
             blockTimeUnixMs: '1640995200000',
             txHash: 'test-hash',

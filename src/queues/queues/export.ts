@@ -58,7 +58,7 @@ export class ExportQueue extends BaseQueue<ExportQueuePayload> {
     this.handlers = handlers
   }
 
-  process({ data, log }: Job<ExportQueuePayload>): Promise<void> {
+  process(job: Job<ExportQueuePayload>): Promise<void> {
     return new Promise<void>(async (resolve, reject) => {
       // Time out if takes more than 30 seconds.
       let timeout: NodeJS.Timeout | null = setTimeout(() => {
@@ -68,7 +68,7 @@ export class ExportQueue extends BaseQueue<ExportQueuePayload> {
 
       try {
         // Group data by handler.
-        const groupedData = data.reduce(
+        const groupedData = job.data.reduce(
           (acc, { handler, data }) => ({
             ...acc,
             [handler]: (acc[handler] || []).concat(data),
@@ -129,7 +129,7 @@ export class ExportQueue extends BaseQueue<ExportQueuePayload> {
         }
       } catch (err) {
         if (timeout !== null) {
-          log(
+          job.log(
             `${err instanceof Error ? err.name : 'Error'}: ${
               err instanceof Error ? err.message : err
             } ${

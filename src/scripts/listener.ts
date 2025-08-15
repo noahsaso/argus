@@ -7,11 +7,11 @@ import { Sequelize } from 'sequelize'
 
 import { ConfigManager, testRedisConnection } from '@/config'
 import { Block, State, loadDb } from '@/db'
-import { extractorMakers } from '@/listener'
+import { makeExtractors } from '@/listener'
 import { ExtractQueue } from '@/queues/queues'
 import { setupMeilisearch } from '@/search'
 import { BlockIterator, WasmCodeService } from '@/services'
-import { DbType, NamedExtractor } from '@/types'
+import { DbType } from '@/types'
 import { AutoCosmWasmClient } from '@/utils'
 
 declare global {
@@ -100,18 +100,11 @@ const main = async () => {
   console.log(`[${new Date().toISOString()}] Setting up extractors...`)
 
   // Set up extractors.
-  const extractors = await Promise.all(
-    Object.entries(extractorMakers).map(
-      async ([name, extractorMaker]): Promise<NamedExtractor> => ({
-        name,
-        extractor: await extractorMaker({
-          config,
-          autoCosmWasmClient,
-          sendWebhooks: false,
-        }),
-      })
-    )
-  )
+  const extractors = await makeExtractors({
+    config,
+    autoCosmWasmClient,
+    sendWebhooks: false,
+  })
 
   console.log(`[${new Date().toISOString()}] Starting listener...`)
 

@@ -1,7 +1,9 @@
+import { Contract as ChainContract } from '@cosmjs/cosmwasm-stargate'
+
 import { Contract, Extraction } from '@/db'
 import { WasmCodeService } from '@/services'
 import { ExtractionJson, Extractor, ExtractorMaker } from '@/types'
-import { retry } from '@/utils'
+import { batch } from '@/utils'
 
 export type DaoExtractorData = {
   addresses: string[]
@@ -88,53 +90,56 @@ export const dao: ExtractorMaker<DaoExtractorData> = async ({
       throw new Error('CosmWasm client not connected')
     }
 
+    const daoDaoCoreCodeIds =
+      WasmCodeService.getInstance().findWasmCodeIdsByKeys('dao-dao-core')
+
     // Get contract data, info, and dump state, and create extractions.
-    const extractions = (
-      await Promise.allSettled(
-        addresses.map((address) =>
-          retry(
-            3,
-            async () =>
-              Promise.all([
-                client.getContract(address),
-                client.queryContractSmart(address, {
-                  info: {},
-                }),
-                client.queryContractSmart(address, {
-                  dump_state: {},
-                }),
-              ]).then(
-                ([contract, info, dumpState]) =>
-                  [
-                    contract,
-                    {
-                      address: contract.address,
-                      name: 'dao-dao-core/info',
-                      blockHeight: height,
-                      blockTimeUnixMs: timeUnixMs,
-                      txHash,
-                      data: info,
-                    } satisfies ExtractionJson,
-                    {
-                      address: contract.address,
-                      name: 'dao-dao-core/dump_state',
-                      blockHeight: height,
-                      blockTimeUnixMs: timeUnixMs,
-                      txHash,
-                      data: dumpState,
-                    } satisfies ExtractionJson,
-                  ] as const
-              ),
-            1_000
-          )
+    const contracts: ChainContract[] = []
+    const extractions: ExtractionJson[] = []
+    await batch({
+      list: addresses,
+      batchSize: 25,
+      task: async (address) => {
+        const contract = await client.getContract(address)
+        if (!daoDaoCoreCodeIds.includes(contract.codeId)) {
+          return
+        }
+
+        const [{ info }, dumpState] = await Promise.all([
+          client.queryContractSmart(address, {
+            info: {},
+          }),
+          client.queryContractSmart(address, {
+            dump_state: {},
+          }),
+        ])
+
+        contracts.push(contract)
+        extractions.push(
+          {
+            address: contract.address,
+            name: 'info',
+            blockHeight: height,
+            blockTimeUnixMs: timeUnixMs,
+            txHash,
+            data: info,
+          },
+          {
+            address: contract.address,
+            name: 'dao-dao-core/dump_state',
+            blockHeight: height,
+            blockTimeUnixMs: timeUnixMs,
+            txHash,
+            data: dumpState,
+          }
         )
-      )
-    ).flatMap((s) => (s.status === 'fulfilled' ? [s.value] : []))
+      },
+    })
 
     // Ensure contracts exist in the DB.
     const [, createdExtractions] = await Promise.all([
       Contract.bulkCreate(
-        extractions.map(([contract]) => ({
+        contracts.map((contract) => ({
           address: contract.address,
           codeId: contract.codeId,
           admin: contract.admin,
@@ -150,21 +155,42 @@ export const dao: ExtractorMaker<DaoExtractorData> = async ({
           conflictAttributes: ['address'],
         }
       ),
-      Extraction.bulkCreate(
-        extractions.flatMap(([, ...extractions]) => extractions),
-        {
-          updateOnDuplicate: ['blockTimeUnixMs', 'txHash', 'data'],
-          conflictAttributes: ['address', 'name', 'blockHeight'],
-          returning: true,
-        }
-      ),
+      Extraction.bulkCreate(extractions, {
+        updateOnDuplicate: ['blockTimeUnixMs', 'txHash', 'data'],
+        conflictAttributes: ['address', 'name', 'blockHeight'],
+        returning: true,
+      }),
     ])
 
     return createdExtractions
   }
 
+  const sync: Extractor<DaoExtractorData>['sync'] = async () => {
+    const client = autoCosmWasmClient.client
+    if (!client) {
+      throw new Error('CosmWasm client not connected')
+    }
+
+    const daoDaoCoreCodeIds =
+      WasmCodeService.getInstance().findWasmCodeIdsByKeys('dao-dao-core')
+
+    // Find all DAO contracts on the chain.
+    const addresses: string[] = []
+    for (const codeId of daoDaoCoreCodeIds) {
+      const contracts = await client.getContracts(codeId)
+      addresses.push(...contracts)
+    }
+
+    return [
+      {
+        addresses,
+      },
+    ]
+  }
+
   return {
     match,
     extract,
+    sync,
   }
 }
