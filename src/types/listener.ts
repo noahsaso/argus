@@ -6,6 +6,7 @@ import { AutoCosmWasmClient } from '@/utils'
 
 import { Config } from './config'
 import { DependableEventModel } from './db'
+import { SerializedBlock } from './misc'
 
 export type ExtractorMatchInput = {
   hash: string
@@ -16,7 +17,7 @@ export type ExtractorMatchInput = {
 
 export type ExtractorExtractInput<Data extends unknown = unknown> = {
   txHash: string
-  height: string
+  block: SerializedBlock
   data: Data
 }
 

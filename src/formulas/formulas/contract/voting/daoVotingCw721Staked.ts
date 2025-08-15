@@ -207,12 +207,24 @@ export const totalPowerAtHeight: ContractFormula<
     const height = env.args.height
       ? Number(env.args.height)
       : Number(env.block.height)
-    const power =
-      (await snapshotItemMayLoadAtHeight<string>({
-        env,
-        name: 'totalStakedNfts',
-        height,
-      })) ?? '0'
+
+    let power = await snapshotItemMayLoadAtHeight<string>({
+      env,
+      name: 'totalStakedNfts',
+      height,
+    })
+
+    // If power not found, try extraction.
+    if (!power) {
+      power = (
+        await env.getExtraction(
+          env.contractAddress,
+          `total_power_at_height:${BigInt(height).toString()}`
+        )
+      )?.data as string | undefined
+    }
+
+    power ??= '0'
 
     return {
       power,
@@ -275,6 +287,16 @@ export const stakedNfts: ContractFormula<
       throw new Error('missing `address`')
     }
 
+    // Get extraction, if exists.
+    const extractedTokenIds = (
+      (await env.getExtraction(env.contractAddress, `staker:${address}`))
+        ?.data as any
+    )?.stakedTokenIds
+    if (extractedTokenIds) {
+      return extractedTokenIds
+    }
+
+    // Fallback to state.
     const tokenIds = (
       await mapRange({
         env,
@@ -308,10 +330,19 @@ export const staker: ContractFormula<string, { tokenId: string }> = {
   compute: async ({
     contractAddress,
     getTransformationMatch,
+    getExtraction,
     args: { tokenId },
   }) => {
     if (!tokenId) {
       throw new Error('missing `tokenId`')
+    }
+
+    // Get extraction, if exists.
+    const extractedOwner = (
+      await getExtraction(contractAddress, `stakedNftOwner:${tokenId}`)
+    )?.data as string | undefined
+    if (extractedOwner) {
+      return extractedOwner
     }
 
     const owner = (
@@ -361,14 +392,36 @@ export const topStakers: ContractFormula<
     const {
       contractAddress,
       getTransformationMap,
+      getExtractionMap,
       args: { limit },
     } = env
 
     const limitNum = limit ? Math.max(0, Number(limit)) : Infinity
 
-    const nftBalancesMap =
-      (await getTransformationMap<string>(contractAddress, 'nftBalances')) ?? {}
-    const nftBalances = Object.entries(nftBalancesMap)
+    const [nftBalancesMap, stakerExtractions] = await Promise.all([
+      // State
+      getTransformationMap<string>(contractAddress, 'nftBalances').then(
+        (map) => map ?? {}
+      ),
+      // TX extractions
+      getExtractionMap<{
+        votingPower: string
+      }>(contractAddress, 'staker').then((map) => map ?? {}),
+    ])
+
+    // Combine.
+    const allBalances = {
+      ...nftBalancesMap,
+      // Override state with extractions.
+      ...Object.fromEntries(
+        Object.entries(stakerExtractions).map(([address, { votingPower }]) => [
+          address,
+          votingPower,
+        ])
+      ),
+    }
+
+    const nftBalances = Object.entries(allBalances)
       // Remove zero balances.
       .filter(([, balance]) => Number(balance) > 0)
       // Descending by balance.
@@ -409,11 +462,32 @@ export const ownersOfStakedNfts: ContractFormula<Record<string, string>> = {
     codeIdsKeys: CODE_IDS_KEYS,
   },
   compute: async (env) => {
-    const { contractAddress, getTransformationMap } = env
+    const { contractAddress, getTransformationMap, getExtractionMap } = env
 
-    const nftBalancesMap =
-      (await getTransformationMap<string>(contractAddress, 'nftBalances')) ?? {}
-    const stakers = Object.entries(nftBalancesMap)
+    const [nftBalancesMap, stakerExtractions] = await Promise.all([
+      // State
+      getTransformationMap<string>(contractAddress, 'nftBalances').then(
+        (map) => map ?? {}
+      ),
+      // TX extractions
+      getExtractionMap<{
+        votingPower: string
+      }>(contractAddress, 'stakedNftOwner').then((map) => map ?? {}),
+    ])
+
+    // Combine.
+    const allBalances = {
+      ...nftBalancesMap,
+      // Override state with extractions.
+      ...Object.fromEntries(
+        Object.entries(stakerExtractions).map(([address, { votingPower }]) => [
+          address,
+          votingPower,
+        ])
+      ),
+    }
+
+    const stakers = Object.entries(allBalances)
       // Remove zero balances.
       .filter(([, balance]) => Number(balance) > 0)
       .map(([address]) => address)

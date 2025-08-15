@@ -1753,12 +1753,12 @@ export const getEnv = ({
     })
 
     // Check cache.
-    const cachedEvent = cache.events[dependentKey]
-    const event =
+    const cachedExtraction = cache.events[dependentKey]
+    const extraction =
       // If undefined, we haven't tried to fetch it yet. If not undefined,
       // either it exists or it doesn't (null).
-      cachedEvent !== undefined
-        ? cachedEvent?.[0]
+      cachedExtraction !== undefined
+        ? cachedExtraction?.[0]
         : await Extraction.findOne({
             where: {
               address,
@@ -1770,24 +1770,106 @@ export const getEnv = ({
 
     // Type-check. Should never happen assuming dependent key namespaces are
     // unique across different event types.
-    if (event && !(event instanceof Extraction)) {
+    if (extraction && !(extraction instanceof Extraction)) {
       throw new Error('Incorrect event type.')
     }
 
-    // Cache event, null if nonexistent.
-    if (cachedEvent === undefined) {
-      cache.events[dependentKey] = event ? [event] : null
+    // Cache extraction, null if nonexistent.
+    if (cachedExtraction === undefined) {
+      cache.events[dependentKey] = extraction ? [extraction] : null
     }
 
-    // If no event found, return undefined.
-    if (!event) {
+    // If no extraction found, return undefined.
+    if (!extraction) {
       return
     }
 
     // Call hook.
-    await onFetch?.([event])
+    await onFetch?.([extraction])
 
-    return event.toJSON()
+    return extraction.toJSON()
+  }
+
+  const getExtractionMap: FormulaTransformationMapGetter = async (
+    address,
+    namePrefix
+  ) => {
+    const mapNamePrefix = namePrefix + ':'
+    const dependentKey = getDependentKey(
+      Extraction.dependentKeyNamespace,
+      address,
+      mapNamePrefix
+    )
+    dependentKeys?.push({
+      key: dependentKey,
+      prefix: true,
+    })
+
+    // Check cache.
+    const cachedExtractions = cache.events[dependentKey]
+    const extractions =
+      // If undefined, we haven't tried to fetch them yet. If not undefined,
+      // either they exist or they don't (null).
+      cachedExtractions !== undefined
+        ? ((cachedExtractions ?? []) as Extraction[])
+        : await Extraction.findAll({
+            attributes: [
+              // DISTINCT ON is not directly supported by Sequelize, so we need
+              // to cast to unknown and back to string to insert this at the
+              // beginning of the query. This ensures we use the most recent
+              // version of the name for each contract.
+              Sequelize.literal(
+                'DISTINCT ON("name") \'\''
+              ) as unknown as string,
+              // Include `id` so that Sequelize doesn't prepend it to the query
+              // before the DISTINCT ON, which must come first.
+              'id',
+              'name',
+              'address',
+              'blockHeight',
+              'blockTimeUnixMs',
+              'data',
+            ],
+            where: {
+              address,
+              name: {
+                [Op.like]: mapNamePrefix + '%',
+              },
+              blockHeight: blockHeightFilter,
+            },
+            order: [
+              // Needs to be first so we can use DISTINCT ON.
+              ['name', 'ASC'],
+              ['blockHeight', 'DESC'],
+            ],
+          })
+
+    // Type-check. Should never happen assuming dependent key namespaces are
+    // unique across different event types.
+    if (extractions.some((extraction) => !(extraction instanceof Extraction))) {
+      throw new Error('Incorrect event type.')
+    }
+
+    // Cache extractions, null if nonexistent.
+    if (cachedExtractions === undefined) {
+      cache.events[dependentKey] = extractions.length ? extractions : null
+    }
+
+    // If no extractions found, return undefined.
+    if (!extractions.length) {
+      return undefined
+    }
+
+    // Call hook.
+    await onFetch?.(extractions)
+
+    // If extractions found, create map.
+    const map: Record<string, any> = {}
+    for (const extraction of extractions) {
+      map[extraction.name.slice(mapNamePrefix.length)] = extraction.data
+    }
+
+    return map
   }
 
   const getFeegrantAllowance = async (granter: string, grantee: string) => {
@@ -1975,6 +2057,8 @@ export const getEnv = ({
     getCommunityPoolBalances,
 
     getExtraction,
+    getExtractionMap,
+
     getFeegrantAllowance,
     getFeegrantAllowances,
     hasFeegrantAllowance,
