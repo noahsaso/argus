@@ -5,17 +5,9 @@ import retry from 'async-await-retry'
 import { LRUCache } from 'lru-cache'
 import { Sequelize } from 'sequelize'
 
-import {
-  AccountWebhook,
-  Block,
-  Contract,
-  State,
-  WasmStateEvent,
-  WasmStateEventTransformation,
-} from '@/db'
-import { WasmCodeTrackersQueue } from '@/queues/queues'
+import { Block, Contract, State, WasmStateEvent } from '@/db'
+import { TransformQueue, WasmCodeTrackersQueue } from '@/queues/queues'
 import { WasmCodeService } from '@/services'
-import { transformParsedStateEvents } from '@/transformers'
 import {
   Handler,
   HandlerMaker,
@@ -525,76 +517,37 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
       })
     )
 
-    // Add code ID to parsed events.
-    stateEvents.forEach((stateEvent) => {
-      const contract = contractMap[stateEvent.contractAddress]
-      if (contract) {
-        stateEvent.codeId = contract.codeId
-      }
-    })
-
     // Remove events that don't have a contract or code ID.
     exportedEvents = exportedEvents.filter(
       (event) => event.contract !== undefined
     )
-    stateEvents = stateEvents.filter((stateEvent) => stateEvent.codeId > 0)
 
-    // Transform events as needed.
-    // Retry 3 times with exponential backoff starting at 100ms delay.
-    const transformations = (await retry(
-      transformParsedStateEvents,
-      [stateEvents],
-      {
-        retriesMax: 3,
-        exponential: true,
-        interval: 100,
-      }
-    )) as WasmStateEventTransformation[]
-
-    // Add contract to transformations.
-    await Promise.all(
-      transformations.map(async (transformation) => {
-        let contract = contractMap[transformation.contractAddress]
-        // Fetch contract if it wasn't found.
-        let missingContract = false
-        if (!contract) {
-          contract = (await transformation.$get('contract')) ?? undefined
-          missingContract = true
-        }
-
-        if (contract) {
-          if (missingContract) {
-            // Save for other transformations.
-            contracts.push(contract)
-            contractMap[contract.address] = contract
-          }
-
-          transformation.contract = contract
-        }
+    // Queue transformations.
+    if (exportedEvents.length > 0) {
+      await TransformQueue.add(exportedEvents[0].blockHeight, {
+        wasmStateEventIds: exportedEvents.map((event) => event.id),
       })
-    )
-
-    const createdEvents = [...exportedEvents, ...transformations]
-
-    // Queue webhooks as needed.
-    if (sendWebhooks) {
-      const { lastWasmBlockHeightExported } = await State.mustGetSingleton()
-
-      // Don't queue webhooks for events before `lastWasmBlockHeightExported` to
-      // ensure that webhooks aren't sent more than once if we're catching up
-      // from a block we already processed. This happens when  restoring from an
-      // earlier snapshot, likely due to an error or to save space.
-      const potentialUnsentWebhookEvents = exportedEvents.filter(
-        (e) =>
-          // Include events on the last block we exported in case events from
-          // the same block were exported in separate batches and thus processed
-          // separately.
-          e.block.height >= BigInt(lastWasmBlockHeightExported || '0')
-      )
-      if (potentialUnsentWebhookEvents.length > 0) {
-        await AccountWebhook.queueWebhooks(potentialUnsentWebhookEvents)
-      }
     }
+
+    // // Queue account webhooks as needed.
+    // if (sendWebhooks) {
+    //   const { lastWasmBlockHeightExported } = await State.mustGetSingleton()
+
+    //   // Don't queue webhooks for events before `lastWasmBlockHeightExported` to
+    //   // ensure that webhooks aren't sent more than once if we're catching up
+    //   // from a block we already processed. This happens when  restoring from an
+    //   // earlier snapshot, likely due to an error or to save space.
+    //   const potentialUnsentWebhookEvents = exportedEvents.filter(
+    //     (e) =>
+    //       // Include events on the last block we exported in case events from
+    //       // the same block were exported in separate batches and thus processed
+    //       // separately.
+    //       e.block.height >= BigInt(lastWasmBlockHeightExported || '0')
+    //   )
+    //   if (potentialUnsentWebhookEvents.length > 0) {
+    //     await AccountWebhook.queueWebhooks(potentialUnsentWebhookEvents)
+    //   }
+    // }
 
     // Store last block height exported, and update latest block
     // height/time if the last export is newer.
@@ -622,7 +575,7 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
       ),
     })
 
-    return createdEvents
+    return exportedEvents
   }
 
   return {
