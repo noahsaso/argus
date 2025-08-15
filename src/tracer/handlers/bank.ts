@@ -6,6 +6,7 @@ import { Sequelize } from 'sequelize'
 import { BankBalance, BankStateEvent, Block, Contract, State } from '@/db'
 import { WasmCodeService } from '@/services'
 import { Handler, HandlerMaker, ParsedBankStateEvent } from '@/types'
+import { batch } from '@/utils'
 
 const STORE_NAME = 'bank'
 // Keep all bank balance history for contracts matching these code IDs keys.
@@ -208,6 +209,14 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
         }
       }
 
+      const bankBalances = Object.values(addressToExistingBalance)
+      // Save all BankBalance records in batches of 100.
+      await batch({
+        list: bankBalances,
+        batchSize: 100,
+        task: (balance) => balance.save(),
+      })
+
       // Find contracts for all addresses matching code IDs so we know which
       // addresses to save history for.
       const codeIds = WasmCodeService.getInstance().findWasmCodeIdsByKeys(
@@ -232,39 +241,16 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
       const keepHistoryEvents = events.filter((event) =>
         addressesToKeepHistoryFor.includes(event.address)
       )
-
-      const [bankBalances, bankStateEvents] = await Promise.all([
-        BankBalance.bulkCreate(
-          Object.values(addressToExistingBalance).map((balance) => ({
-            address: balance.address,
-            balances: balance.balances,
-            denomUpdateBlockHeights: balance.denomUpdateBlockHeights,
-            blockHeight: balance.blockHeight,
-            blockTimeUnixMs: balance.blockTimeUnixMs,
-            blockTimestamp: balance.blockTimestamp,
-          })),
-          {
-            updateOnDuplicate: [
-              'balances',
-              'denomUpdateBlockHeights',
-              'blockHeight',
-              'blockTimeUnixMs',
-              'blockTimestamp',
-            ],
-            conflictAttributes: ['address'],
-          }
-        ),
-        // Unique index on [blockHeight, address, denom] ensures that we don't
-        // insert duplicate events. If we encounter a duplicate, we update the
-        // `balance` field in case event processing for a block was batched
-        // separately.
-        keepHistoryEvents.length
-          ? BankStateEvent.bulkCreate(keepHistoryEvents, {
-              updateOnDuplicate: ['balance'],
-              conflictAttributes: ['address', 'denom', 'blockHeight'],
-            })
-          : [],
-      ])
+      // Unique index on [blockHeight, address, denom] ensures that we don't
+      // insert duplicate events. If we encounter a duplicate, we update the
+      // `balance` field in case event processing for a block was batched
+      // separately.
+      const bankStateEvents = keepHistoryEvents.length
+        ? await BankStateEvent.bulkCreate(keepHistoryEvents, {
+            updateOnDuplicate: ['balance'],
+            conflictAttributes: ['address', 'denom', 'blockHeight'],
+          })
+        : []
 
       return [...bankBalances, ...bankStateEvents].sort(
         (a, b) => Number(a.blockHeight) - Number(b.blockHeight)
