@@ -208,20 +208,28 @@ export const totalPowerAtHeight: ContractFormula<
       ? Number(env.args.height)
       : Number(env.block.height)
 
-    let power = await snapshotItemMayLoadAtHeight<string>({
-      env,
-      name: 'totalStakedNfts',
-      height,
-    })
+    // Load from extraction.
+    let power = Object.entries(
+      (await env.getExtractionMap<string>(
+        env.contractAddress,
+        'total_power_at_height'
+      )) ?? {}
+    )
+      // Find highest entry whose height is less than the target height, since
+      // this query uses snapshot maps which return the old value at a height.
+      .sort(([a], [b]) => Number(b) - Number(a))
+      .find(([entryHeight]) => Number(entryHeight) < height)?.[1] as
+      | string
+      | undefined
+      | null
 
-    // If power not found, try extraction.
+    // Fallback to state.
     if (!power) {
-      power = (
-        await env.getExtraction(
-          env.contractAddress,
-          `total_power_at_height:${BigInt(height).toString()}`
-        )
-      )?.data as string | undefined
+      power = await snapshotItemMayLoadAtHeight<string>({
+        env,
+        name: 'totalStakedNfts',
+        height,
+      })
     }
 
     power ??= '0'
@@ -472,7 +480,7 @@ export const ownersOfStakedNfts: ContractFormula<Record<string, string>> = {
       // TX extractions
       getExtractionMap<{
         votingPower: string
-      }>(contractAddress, 'stakedNftOwner').then((map) => map ?? {}),
+      }>(contractAddress, 'staker').then((map) => map ?? {}),
     ])
 
     // Combine.

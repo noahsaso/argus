@@ -34,7 +34,7 @@ describe('NFT Stake Update Extractor', () => {
         getContract: vi.fn(),
         queryContractSmart: vi.fn(),
         getBlock: vi.fn(),
-        getHeight: vi.fn(),
+        getHeight: vi.fn().mockResolvedValue(1001),
       },
     } as any
 
@@ -194,16 +194,13 @@ describe('NFT Stake Update Extractor', () => {
       expect(
         mockAutoCosmWasmClient.client!.queryContractSmart
       ).toHaveBeenCalledWith('juno1nftvoting123contract456', {
-        total_power_at_height: {
-          height: 1000,
-        },
+        total_power_at_height: {},
       })
       expect(
         mockAutoCosmWasmClient.client!.queryContractSmart
       ).toHaveBeenCalledWith('juno1nftvoting123contract456', {
         voting_power_at_height: {
           address: 'juno1staker123',
-          height: 1000,
         },
       })
       expect(

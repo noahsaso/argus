@@ -121,6 +121,15 @@ export const nftStakeUpdate: ExtractorMaker<
       throw new Error('CosmWasm client not connected')
     }
 
+    // Wait 1 block to ensure staked balances are updated.
+    while (true) {
+      const currentHeight = await client.getHeight()
+      if (currentHeight > Number(height)) {
+        break
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+    }
+
     const daoVotingCw721StakedCodeIds =
       WasmCodeService.getInstance().findWasmCodeIdsByKeys(
         'dao-voting-cw721-staked'
@@ -151,9 +160,7 @@ export const nftStakeUpdate: ExtractorMaker<
               // Get total voting power at height.
               const totalVotingPower = await client
                 .queryContractSmart(contractAddress, {
-                  total_power_at_height: {
-                    height: Number(height),
-                  },
+                  total_power_at_height: {},
                 })
                 .then(({ power }) => power as string)
 
@@ -175,7 +182,6 @@ export const nftStakeUpdate: ExtractorMaker<
                     .queryContractSmart(contractAddress, {
                       voting_power_at_height: {
                         address,
-                        height: Number(height),
                       },
                     })
                     .then(({ power }) => power as string)
