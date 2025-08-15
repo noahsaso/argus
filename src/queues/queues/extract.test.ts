@@ -58,7 +58,11 @@ describe('ExtractQueue', () => {
         extractor: 'dao',
         data: {
           txHash: 'test-hash-123',
-          height: '1000',
+          block: {
+            height: '1000',
+            timeUnixMs: '1640995200000',
+            timestamp: '2022-01-01T00:00:00Z',
+          },
           data: {
             addresses: ['juno1test123contract456'],
           },
@@ -103,7 +107,11 @@ describe('ExtractQueue', () => {
 
       expect(mockExtractor.extract).toHaveBeenCalledWith({
         txHash: 'test-hash-123',
-        height: '1000',
+        block: {
+          height: '1000',
+          timeUnixMs: '1640995200000',
+          timestamp: '2022-01-01T00:00:00Z',
+        },
         data: {
           addresses: ['juno1test123contract456'],
         },
@@ -123,7 +131,11 @@ describe('ExtractQueue', () => {
           extractor: 'nonexistent',
           data: {
             txHash: 'test-hash',
-            height: '1000',
+            block: {
+              height: '1000',
+              timeUnixMs: '1640995200000',
+              timestamp: '2022-01-01T00:00:00Z',
+            },
             data: {},
           },
         },
@@ -305,7 +317,11 @@ describe('ExtractQueue', () => {
           extractor: 'testExtractor',
           data: {
             txHash: 'test-hash-456',
-            height: '1001',
+            block: {
+              height: '1001',
+              timeUnixMs: '1640995260000',
+              timestamp: '2022-01-01T00:00:00Z',
+            },
             data: { test: 'payload' },
           },
         },
@@ -316,7 +332,11 @@ describe('ExtractQueue', () => {
 
       expect(secondExtractor.extract).toHaveBeenCalledWith({
         txHash: 'test-hash-456',
-        height: '1001',
+        block: {
+          height: '1001',
+          timeUnixMs: '1640995260000',
+          timestamp: '2022-01-01T00:00:00Z',
+        },
         data: { test: 'payload' },
       })
     })

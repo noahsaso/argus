@@ -218,6 +218,16 @@ export const nftStakeUpdate: ExtractorMaker<
                       stakedTokenIds,
                     },
                   })
+                  stakedTokenIds.forEach((tokenId) => {
+                    extractions.push({
+                      address: contractAddress,
+                      name: `stakedNftOwner:${tokenId}`,
+                      blockHeight: height,
+                      blockTimeUnixMs: timeUnixMs,
+                      txHash,
+                      data: address,
+                    })
+                  })
                 },
               })
 

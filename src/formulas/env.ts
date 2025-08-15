@@ -1842,7 +1842,6 @@ export const getEnv = ({
               ['name', 'ASC'],
               ['blockHeight', 'DESC'],
             ],
-            include: Contract,
           })
 
     // Type-check. Should never happen assuming dependent key namespaces are
