@@ -1,6 +1,7 @@
 import * as Sentry from '@sentry/node'
 
 import { State } from '@/db'
+import { ExportBackgroundQueue } from '@/queues/queues'
 import { ExportQueue } from '@/queues/queues/export'
 import { TracedEvent } from '@/types'
 
@@ -163,20 +164,35 @@ export class BatchedTraceExporter {
       this.pendingBatch[this.pendingBatch.length - 1].trace.metadata.blockHeight
     )
 
-    // Export to queue
-    await ExportQueue.add(
-      blockHeight.toString(),
-      uniqueBatchData.map(({ handler, data }) => {
-        // Remove ID since it's no longer relevant.
-        const exportData = { ...data }
-        delete exportData.id
+    // Export to queues
+    await Promise.all([
+      ExportQueue.add(
+        blockHeight.toString(),
+        uniqueBatchData.map(({ handler, data }) => {
+          // Remove ID since it's no longer relevant.
+          const exportData = { ...data }
+          delete exportData.id
 
-        return {
-          handler,
-          data: exportData,
-        }
-      })
-    )
+          return {
+            handler,
+            data: exportData,
+          }
+        })
+      ),
+      ExportBackgroundQueue.add(
+        blockHeight.toString(),
+        uniqueBatchData.map(({ handler, data }) => {
+          // Remove ID since it's no longer relevant.
+          const exportData = { ...data }
+          delete exportData.id
+
+          return {
+            handler,
+            data: exportData,
+          }
+        })
+      ),
+    ])
 
     console.log(
       `\n[${new Date().toISOString()}] Exported ${this.pendingBatch.length.toLocaleString()} events for block ${blockHeight.toLocaleString()}.`

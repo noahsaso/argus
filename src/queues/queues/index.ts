@@ -1,4 +1,5 @@
 export { ExportQueue } from './export'
+export { ExportBackgroundQueue } from './export-background'
 export { ExtractQueue } from './extract'
 export { SearchQueue } from './search'
 export { TransformationsQueue } from './transformations'

@@ -16,21 +16,23 @@ import { closeBullQueue, getBullQueue, getBullQueueEvents } from '../connection'
  * Payload for items in the export queue, which consists of handler and data
  * match pairings.
  */
-export type ExportQueuePayload = {
+export type ExportBackgroundQueuePayload = {
   handler: string
   data: unknown
 }[]
 
-export class ExportQueue extends BaseQueue<ExportQueuePayload> {
-  static queueName = 'export'
+export class ExportBackgroundQueue extends BaseQueue<ExportBackgroundQueuePayload> {
+  static queueName = 'export-background'
+  static concurrency = 10
 
-  static getQueue = () => getBullQueue<ExportQueuePayload>(this.queueName)
+  static getQueue = () =>
+    getBullQueue<ExportBackgroundQueuePayload>(this.queueName)
   static getQueueEvents = () => getBullQueueEvents(this.queueName)
   static add = async (
-    ...params: Parameters<Queue<ExportQueuePayload>['add']>
+    ...params: Parameters<Queue<ExportBackgroundQueuePayload>['add']>
   ) => (await this.getQueue()).add(...params)
   static addBulk = async (
-    ...params: Parameters<Queue<ExportQueuePayload>['addBulk']>
+    ...params: Parameters<Queue<ExportBackgroundQueuePayload>['addBulk']>
   ) => (await this.getQueue()).addBulk(...params)
   static close = () => closeBullQueue(this.queueName)
 
@@ -53,12 +55,12 @@ export class ExportQueue extends BaseQueue<ExportQueuePayload> {
         chainId:
           state?.chainId || autoCosmWasmClient.chainId || config.chainId || '',
       })
-    ).filter(({ handler }) => handler.process)
+    ).filter(({ handler }) => handler.processBackground)
 
     this.handlers = handlers
   }
 
-  process({ data, log }: Job<ExportQueuePayload>): Promise<void> {
+  process({ data, log }: Job<ExportBackgroundQueuePayload>): Promise<void> {
     return new Promise<void>(async (resolve, reject) => {
       // Time out if takes more than 30 seconds.
       let timeout: NodeJS.Timeout | null = setTimeout(() => {
@@ -79,12 +81,12 @@ export class ExportQueue extends BaseQueue<ExportQueuePayload> {
         // Process data.
         for (const { name, handler } of this.handlers) {
           const events = groupedData[name]
-          if (!events?.length || !handler.process) {
+          if (!events?.length || !handler.processBackground) {
             continue
           }
 
           // Retry 3 times with exponential backoff starting at 100ms delay.
-          const models = await retry(handler.process, [events], {
+          const models = await retry(handler.processBackground, [events], {
             retriesMax: 3,
             exponential: true,
             interval: 100,

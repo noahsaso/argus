@@ -24,9 +24,14 @@ export type Handler<Data extends unknown = unknown> = {
     | undefined
   /**
    * The function that will be called with queued objects. Returns created
-   * events.
+   * events. This is blocking.
    */
-  process: (data: Data[]) => Promise<DependableEventModel[]>
+  process?: (data: Data[]) => Promise<DependableEventModel[]>
+  /**
+   * The function that will be called with queued objects. Returns created
+   * events. This is used for background processing and is non-blocking.
+   */
+  processBackground?: (data: Data[]) => Promise<DependableEventModel[]>
 }
 
 export type HandlerMakerOptions = {
