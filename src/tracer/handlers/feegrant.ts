@@ -125,6 +125,7 @@ export const feegrant: HandlerMaker<ParsedFeegrantStateEvent> = async ({
           'parsedAllowanceType',
           'parsedExpirationUnixMs',
         ],
+        conflictAttributes: ['granter', 'grantee', 'blockHeight'],
       })
     }
 
