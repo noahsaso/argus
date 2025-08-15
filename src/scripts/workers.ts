@@ -18,8 +18,13 @@ program.option(
   '--no-webhooks',
   "don't send webhooks"
 )
+program.option(
+  '-m, --mode <mode>',
+  'mode to run in (default, background)',
+  'default'
+)
 program.parse()
-const { config: _config, webhooks } = program.opts()
+const { config: _config, webhooks, mode } = program.opts()
 
 // Load config from specific config file.
 const config = ConfigManager.load(_config)
@@ -71,13 +76,19 @@ const main = async () => {
     sendWebhooks: !!webhooks,
   }
 
-  const workers = await Promise.all(
-    queues.map(async (Queue) => {
-      const queue = new Queue(options)
-      await queue.init()
-      return queue.getWorker()
-    })
-  )
+  const workers = (
+    await Promise.all(
+      queues.map(async (Queue) => {
+        const queue = new Queue(options)
+        if (queue.mode !== mode) {
+          return []
+        }
+
+        await queue.init()
+        return queue.getWorker()
+      })
+    )
+  ).flat()
 
   // Add shutdown signal handler.
   process.on('SIGINT', () => {
