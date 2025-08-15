@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 
-import { FeegrantAllowance } from '@/db'
+import { Op } from 'sequelize'
+
+import { FeegrantAllowance, loadDb } from '@/db'
+import { DbType } from '@/types'
 import { parseAllowanceData } from '@/utils'
 
 /**
@@ -10,38 +13,57 @@ import { parseAllowanceData } from '@/utils'
 async function backfillFeegrantParsedData() {
   console.log('Starting feegrant parsed data backfill...')
 
+  const db = await loadDb({
+    type: DbType.Data,
+  })
+
   try {
     // Get all allowances that don't have parsed data yet
-    const allowances = await FeegrantAllowance.findAll({
+    const allowanceCount = await FeegrantAllowance.count({
       where: {
         parsedAmount: null,
         allowanceData: {
-          $ne: '',
+          [Op.ne]: '',
         },
       },
-      order: [['blockHeight', 'ASC']],
     })
 
-    console.log(`Found ${allowances.length} allowances to backfill`)
+    console.log(
+      `Found ${allowanceCount.toLocaleString()} allowances to backfill`
+    )
 
     let processed = 0
     let updated = 0
 
     // Process in batches to avoid memory issues
-    const batchSize = 100
-    for (let i = 0; i < allowances.length; i += batchSize) {
-      const batch = allowances.slice(i, i + batchSize)
+    const batchSize = 500
+    const batchCount = Math.ceil(allowanceCount / batchSize)
+    let lastId = '0'
 
-      console.log(
-        `Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(
-          allowances.length / batchSize
-        )}`
-      )
+    for (let i = 0; i < batchCount; i++) {
+      const allowanceBatch = await FeegrantAllowance.findAll({
+        where: {
+          id: {
+            [Op.gt]: lastId,
+          },
+          parsedAmount: null,
+          allowanceData: {
+            [Op.ne]: '',
+          },
+        },
+        order: [['id', 'ASC']],
+        limit: batchSize,
+      })
 
-      for (const allowance of batch) {
+      lastId = allowanceBatch[allowanceBatch.length - 1].id
+
+      console.log(`Processing batch ${i + 1}/${batchCount}`)
+
+      const updates = allowanceBatch.flatMap((allowance) => {
         try {
           // Parse the allowance data
           const parsed = parseAllowanceData(allowance.allowanceData)
+          processed++
 
           // Update the record if we got any parsed data
           if (
@@ -50,35 +72,55 @@ async function backfillFeegrantParsedData() {
             parsed.allowanceType ||
             parsed.expirationUnixMs
           ) {
-            await allowance.update({
+            updated++
+            return {
+              id: allowance.id,
+              granter: allowance.granter,
+              grantee: allowance.grantee,
+              blockHeight: allowance.blockHeight,
+              blockTimeUnixMs: allowance.blockTimeUnixMs,
+              blockTimestamp: allowance.blockTimestamp,
+              allowanceData: allowance.allowanceData,
+              allowanceType: allowance.allowanceType,
+              active: allowance.active,
               parsedAmount: parsed.amount || null,
               parsedDenom: parsed.denom || null,
               parsedAllowanceType: parsed.allowanceType || null,
               parsedExpirationUnixMs: parsed.expirationUnixMs || null,
-            })
-            updated++
-          }
-
-          processed++
-
-          if (processed % 50 === 0) {
-            console.log(
-              `Processed ${processed}/${allowances.length} allowances (${updated} updated)`
-            )
+            }
           }
         } catch (error) {
           console.error(`Error processing allowance ${allowance.id}:`, error)
         }
-      }
+
+        return []
+      })
+
+      await FeegrantAllowance.bulkCreate(updates, {
+        updateOnDuplicate: [
+          'parsedAmount',
+          'parsedDenom',
+          'parsedAllowanceType',
+          'parsedExpirationUnixMs',
+        ],
+        conflictAttributes: ['id'],
+      })
+
+      console.log(
+        `Processed ${processed.toLocaleString()}/${allowanceCount.toLocaleString()} allowances (${updated.toLocaleString()} updated)`
+      )
 
       // Small delay between batches to avoid overwhelming the database
       await new Promise((resolve) => setTimeout(resolve, 100))
     }
 
     console.log(`Backfill completed!`)
-    console.log(`- Total processed: ${processed}`)
-    console.log(`- Total updated: ${updated}`)
-    console.log(`- Skipped (no parseable data): ${processed - updated}`)
+    console.log(`- Total processed: ${processed.toLocaleString()}`)
+    console.log(`- Total updated: ${updated.toLocaleString()}`)
+    console.log(
+      `- Skipped (no parseable data): ${processed - updated}`.toLocaleString()
+    )
+    process.exit(0)
   } catch (error) {
     console.error('Error during backfill:', error)
     process.exit(1)
