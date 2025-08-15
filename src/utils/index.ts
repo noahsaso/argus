@@ -1,3 +1,4 @@
+export * from './AsyncProfiler'
 export * from './AutoCosmWasmClient'
 export * from './block'
 export * from './chain'

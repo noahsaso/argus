@@ -5,7 +5,7 @@ import { QueryTypes, Sequelize } from 'sequelize'
 import { BankDenomBalance, BankStateEvent, Block, Contract, State } from '@/db'
 import { WasmCodeService } from '@/services'
 import { Handler, HandlerMaker, ParsedBankStateEvent } from '@/types'
-import { retry } from '@/utils'
+import { AsyncProfiler, retry } from '@/utils'
 
 const STORE_NAME = 'bank'
 // Keep all bank balance history for contracts matching these code IDs keys.
@@ -129,12 +129,17 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
   const process: Handler<ParsedBankStateEvent>['process'] = async (events) => {
     const exportEvents = async () => {
       // Save blocks from events.
-      await Block.createMany(
-        [...new Set(events.map((e) => e.blockHeight))].map((height) => ({
-          height,
-          timeUnixMs: events.find((e) => e.blockHeight === height)!
-            .blockTimeUnixMs,
-        }))
+      await AsyncProfiler.profile(
+        () =>
+          Block.createMany(
+            [...new Set(events.map((e) => e.blockHeight))].map((height) => ({
+              height,
+              timeUnixMs: events.find((e) => e.blockHeight === height)!
+                .blockTimeUnixMs,
+            }))
+          ),
+        'Block.createMany',
+        'bank-handler-blocks'
       )
 
       // Get unique addresses with balance updates.
@@ -147,17 +152,22 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
       )
       const addressesToKeepHistoryFor = codeIds.length
         ? (
-            await Contract.findAll({
-              where: {
-                address: uniqueAddresses.filter(
-                  (address) =>
-                    !BANK_HISTORY_EXCLUDED_ADDRESSES.has(
-                      `${chainId}:${address}`
-                    )
-                ),
-                codeId: codeIds,
-              },
-            })
+            await AsyncProfiler.profile(
+              () =>
+                Contract.findAll({
+                  where: {
+                    address: uniqueAddresses.filter(
+                      (address) =>
+                        !BANK_HISTORY_EXCLUDED_ADDRESSES.has(
+                          `${chainId}:${address}`
+                        )
+                    ),
+                    codeId: codeIds,
+                  },
+                }),
+              `Contract.findAll for history (${uniqueAddresses.length} addresses, ${codeIds.length} codeIds)`,
+              'bank-handler-find-contracts-for-history'
+            )
           ).map((contract) => contract.address)
         : []
 
@@ -167,10 +177,15 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
 
       const [bankStateEvents, bankDenomBalances] = await Promise.all([
         keepHistoryEvents.length
-          ? BankStateEvent.bulkCreate(keepHistoryEvents, {
-              updateOnDuplicate: ['balance'],
-              conflictAttributes: ['address', 'denom', 'blockHeight'],
-            })
+          ? AsyncProfiler.profile(
+              () =>
+                BankStateEvent.bulkCreate(keepHistoryEvents, {
+                  updateOnDuplicate: ['balance'],
+                  conflictAttributes: ['address', 'denom', 'blockHeight'],
+                }),
+              'BankStateEvent.bulkCreate',
+              'bank-handler-bank-state-events'
+            )
           : [],
         // Custom upsert logic to only update when blockHeight is newer
         (async () => {
@@ -267,24 +282,29 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
     )[events.length - 1]
     const lastBlockHeightExported = lastEvent.blockHeight
     const lastBlockTimeUnixMsExported = lastEvent.blockTimeUnixMs
-    await State.updateSingleton({
-      lastBankBlockHeightExported: Sequelize.fn(
-        'GREATEST',
-        Sequelize.col('lastBankBlockHeightExported'),
-        lastBlockHeightExported
-      ),
+    await AsyncProfiler.profile(
+      () =>
+        State.updateSingleton({
+          lastBankBlockHeightExported: Sequelize.fn(
+            'GREATEST',
+            Sequelize.col('lastBankBlockHeightExported'),
+            lastBlockHeightExported
+          ),
 
-      latestBlockHeight: Sequelize.fn(
-        'GREATEST',
-        Sequelize.col('latestBlockHeight'),
-        lastBlockHeightExported
-      ),
-      latestBlockTimeUnixMs: Sequelize.fn(
-        'GREATEST',
-        Sequelize.col('latestBlockTimeUnixMs'),
-        lastBlockTimeUnixMsExported
-      ),
-    })
+          latestBlockHeight: Sequelize.fn(
+            'GREATEST',
+            Sequelize.col('latestBlockHeight'),
+            lastBlockHeightExported
+          ),
+          latestBlockTimeUnixMs: Sequelize.fn(
+            'GREATEST',
+            Sequelize.col('latestBlockTimeUnixMs'),
+            lastBlockTimeUnixMsExported
+          ),
+        }),
+      'State.updateSingleton',
+      'bank-handler-state-update'
+    )
 
     return exportedEvents
   }
