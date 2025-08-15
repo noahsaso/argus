@@ -52,7 +52,6 @@ const CONTRACT_STATE_EVENT_KEY_ALLOWLIST: Partial<
 
 export const wasm: HandlerMaker<WasmExportData> = async ({
   config: { bech32Prefix, onlyExportKnownCodeIds },
-  sendWebhooks,
   autoCosmWasmClient,
 }) => {
   const chainId =
