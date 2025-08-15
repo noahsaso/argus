@@ -15,7 +15,7 @@ export type TransformQueuePayload = {
 
 export class TransformQueue extends BaseQueue<TransformQueuePayload> {
   static queueName = 'transform'
-  static concurrency = 10
+  static concurrency = 5
 
   static getQueue = () => getBullQueue<TransformQueuePayload>(this.queueName)
   static getQueueEvents = () => getBullQueueEvents(this.queueName)
@@ -51,44 +51,50 @@ export class TransformQueue extends BaseQueue<TransformQueuePayload> {
           100
         )
 
-        const contractMap: Record<string, Contract | undefined> =
-          Object.fromEntries(
-            wasmStateEvents.map(({ contract }) => [contract.address, contract])
-          )
-
-        // Add contract to transformations.
-        transformations.forEach((transformation) => {
-          transformation.contract = contractMap[transformation.contractAddress]!
-        })
-
-        const models = [...wasmStateEvents, ...transformations]
-
-        // Queue Meilisearch index updates.
-        const queued = (
-          await Promise.all(
-            models.map((model) => queueMeilisearchIndexUpdates(model))
-          )
-        ).reduce((acc, q) => acc + q, 0)
-
-        if (queued > 0) {
-          console.log(
-            `[${new Date().toISOString()}] Queued ${queued.toLocaleString()} search index update(s).`
-          )
-        }
-
-        // Queue webhooks.
-        if (this.options.sendWebhooks) {
-          const queued = await queueWebhooks(models).catch((err) => {
-            console.error(
-              `[${new Date().toISOString()}] Error queuing webhooks: ${err}`
+        if (transformations.length) {
+          const contractMap: Record<string, Contract | undefined> =
+            Object.fromEntries(
+              wasmStateEvents.map(({ contract }) => [
+                contract.address,
+                contract,
+              ])
             )
-            return 0
+
+          // Add contract to transformations.
+          transformations.forEach((transformation) => {
+            transformation.contract =
+              contractMap[transformation.contractAddress]!
           })
+
+          // Queue Meilisearch index updates.
+          const queued = (
+            await Promise.all(
+              transformations.map((transformation) =>
+                queueMeilisearchIndexUpdates(transformation)
+              )
+            )
+          ).reduce((acc, q) => acc + q, 0)
 
           if (queued > 0) {
             console.log(
-              `[${new Date().toISOString()}] Queued ${queued.toLocaleString()} webhook(s).`
+              `[${new Date().toISOString()}] Queued ${queued.toLocaleString()} search index update(s).`
             )
+          }
+
+          // Queue webhooks.
+          if (this.options.sendWebhooks) {
+            const queued = await queueWebhooks(transformations).catch((err) => {
+              console.error(
+                `[${new Date().toISOString()}] Error queuing webhooks: ${err}`
+              )
+              return 0
+            })
+
+            if (queued > 0) {
+              console.log(
+                `[${new Date().toISOString()}] Queued ${queued.toLocaleString()} webhook(s).`
+              )
+            }
           }
         }
 
