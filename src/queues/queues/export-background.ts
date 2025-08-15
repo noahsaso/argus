@@ -79,56 +79,53 @@ export class ExportBackgroundQueue extends BaseQueue<ExportBackgroundQueuePayloa
           {} as Record<string, any[]>
         )
 
-        // Process data.
-        for (const { name, handler } of this.handlers) {
-          const events = groupedData[name]
-          if (!events?.length || !handler.processBackground) {
-            continue
-          }
-
-          // Retry 3 times with exponential backoff starting at 100ms delay.
-          const models = await retry(handler.processBackground, [events], {
-            retriesMax: 3,
-            exponential: true,
-            interval: 100,
-          })
-
-          if (models && Array.isArray(models) && models.length) {
-            // Queue Meilisearch index updates.
-            const queued = (
-              await Promise.all(
-                models.map((event) => queueMeilisearchIndexUpdates(event))
-              )
-            ).reduce((acc, q) => acc + q, 0)
-
-            if (queued > 0) {
-              console.log(
-                `[${new Date().toISOString()}] Queued ${queued.toLocaleString()} search index update(s).`
-              )
+        // Process handlers in parallel.
+        await Promise.all(
+          this.handlers.map(async ({ name, handler }) => {
+            const events = groupedData[name]
+            if (!events?.length || !handler.processBackground) {
+              return
             }
 
-            // Queue webhooks.
-            if (this.options.sendWebhooks) {
-              const queued = await queueWebhooks(models).catch((err) => {
-                console.error(
-                  `[${new Date().toISOString()}] Error queuing webhooks: ${err}`
+            // Retry 3 times with exponential backoff starting at 100ms delay.
+            const models = await retry(handler.processBackground, [events], {
+              retriesMax: 3,
+              exponential: true,
+              interval: 100,
+            })
+
+            if (models && Array.isArray(models) && models.length) {
+              // Queue Meilisearch index updates.
+              const queued = (
+                await Promise.all(
+                  models.map((event) => queueMeilisearchIndexUpdates(event))
                 )
-                return 0
-              })
+              ).reduce((acc, q) => acc + q, 0)
 
               if (queued > 0) {
                 console.log(
-                  `[${new Date().toISOString()}] Queued ${queued.toLocaleString()} webhook(s).`
+                  `[${new Date().toISOString()}] Queued ${queued.toLocaleString()} search index update(s).`
                 )
               }
-            }
-          }
 
-          // If timed out, stop.
-          if (timeout === null) {
-            break
-          }
-        }
+              // Queue webhooks.
+              if (this.options.sendWebhooks) {
+                const queued = await queueWebhooks(models).catch((err) => {
+                  console.error(
+                    `[${new Date().toISOString()}] Error queuing webhooks: ${err}`
+                  )
+                  return 0
+                })
+
+                if (queued > 0) {
+                  console.log(
+                    `[${new Date().toISOString()}] Queued ${queued.toLocaleString()} webhook(s).`
+                  )
+                }
+              }
+            }
+          })
+        )
 
         if (timeout !== null) {
           resolve()
