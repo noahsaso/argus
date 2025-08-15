@@ -61,6 +61,28 @@ import { getDependentKey, serializeBlock } from '@/utils'
     {
       fields: ['blockHeight'],
     },
+    {
+      fields: ['active', 'parsedDenom'],
+      where: {
+        active: true,
+      },
+      name: 'feegrant_allowances_active_parsed_denom',
+    },
+    {
+      fields: ['active', 'parsedAllowanceType'],
+      where: {
+        active: true,
+      },
+      name: 'feegrant_allowances_active_parsed_allowance_type',
+    },
+    {
+      fields: ['parsedDenom'],
+      name: 'feegrant_allowances_parsed_denom',
+    },
+    {
+      fields: ['parsedAllowanceType'],
+      name: 'feegrant_allowances_parsed_allowance_type',
+    },
   ],
 })
 export class FeegrantAllowance extends DependableEventModel {
@@ -103,6 +125,23 @@ export class FeegrantAllowance extends DependableEventModel {
   @AllowNull(false)
   @Column(DataType.BOOLEAN)
   declare active: boolean
+
+  // Parsed fields for efficient querying
+  @AllowNull(true)
+  @Column(DataType.TEXT)
+  declare parsedAmount: string | null
+
+  @AllowNull(true)
+  @Column(DataType.TEXT)
+  declare parsedDenom: string | null
+
+  @AllowNull(true)
+  @Column(DataType.TEXT)
+  declare parsedAllowanceType: string | null
+
+  @AllowNull(true)
+  @Column(DataType.BIGINT)
+  declare parsedExpirationUnixMs: string | null
 
   get json(): FeegrantAllowanceJson {
     return {

@@ -140,4 +140,8 @@ export type ParsedFeegrantStateEvent = {
   allowanceData: string
   allowanceType: string | null
   active: boolean
+  parsedAmount: string | null
+  parsedDenom: string | null
+  parsedAllowanceType: string | null
+  parsedExpirationUnixMs: string | null
 }

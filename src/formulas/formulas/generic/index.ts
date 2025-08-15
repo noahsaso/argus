@@ -1,4 +1,5 @@
 // export * as communityPool from './communityPool'
+export * as feegrant from './feegrant'
 export * as gov from './gov'
 export * as stats from './stats'
 export * as token from './token'
