@@ -1,21 +1,21 @@
-import { ExtractorEnv, ExtractorMaker, NamedExtractor } from '@/types'
+import { ExtractorEnv } from '@/types'
 
-import { contract } from './contract'
-import { dao } from './dao'
-import { nftStakeUpdate } from './nftStakeUpdate'
+import { ContractExtractor } from './contract'
+import { DaoExtractor } from './dao'
 
-export const extractorMakers: Record<string, ExtractorMaker<any>> = {
-  contract,
-  dao,
-  nftStakeUpdate,
-}
+export const getExtractors = (env: ExtractorEnv) =>
+  [DaoExtractor, ContractExtractor].map((Extractor) => new Extractor(env))
 
-export const makeExtractors = async (
-  env: ExtractorEnv
-): Promise<NamedExtractor[]> =>
-  Promise.all(
-    Object.entries(extractorMakers).map(async ([name, extractorMaker]) => ({
-      name,
-      extractor: await extractorMaker(env),
-    }))
-  )
+// export const extractorMakers: Record<string, ExtractorMaker<any>> = {
+//   nftStakeUpdate,
+// }
+
+// export const makeExtractors = async (
+//   env: ExtractorEnv
+// ): Promise<NamedExtractor[]> =>
+//   Promise.all(
+//     Object.entries(extractorMakers).map(async ([name, extractorMaker]) => ({
+//       name,
+//       extractor: await extractorMaker(env),
+//     }))
+//   )

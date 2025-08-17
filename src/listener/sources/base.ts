@@ -1,4 +1,4 @@
-import { ExtractorMatchInput } from '@/types'
+import { ExtractableTxInput } from '@/types'
 
 export abstract class DataSource<
   /**
@@ -8,7 +8,7 @@ export abstract class DataSource<
   /**
    * The data for the data source that is extracted.
    */
-  Data extends Record<string, unknown> = Record<string, unknown>
+  Data extends unknown = unknown
 > {
   /**
    * The unique identifier for the data source type.
@@ -29,5 +29,5 @@ export abstract class DataSource<
   /**
    * The function called with each TX to match and extract relevant data.
    */
-  abstract match(input: ExtractorMatchInput): Data[]
+  abstract match(input: ExtractableTxInput): Data[]
 }

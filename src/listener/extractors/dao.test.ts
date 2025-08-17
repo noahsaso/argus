@@ -8,11 +8,11 @@ import { Contract, Extraction } from '@/db'
 import { WasmCodeService } from '@/services'
 import { AutoCosmWasmClient } from '@/utils'
 
-import { DaoExtractorData, dao } from './dao'
+import { DaoExtractor } from './dao'
 
 describe('DAO Extractor', () => {
   let mockAutoCosmWasmClient: AutoCosmWasmClient
-  let extractor: Awaited<ReturnType<typeof dao>>
+  let extractor: DaoExtractor
 
   beforeAll(async () => {
     const instance = await WasmCodeService.setUpInstance()
@@ -40,10 +40,16 @@ describe('DAO Extractor', () => {
     } as any
 
     // Set up the extractor
-    extractor = await dao({
+    extractor = new DaoExtractor({
       config: ConfigManager.load(),
       sendWebhooks: false,
       autoCosmWasmClient: mockAutoCosmWasmClient,
+      txHash: 'test-hash',
+      block: {
+        height: '1000',
+        timeUnixMs: '1640995200000',
+        timestamp: '2022-01-01T01:00:00Z',
+      },
     })
   })
 

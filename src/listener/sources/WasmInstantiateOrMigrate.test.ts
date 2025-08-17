@@ -11,28 +11,21 @@ import {
 } from 'vitest'
 
 import { WasmCodeService } from '@/services'
-import { ExtractorMatchInput } from '@/types'
+import { ExtractableTxInput } from '@/types'
 
 import {
-  WasmInstantiateDataSource,
-  WasmInstantiateDataSourceConfig,
-} from './WasmInstantiate'
+  WasmInstantiateOrMigrateDataSource,
+  WasmInstantiateOrMigrateDataSourceConfig,
+} from './WasmInstantiateOrMigrate'
 
-// Mock the WasmCodeService
-vi.mock('@/services', () => ({
-  WasmCodeService: {
-    getInstance: vi.fn(),
-  },
-}))
-
-describe('WasmInstantiateDataSource', () => {
-  let dataSource: WasmInstantiateDataSource
+describe('WasmInstantiateOrMigrateDataSource', () => {
+  let dataSource: WasmInstantiateOrMigrateDataSource
   let mockWasmCodeService: {
     findWasmCodeIdsByKeys: MockInstance
     findWasmCodeKeysById: MockInstance
   }
 
-  const createMockExtractorInput = (events: Event[]): ExtractorMatchInput => ({
+  const createMockExtractorInput = (events: Event[]): ExtractableTxInput => ({
     hash: 'test-hash',
     tx: {} as any,
     messages: [],
@@ -46,7 +39,7 @@ describe('WasmInstantiateDataSource', () => {
       findWasmCodeKeysById: vi.fn(),
     }
 
-    vi.mocked(WasmCodeService.getInstance).mockReturnValue(
+    vi.spyOn(WasmCodeService, 'getInstance').mockReturnValue(
       mockWasmCodeService as any
     )
   })
@@ -57,18 +50,20 @@ describe('WasmInstantiateDataSource', () => {
 
   describe('constructor and basic configuration', () => {
     beforeEach(() => {
-      const config: WasmInstantiateDataSourceConfig = {
-        codeIdKeys: ['dao-dao-core', 'dao-proposal-single'],
+      const config: WasmInstantiateOrMigrateDataSourceConfig = {
+        codeIdsKeys: ['dao-dao-core', 'dao-proposal-single'],
       }
 
       // Mock findWasmCodeIdsByKeys to return specific code IDs
       mockWasmCodeService.findWasmCodeIdsByKeys.mockReturnValue([123, 456, 789])
 
-      dataSource = new WasmInstantiateDataSource(config)
+      dataSource = new WasmInstantiateOrMigrateDataSource(config)
     })
 
     it('should have correct static type', () => {
-      expect(WasmInstantiateDataSource.type).toBe('wasm/instantiate')
+      expect(WasmInstantiateOrMigrateDataSource.type).toBe(
+        'wasm/instantiate-or-migrate'
+      )
     })
 
     it('should call WasmCodeService with correct keys during construction', () => {
@@ -80,15 +75,16 @@ describe('WasmInstantiateDataSource', () => {
 
     it('should store the correct config', () => {
       expect(dataSource.config).toEqual({
-        codeIdKeys: ['dao-dao-core', 'dao-proposal-single'],
+        type: 'both',
+        codeIdsKeys: ['dao-dao-core', 'dao-proposal-single'],
       })
     })
   })
 
   describe('match function - basic matching', () => {
     beforeEach(() => {
-      const config: WasmInstantiateDataSourceConfig = {
-        codeIdKeys: ['dao-dao-core'],
+      const config: WasmInstantiateOrMigrateDataSourceConfig = {
+        codeIdsKeys: ['dao-dao-core'],
       }
 
       mockWasmCodeService.findWasmCodeIdsByKeys.mockReturnValue([123, 456])
@@ -104,7 +100,7 @@ describe('WasmInstantiateDataSource', () => {
         }
       )
 
-      dataSource = new WasmInstantiateDataSource(config)
+      dataSource = new WasmInstantiateOrMigrateDataSource(config)
     })
 
     it('should match instantiate event with correct code_id', () => {
@@ -123,6 +119,7 @@ describe('WasmInstantiateDataSource', () => {
 
       expect(result).toHaveLength(1)
       expect(result[0]).toEqual({
+        type: 'instantiate',
         address: 'juno1contract123',
         codeId: 123,
         codeIdsKeys: ['dao-dao-core', 'legacy-dao'],
@@ -222,8 +219,8 @@ describe('WasmInstantiateDataSource', () => {
 
   describe('match function - multiple events', () => {
     beforeEach(() => {
-      const config: WasmInstantiateDataSourceConfig = {
-        codeIdKeys: ['dao-dao-core', 'dao-proposal'],
+      const config: WasmInstantiateOrMigrateDataSourceConfig = {
+        codeIdsKeys: ['dao-dao-core', 'dao-proposal'],
       }
 
       mockWasmCodeService.findWasmCodeIdsByKeys.mockReturnValue([123, 456, 789])
@@ -242,7 +239,7 @@ describe('WasmInstantiateDataSource', () => {
         }
       )
 
-      dataSource = new WasmInstantiateDataSource(config)
+      dataSource = new WasmInstantiateOrMigrateDataSource(config)
     })
 
     it('should match multiple instantiate events', () => {
@@ -271,12 +268,14 @@ describe('WasmInstantiateDataSource', () => {
       const secondMatch = result.find((r) => r.address === 'juno1contract456')
 
       expect(firstMatch).toEqual({
+        type: 'instantiate',
         address: 'juno1contract123',
         codeId: 123,
         codeIdsKeys: ['dao-dao-core'],
       })
 
       expect(secondMatch).toEqual({
+        type: 'instantiate',
         address: 'juno1contract456',
         codeId: 456,
         codeIdsKeys: ['dao-proposal'],
@@ -309,6 +308,7 @@ describe('WasmInstantiateDataSource', () => {
 
       expect(result).toHaveLength(1)
       expect(result[0]).toEqual({
+        type: 'instantiate',
         address: 'juno1contract123',
         codeId: 123,
         codeIdsKeys: ['dao-dao-core'],
@@ -347,19 +347,20 @@ describe('WasmInstantiateDataSource', () => {
         expect.arrayContaining([123, 789])
       )
       expect(result.map((r) => r.codeId)).not.toContain(999)
+      expect(result.every((r) => r.type === 'instantiate')).toBe(true)
     })
   })
 
   describe('edge cases and error handling', () => {
     beforeEach(() => {
-      const config: WasmInstantiateDataSourceConfig = {
-        codeIdKeys: ['dao-dao-core'],
+      const config: WasmInstantiateOrMigrateDataSourceConfig = {
+        codeIdsKeys: ['dao-dao-core'],
       }
 
       mockWasmCodeService.findWasmCodeIdsByKeys.mockReturnValue([123])
       mockWasmCodeService.findWasmCodeKeysById.mockReturnValue(['dao-dao-core'])
 
-      dataSource = new WasmInstantiateDataSource(config)
+      dataSource = new WasmInstantiateOrMigrateDataSource(config)
     })
 
     it('should handle empty events array', () => {
@@ -425,8 +426,8 @@ describe('WasmInstantiateDataSource', () => {
     })
 
     it('should handle very large code_id', () => {
-      const config: WasmInstantiateDataSourceConfig = {
-        codeIdKeys: ['dao-dao-core'],
+      const config: WasmInstantiateOrMigrateDataSourceConfig = {
+        codeIdsKeys: ['dao-dao-core'],
       }
 
       mockWasmCodeService.findWasmCodeIdsByKeys.mockReturnValue([
@@ -434,7 +435,7 @@ describe('WasmInstantiateDataSource', () => {
       ])
       mockWasmCodeService.findWasmCodeKeysById.mockReturnValue(['dao-dao-core'])
 
-      dataSource = new WasmInstantiateDataSource(config)
+      dataSource = new WasmInstantiateOrMigrateDataSource(config)
 
       const events: Event[] = [
         {
@@ -454,13 +455,13 @@ describe('WasmInstantiateDataSource', () => {
 
   describe('WasmCodeService integration', () => {
     it('should handle empty codeIdKeys array', () => {
-      const config: WasmInstantiateDataSourceConfig = {
-        codeIdKeys: [],
+      const config: WasmInstantiateOrMigrateDataSourceConfig = {
+        codeIdsKeys: [],
       }
 
       mockWasmCodeService.findWasmCodeIdsByKeys.mockReturnValue([])
 
-      dataSource = new WasmInstantiateDataSource(config)
+      dataSource = new WasmInstantiateOrMigrateDataSource(config)
 
       const events: Event[] = [
         {
@@ -477,13 +478,13 @@ describe('WasmInstantiateDataSource', () => {
     })
 
     it('should handle WasmCodeService returning empty array', () => {
-      const config: WasmInstantiateDataSourceConfig = {
-        codeIdKeys: ['non-existent-key'],
+      const config: WasmInstantiateOrMigrateDataSourceConfig = {
+        codeIdsKeys: ['non-existent-key'],
       }
 
       mockWasmCodeService.findWasmCodeIdsByKeys.mockReturnValue([])
 
-      dataSource = new WasmInstantiateDataSource(config)
+      dataSource = new WasmInstantiateOrMigrateDataSource(config)
 
       const events: Event[] = [
         {
@@ -500,14 +501,14 @@ describe('WasmInstantiateDataSource', () => {
     })
 
     it('should call findWasmCodeKeysById with correct codeId', () => {
-      const config: WasmInstantiateDataSourceConfig = {
-        codeIdKeys: ['dao-dao-core'],
+      const config: WasmInstantiateOrMigrateDataSourceConfig = {
+        codeIdsKeys: ['dao-dao-core'],
       }
 
       mockWasmCodeService.findWasmCodeIdsByKeys.mockReturnValue([123])
       mockWasmCodeService.findWasmCodeKeysById.mockReturnValue(['dao-dao-core'])
 
-      dataSource = new WasmInstantiateDataSource(config)
+      dataSource = new WasmInstantiateOrMigrateDataSource(config)
 
       const events: Event[] = [
         {
@@ -525,8 +526,8 @@ describe('WasmInstantiateDataSource', () => {
     })
 
     it('should handle multiple codeIdKeys correctly', () => {
-      const config: WasmInstantiateDataSourceConfig = {
-        codeIdKeys: [
+      const config: WasmInstantiateOrMigrateDataSourceConfig = {
+        codeIdsKeys: [
           'dao-dao-core',
           'dao-proposal-single',
           'dao-voting-cw20-staked',
@@ -535,7 +536,7 @@ describe('WasmInstantiateDataSource', () => {
 
       mockWasmCodeService.findWasmCodeIdsByKeys.mockReturnValue([100, 200, 300])
 
-      dataSource = new WasmInstantiateDataSource(config)
+      dataSource = new WasmInstantiateOrMigrateDataSource(config)
 
       expect(mockWasmCodeService.findWasmCodeIdsByKeys).toHaveBeenCalledWith(
         'dao-dao-core',
@@ -545,8 +546,8 @@ describe('WasmInstantiateDataSource', () => {
     })
 
     it('should handle WasmCodeService returning overlapping code IDs', () => {
-      const config: WasmInstantiateDataSourceConfig = {
-        codeIdKeys: ['key1', 'key2'],
+      const config: WasmInstantiateOrMigrateDataSourceConfig = {
+        codeIdsKeys: ['key1', 'key2'],
       }
 
       // Simulate overlapping code IDs from different keys
@@ -559,7 +560,7 @@ describe('WasmInstantiateDataSource', () => {
         }
       )
 
-      dataSource = new WasmInstantiateDataSource(config)
+      dataSource = new WasmInstantiateOrMigrateDataSource(config)
 
       const events: Event[] = [
         {
@@ -575,6 +576,7 @@ describe('WasmInstantiateDataSource', () => {
 
       expect(result).toHaveLength(1)
       expect(result[0]).toEqual({
+        type: 'instantiate',
         address: 'juno1contract123',
         codeId: 123,
         codeIdsKeys: ['key1', 'key2'],
@@ -582,10 +584,356 @@ describe('WasmInstantiateDataSource', () => {
     })
   })
 
+  describe('migrate event matching', () => {
+    beforeEach(() => {
+      const config: WasmInstantiateOrMigrateDataSourceConfig = {
+        type: 'migrate',
+        codeIdsKeys: ['dao-dao-core'],
+      }
+
+      mockWasmCodeService.findWasmCodeIdsByKeys.mockReturnValue([123, 456])
+      mockWasmCodeService.findWasmCodeKeysById.mockImplementation(
+        (codeId: number) => {
+          if (codeId === 123) return ['dao-dao-core', 'legacy-dao']
+          if (codeId === 456) return ['dao-dao-core']
+          return []
+        }
+      )
+
+      dataSource = new WasmInstantiateOrMigrateDataSource(config)
+    })
+
+    it('should match migrate event with correct code_id', () => {
+      const events: Event[] = [
+        {
+          type: 'migrate',
+          attributes: [
+            { key: 'code_id', value: '123' },
+            { key: '_contract_address', value: 'juno1contract123' },
+            { key: 'old_code_id', value: '100' },
+          ],
+        },
+      ]
+
+      const result = dataSource.match(createMockExtractorInput(events))
+
+      expect(result).toHaveLength(1)
+      expect(result[0]).toEqual({
+        type: 'migrate',
+        address: 'juno1contract123',
+        codeId: 123,
+        codeIdsKeys: ['dao-dao-core', 'legacy-dao'],
+      })
+    })
+
+    it('should not match instantiate events when configured for migrate only', () => {
+      const events: Event[] = [
+        {
+          type: 'instantiate',
+          attributes: [
+            { key: 'code_id', value: '123' },
+            { key: '_contract_address', value: 'juno1contract123' },
+          ],
+        },
+      ]
+
+      const result = dataSource.match(createMockExtractorInput(events))
+      expect(result).toHaveLength(0)
+    })
+
+    it('should handle multiple migrate events', () => {
+      const events: Event[] = [
+        {
+          type: 'migrate',
+          attributes: [
+            { key: 'code_id', value: '123' },
+            { key: '_contract_address', value: 'juno1contract123' },
+          ],
+        },
+        {
+          type: 'migrate',
+          attributes: [
+            { key: 'code_id', value: '456' },
+            { key: '_contract_address', value: 'juno1contract456' },
+          ],
+        },
+      ]
+
+      const result = dataSource.match(createMockExtractorInput(events))
+
+      expect(result).toHaveLength(2)
+      expect(result.every((r) => r.type === 'migrate')).toBe(true)
+    })
+  })
+
+  describe('type configuration', () => {
+    it('should default to "both" when type is not specified', () => {
+      const config: WasmInstantiateOrMigrateDataSourceConfig = {
+        codeIdsKeys: ['dao-dao-core'],
+      }
+
+      mockWasmCodeService.findWasmCodeIdsByKeys.mockReturnValue([123])
+      mockWasmCodeService.findWasmCodeKeysById.mockReturnValue(['dao-dao-core'])
+
+      dataSource = new WasmInstantiateOrMigrateDataSource(config)
+
+      expect(dataSource.config.type).toBe('both')
+    })
+
+    it('should match only instantiate events when type is "instantiate"', () => {
+      const config: WasmInstantiateOrMigrateDataSourceConfig = {
+        type: 'instantiate',
+        codeIdsKeys: ['dao-dao-core'],
+      }
+
+      mockWasmCodeService.findWasmCodeIdsByKeys.mockReturnValue([123])
+      mockWasmCodeService.findWasmCodeKeysById.mockReturnValue(['dao-dao-core'])
+
+      dataSource = new WasmInstantiateOrMigrateDataSource(config)
+
+      const events: Event[] = [
+        {
+          type: 'instantiate',
+          attributes: [
+            { key: 'code_id', value: '123' },
+            { key: '_contract_address', value: 'juno1contract123' },
+          ],
+        },
+        {
+          type: 'migrate',
+          attributes: [
+            { key: 'code_id', value: '123' },
+            { key: '_contract_address', value: 'juno1contract456' },
+          ],
+        },
+      ]
+
+      const result = dataSource.match(createMockExtractorInput(events))
+
+      expect(result).toHaveLength(1)
+      expect(result[0]).toEqual({
+        type: 'instantiate',
+        address: 'juno1contract123',
+        codeId: 123,
+        codeIdsKeys: ['dao-dao-core'],
+      })
+    })
+
+    it('should match only migrate events when type is "migrate"', () => {
+      const config: WasmInstantiateOrMigrateDataSourceConfig = {
+        type: 'migrate',
+        codeIdsKeys: ['dao-dao-core'],
+      }
+
+      mockWasmCodeService.findWasmCodeIdsByKeys.mockReturnValue([123])
+      mockWasmCodeService.findWasmCodeKeysById.mockReturnValue(['dao-dao-core'])
+
+      dataSource = new WasmInstantiateOrMigrateDataSource(config)
+
+      const events: Event[] = [
+        {
+          type: 'instantiate',
+          attributes: [
+            { key: 'code_id', value: '123' },
+            { key: '_contract_address', value: 'juno1contract123' },
+          ],
+        },
+        {
+          type: 'migrate',
+          attributes: [
+            { key: 'code_id', value: '123' },
+            { key: '_contract_address', value: 'juno1contract456' },
+          ],
+        },
+      ]
+
+      const result = dataSource.match(createMockExtractorInput(events))
+
+      expect(result).toHaveLength(1)
+      expect(result[0]).toEqual({
+        type: 'migrate',
+        address: 'juno1contract456',
+        codeId: 123,
+        codeIdsKeys: ['dao-dao-core'],
+      })
+    })
+
+    it('should match both instantiate and migrate events when type is "both"', () => {
+      const config: WasmInstantiateOrMigrateDataSourceConfig = {
+        type: 'both',
+        codeIdsKeys: ['dao-dao-core'],
+      }
+
+      mockWasmCodeService.findWasmCodeIdsByKeys.mockReturnValue([123])
+      mockWasmCodeService.findWasmCodeKeysById.mockReturnValue(['dao-dao-core'])
+
+      dataSource = new WasmInstantiateOrMigrateDataSource(config)
+
+      const events: Event[] = [
+        {
+          type: 'instantiate',
+          attributes: [
+            { key: 'code_id', value: '123' },
+            { key: '_contract_address', value: 'juno1contract123' },
+          ],
+        },
+        {
+          type: 'migrate',
+          attributes: [
+            { key: 'code_id', value: '123' },
+            { key: '_contract_address', value: 'juno1contract456' },
+          ],
+        },
+      ]
+
+      const result = dataSource.match(createMockExtractorInput(events))
+
+      expect(result).toHaveLength(2)
+
+      const instantiateMatch = result.find((r) => r.type === 'instantiate')
+      const migrateMatch = result.find((r) => r.type === 'migrate')
+
+      expect(instantiateMatch).toEqual({
+        type: 'instantiate',
+        address: 'juno1contract123',
+        codeId: 123,
+        codeIdsKeys: ['dao-dao-core'],
+      })
+
+      expect(migrateMatch).toEqual({
+        type: 'migrate',
+        address: 'juno1contract456',
+        codeId: 123,
+        codeIdsKeys: ['dao-dao-core'],
+      })
+    })
+  })
+
+  describe('optional codeIdsKeys configuration', () => {
+    it('should match all instantiate events when codeIdsKeys is not specified', () => {
+      const config: WasmInstantiateOrMigrateDataSourceConfig = {
+        type: 'instantiate',
+      }
+
+      dataSource = new WasmInstantiateOrMigrateDataSource(config)
+      mockWasmCodeService.findWasmCodeKeysById.mockReturnValue([])
+
+      const events: Event[] = [
+        {
+          type: 'instantiate',
+          attributes: [
+            { key: 'code_id', value: '999' }, // Any code ID should match
+            { key: '_contract_address', value: 'juno1contract999' },
+          ],
+        },
+      ]
+
+      const result = dataSource.match(createMockExtractorInput(events))
+
+      expect(result).toHaveLength(1)
+      expect(result[0]).toEqual({
+        type: 'instantiate',
+        address: 'juno1contract999',
+        codeId: 999,
+        codeIdsKeys: [],
+      })
+    })
+
+    it('should match all migrate events when codeIdsKeys is not specified', () => {
+      const config: WasmInstantiateOrMigrateDataSourceConfig = {
+        type: 'migrate',
+      }
+
+      dataSource = new WasmInstantiateOrMigrateDataSource(config)
+      mockWasmCodeService.findWasmCodeKeysById.mockReturnValue([])
+
+      const events: Event[] = [
+        {
+          type: 'migrate',
+          attributes: [
+            { key: 'code_id', value: '888' }, // Any code ID should match
+            { key: '_contract_address', value: 'juno1contract888' },
+          ],
+        },
+      ]
+
+      const result = dataSource.match(createMockExtractorInput(events))
+
+      expect(result).toHaveLength(1)
+      expect(result[0]).toEqual({
+        type: 'migrate',
+        address: 'juno1contract888',
+        codeId: 888,
+        codeIdsKeys: [],
+      })
+    })
+
+    it('should handle empty codeIdsKeys array (no matches)', () => {
+      const config: WasmInstantiateOrMigrateDataSourceConfig = {
+        type: 'both',
+        codeIdsKeys: [],
+      }
+
+      mockWasmCodeService.findWasmCodeIdsByKeys.mockReturnValue([])
+      dataSource = new WasmInstantiateOrMigrateDataSource(config)
+      mockWasmCodeService.findWasmCodeKeysById.mockReturnValue([])
+
+      const events: Event[] = [
+        {
+          type: 'instantiate',
+          attributes: [
+            { key: 'code_id', value: '777' },
+            { key: '_contract_address', value: 'juno1contract777' },
+          ],
+        },
+      ]
+
+      const result = dataSource.match(createMockExtractorInput(events))
+
+      // With empty codeIdsKeys array, the codeIds becomes [], which means
+      // no code IDs will match (empty array is truthy but includes() returns false)
+      expect(result).toHaveLength(0)
+    })
+  })
+
+  describe('static methods', () => {
+    it('should have static source method', () => {
+      const source = WasmInstantiateOrMigrateDataSource.source('testHandler', {
+        type: 'both',
+        codeIdsKeys: ['dao-dao-core'],
+      })
+
+      expect(source).toEqual({
+        type: 'wasm/instantiate-or-migrate',
+        handler: 'testHandler',
+        config: {
+          type: 'both',
+          codeIdsKeys: ['dao-dao-core'],
+        },
+      })
+    })
+
+    it('should have static data method', () => {
+      const testData = {
+        type: 'instantiate' as const,
+        address: 'juno1test123',
+        codeId: 123,
+        codeIdsKeys: ['dao-dao-core'],
+      }
+
+      const data = WasmInstantiateOrMigrateDataSource.data(testData)
+
+      expect(data).toEqual({
+        type: 'wasm/instantiate-or-migrate',
+        data: testData,
+      })
+    })
+  })
+
   describe('complex scenarios', () => {
     beforeEach(() => {
-      const config: WasmInstantiateDataSourceConfig = {
-        codeIdKeys: ['dao-dao-core', 'dao-proposal'],
+      const config: WasmInstantiateOrMigrateDataSourceConfig = {
+        codeIdsKeys: ['dao-dao-core', 'dao-proposal'],
       }
 
       mockWasmCodeService.findWasmCodeIdsByKeys.mockReturnValue([123, 456])
@@ -602,7 +950,7 @@ describe('WasmInstantiateDataSource', () => {
         }
       )
 
-      dataSource = new WasmInstantiateDataSource(config)
+      dataSource = new WasmInstantiateOrMigrateDataSource(config)
     })
 
     it('should handle transaction with multiple contract instantiations', () => {
@@ -633,12 +981,14 @@ describe('WasmInstantiateDataSource', () => {
       const daoProposal = result.find((r) => r.address === 'juno1proposal456')
 
       expect(daoCore).toEqual({
+        type: 'instantiate',
         address: 'juno1dao123',
         codeId: 123,
         codeIdsKeys: ['dao-dao-core'],
       })
 
       expect(daoProposal).toEqual({
+        type: 'instantiate',
         address: 'juno1proposal456',
         codeId: 456,
         codeIdsKeys: ['dao-proposal'],
@@ -686,6 +1036,56 @@ describe('WasmInstantiateDataSource', () => {
       expect(result.map((r) => r.address)).toEqual(
         expect.arrayContaining(['juno1dao123', 'juno1proposal456'])
       )
+      expect(result.every((r) => r.type === 'instantiate')).toBe(true)
+    })
+
+    it('should handle mixed instantiate and migrate events', () => {
+      const events: Event[] = [
+        {
+          type: 'instantiate',
+          attributes: [
+            { key: 'code_id', value: '123' },
+            { key: '_contract_address', value: 'juno1dao123' },
+            { key: 'label', value: 'DAO Core' },
+          ],
+        },
+        {
+          type: 'migrate',
+          attributes: [
+            { key: 'code_id', value: '456' },
+            { key: '_contract_address', value: 'juno1proposal456' },
+            { key: 'old_code_id', value: '400' },
+          ],
+        },
+        {
+          type: 'wasm',
+          attributes: [
+            { key: 'action', value: 'execute' },
+            { key: '_contract_address', value: 'juno1other789' },
+          ],
+        },
+      ]
+
+      const result = dataSource.match(createMockExtractorInput(events))
+
+      expect(result).toHaveLength(2)
+
+      const instantiateMatch = result.find((r) => r.type === 'instantiate')
+      const migrateMatch = result.find((r) => r.type === 'migrate')
+
+      expect(instantiateMatch).toEqual({
+        type: 'instantiate',
+        address: 'juno1dao123',
+        codeId: 123,
+        codeIdsKeys: ['dao-dao-core'],
+      })
+
+      expect(migrateMatch).toEqual({
+        type: 'migrate',
+        address: 'juno1proposal456',
+        codeId: 456,
+        codeIdsKeys: ['dao-proposal'],
+      })
     })
   })
 })

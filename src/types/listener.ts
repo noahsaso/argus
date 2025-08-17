@@ -5,54 +5,69 @@ import { Tx } from '@dao-dao/types/protobuf/codegen/cosmos/tx/v1beta1/tx'
 import { AutoCosmWasmClient } from '@/utils'
 
 import { Config } from './config'
-import { DependableEventModel } from './db'
+import { ExtractionJson } from './db'
 import { SerializedBlock } from './misc'
 
-export type ExtractorMatchInput = {
+/**
+ * Passed to each data source to match and extract data.
+ */
+export type ExtractableTxInput = {
   hash: string
   tx: Tx
   messages: DecodedStargateMsg['stargate'][]
   events: readonly Event[]
 }
 
-export type ExtractorExtractInput<Data extends unknown = unknown> = {
-  txHash: string
-  block: SerializedBlock
-  data: Data
-}
-
-export type Extractor<Data extends unknown = unknown> = {
-  /**
-   * The function that will be called for each TX which determines if it will be
-   * queued for extraction. If returns an object, it will be queued. If returns
-   * undefined, it will not be queued.
-   */
-  match: (input: ExtractorMatchInput) => Data | undefined
-  /**
-   * The function that will be called with queued objects. Returns created
-   * events.
-   */
-  extract: (
-    input: ExtractorExtractInput<Data>
-  ) => Promise<DependableEventModel[]>
-  /**
-   * Optional function to sync extractions. This is useful to fill in missing
-   * extractions.
-   */
-  sync?: () => Promise<Data[]>
-}
-
+/**
+ * The environment for each extractor.
+ */
 export type ExtractorEnv = {
   config: Config
-  sendWebhooks: boolean
+  txHash: string
+  block: SerializedBlock
   autoCosmWasmClient: AutoCosmWasmClient
+  sendWebhooks: boolean
 }
 
-export type ExtractorMaker<Data extends unknown = unknown> = (
-  env: ExtractorEnv
-) => Promise<Extractor<Data>>
+/**
+ * A data source configuration for an extractor.
+ */
+export type ExtractorDataSource<
+  Config extends Record<string, unknown> = Record<string, unknown>
+> = {
+  /**
+   * The type of the source.
+   */
+  type: string
+  /**
+   * The name of the handler function to call with the data.
+   */
+  handler: string
+  /**
+   * The config for the source.
+   */
+  config: Config
+}
 
-export type NamedExtractor = {
-  name: string
-  extractor: Extractor
+/**
+ * The output of an extractor handler, to be saved as an extraction in the DB.
+ */
+export type ExtractorHandlerOutput = Pick<
+  ExtractionJson,
+  'address' | 'name' | 'data'
+>
+
+/**
+ * The handler function for an extractor.
+ */
+export type ExtractorHandler<Data extends unknown = unknown> = (
+  data: Data
+) => Promise<ExtractorHandlerOutput[]>
+
+/**
+ * The data extracted by a data source, to be passed to an extractor handler.
+ */
+export type ExtractorData<Data extends unknown = unknown> = {
+  type: string
+  data: Data
 }

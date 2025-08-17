@@ -8,11 +8,11 @@ import { ConfigManager } from '@/config'
 import { Contract, Extraction } from '@/db'
 import { AutoCosmWasmClient } from '@/utils'
 
-import { ContractsExtractorData, contract } from './contract'
+import { ContractExtractor } from './contract'
 
 describe('Contracts Extractor', () => {
   let mockAutoCosmWasmClient: AutoCosmWasmClient
-  let extractor: Awaited<ReturnType<typeof contract>>
+  let extractor: ContractExtractor
   let queryContractRawMock: MockInstance
 
   beforeEach(async () => {
@@ -34,10 +34,16 @@ describe('Contracts Extractor', () => {
     } as any
 
     // Set up the extractor
-    extractor = await contract({
+    extractor = new ContractExtractor({
       config: ConfigManager.load(),
       sendWebhooks: false,
       autoCosmWasmClient: mockAutoCosmWasmClient,
+      txHash: 'test-hash',
+      block: {
+        height: '1000',
+        timeUnixMs: '1640995200000',
+        timestamp: '2022-01-01T01:00:00Z',
+      },
     })
   })
 

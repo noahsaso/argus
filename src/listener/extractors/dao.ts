@@ -1,172 +1,115 @@
-import { Contract as ChainContract } from '@cosmjs/cosmwasm-stargate'
-
-import { Contract, Extraction } from '@/db'
+import { Contract } from '@/db'
 import { WasmCodeService } from '@/services'
-import { ExtractionJson, Extractor, ExtractorMaker } from '@/types'
-import { batch } from '@/utils'
+import {
+  ExtractorDataSource,
+  ExtractorHandler,
+  ExtractorHandlerOutput,
+} from '@/types'
 
-export type DaoExtractorData = {
-  addresses: string[]
-}
+import {
+  WasmEventData,
+  WasmEventDataSource,
+  WasmInstantiateOrMigrateData,
+  WasmInstantiateOrMigrateDataSource,
+} from '../sources'
+import { Extractor } from './base'
 
-export const dao: ExtractorMaker<DaoExtractorData> = async ({
-  autoCosmWasmClient,
-}) => {
-  const match: Extractor<DaoExtractorData>['match'] = ({ events }) => {
-    const daoDaoCoreCodeIds =
-      WasmCodeService.getInstance().findWasmCodeIdsByKeys('dao-dao-core')
-
-    // Find DAO addresses by looking for dao-dao-core code IDs being
-    // instantiated or DAO config being updated.
-
-    const instantiated = events
-      .filter(
-        (e) =>
-          e.type === 'instantiate' &&
-          e.attributes.some(
-            (a) =>
-              a.key === 'code_id' &&
-              !isNaN(Number(a.value)) &&
-              daoDaoCoreCodeIds.includes(Number(a.value))
-          )
-      )
-      .flatMap((e) =>
-        e.attributes
-          .filter((a) => a.key === '_contract_address')
-          .map((a) => a.value)
-      )
-
-    const executeActions: (string | [string, string[]])[] = [
-      'execute_proposal_hook',
-      ['execute_update_config', ['name', 'description', 'image_url']],
-      ['execute_accept_admin_nomination', ['new_admin']],
-      'execute_update_voting_module',
-      'execute_update_proposal_modules',
-    ]
-
-    const executions = events
-      .filter(
-        (e) =>
-          e.type === 'wasm' &&
-          e.attributes.some(
-            (a) =>
-              a.key === 'action' &&
-              executeActions.some((action) =>
-                typeof action === 'string'
-                  ? action === a.value
-                  : action[0] === a.value &&
-                    action[1].every((key) =>
-                      e.attributes.some((a) => a.key === key)
-                    )
-              )
-          )
-      )
-      .flatMap((e) =>
-        e.attributes
-          .filter((a) => a.key === '_contract_address')
-          .map((a) => a.value)
-      )
-
-    // Combine addresses from instantiations and executions.
-    const addresses = [...instantiated, ...executions]
-
-    if (addresses.length === 0) {
-      return
-    }
-
-    return {
-      addresses,
-    }
+export class DaoExtractor extends Extractor {
+  static get type(): string {
+    return 'dao'
   }
 
-  const extract: Extractor<DaoExtractorData>['extract'] = async ({
-    txHash,
-    block: { height, timeUnixMs },
-    data: { addresses },
-  }) => {
-    await autoCosmWasmClient.update()
-    const client = autoCosmWasmClient.client
+  sources: ExtractorDataSource[] = [
+    WasmInstantiateOrMigrateDataSource.source('instantiate', {
+      codeIdsKeys: ['dao-dao-core'],
+    }),
+    WasmEventDataSource.source('execute', {
+      key: 'action',
+      value: [
+        'execute_proposal_hook',
+        'execute_update_voting_module',
+        'execute_update_proposal_modules',
+      ],
+    }),
+    WasmEventDataSource.source('execute', {
+      key: 'action',
+      value: 'execute_update_config',
+      otherAttributes: ['name', 'description', 'image_url'],
+    }),
+    WasmEventDataSource.source('execute', {
+      key: 'action',
+      value: 'execute_accept_admin_nomination',
+      otherAttributes: ['new_admin'],
+    }),
+  ]
+
+  // Handlers.
+  protected instantiate: ExtractorHandler<WasmInstantiateOrMigrateData> = ({
+    address,
+  }) => this.save(address)
+  protected execute: ExtractorHandler<WasmEventData> = ({ address }) =>
+    this.save(address)
+
+  private async save(address: string): Promise<ExtractorHandlerOutput[]> {
+    const client = this.env.autoCosmWasmClient.client
     if (!client) {
       throw new Error('CosmWasm client not connected')
     }
 
+    const contract = await client.getContract(address)
+
     const daoDaoCoreCodeIds =
       WasmCodeService.getInstance().findWasmCodeIdsByKeys('dao-dao-core')
+    if (!daoDaoCoreCodeIds.includes(contract.codeId)) {
+      return []
+    }
 
-    // Get contract data, info, and dump state, and create extractions.
-    const contracts: ChainContract[] = []
-    const extractions: ExtractionJson[] = []
-    await batch({
-      list: addresses,
-      batchSize: 25,
-      task: async (address) => {
-        const contract = await client.getContract(address)
-        if (!daoDaoCoreCodeIds.includes(contract.codeId)) {
-          return
-        }
-
-        const [{ info }, dumpState] = await Promise.all([
-          client.queryContractSmart(address, {
-            info: {},
-          }),
-          client.queryContractSmart(address, {
-            dump_state: {},
-          }),
-        ])
-
-        contracts.push(contract)
-        extractions.push(
-          {
-            address: contract.address,
-            name: 'info',
-            blockHeight: height,
-            blockTimeUnixMs: timeUnixMs,
-            txHash,
-            data: info,
-          },
-          {
-            address: contract.address,
-            name: 'dao-dao-core/dump_state',
-            blockHeight: height,
-            blockTimeUnixMs: timeUnixMs,
-            txHash,
-            data: dumpState,
-          }
-        )
-      },
-    })
-
-    // Ensure contracts exist in the DB.
-    const [, createdExtractions] = await Promise.all([
-      Contract.bulkCreate(
-        contracts.map((contract) => ({
-          address: contract.address,
-          codeId: contract.codeId,
-          admin: contract.admin,
-          creator: contract.creator,
-          label: contract.label,
-          instantiatedAtBlockHeight: height,
-          instantiatedAtBlockTimeUnixMs: timeUnixMs,
-          instantiatedAtBlockTimestamp: new Date(Number(timeUnixMs)),
-          txHash,
-        })),
-        {
-          updateOnDuplicate: ['codeId', 'admin', 'creator', 'label', 'txHash'],
-          conflictAttributes: ['address'],
-        }
-      ),
-      Extraction.bulkCreate(extractions, {
-        updateOnDuplicate: ['blockTimeUnixMs', 'txHash', 'data'],
-        conflictAttributes: ['address', 'name', 'blockHeight'],
-        returning: true,
+    const [{ info }, dumpState] = await Promise.all([
+      client.queryContractSmart(address, {
+        info: {},
+      }),
+      client.queryContractSmart(address, {
+        dump_state: {},
       }),
     ])
 
-    return createdExtractions
+    // Ensure contract exists in the DB.
+    await Contract.upsert(
+      {
+        address: contract.address,
+        codeId: contract.codeId,
+        admin: contract.admin,
+        creator: contract.creator,
+        label: contract.label,
+        instantiatedAtBlockHeight: this.env.block.height,
+        instantiatedAtBlockTimeUnixMs: this.env.block.timeUnixMs,
+        instantiatedAtBlockTimestamp: this.env.block.timestamp,
+        txHash: this.env.txHash,
+      },
+      {
+        // Update these fields if already exists.
+        fields: ['codeId', 'admin', 'creator', 'label'],
+        returning: false,
+      }
+    )
+
+    // Return extractions.
+    return [
+      {
+        address: contract.address,
+        name: 'info',
+        data: info,
+      },
+      {
+        address: contract.address,
+        name: 'dao-dao-core/dump_state',
+        data: dumpState,
+      },
+    ]
   }
 
-  const sync: Extractor<DaoExtractorData>['sync'] = async () => {
-    const client = autoCosmWasmClient.client
+  async _sync() {
+    const client = this.env.autoCosmWasmClient.client
     if (!client) {
       throw new Error('CosmWasm client not connected')
     }
@@ -181,16 +124,13 @@ export const dao: ExtractorMaker<DaoExtractorData> = async ({
       addresses.push(...contracts)
     }
 
-    return [
-      {
-        addresses,
-      },
-    ]
-  }
-
-  return {
-    match,
-    extract,
-    sync,
+    return addresses.map((address) =>
+      WasmInstantiateOrMigrateDataSource.data({
+        type: 'instantiate',
+        address,
+        codeId: 0,
+        codeIdsKeys: [],
+      })
+    )
   }
 }

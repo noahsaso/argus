@@ -1,4 +1,4 @@
-import { ExtractorMatchInput } from '@/types'
+import { ExtractableTxInput, ExtractorData, ExtractorDataSource } from '@/types'
 
 import { DataSource } from './base'
 
@@ -17,7 +17,7 @@ export type WasmEventDataSourceConfig = {
   otherAttributes?: string[]
 }
 
-export type WasmEventDataSourceData = {
+export type WasmEventData = {
   /**
    * The address of the contract that emitted the event.
    */
@@ -47,17 +47,35 @@ export type WasmEventDataSourceData = {
 
 export class WasmEventDataSource extends DataSource<
   WasmEventDataSourceConfig,
-  WasmEventDataSourceData
+  WasmEventData
 > {
   static get type(): string {
     return 'wasm/event'
+  }
+
+  static source(
+    handler: string,
+    config: WasmEventDataSourceConfig
+  ): ExtractorDataSource<WasmEventDataSourceConfig> {
+    return {
+      type: this.type,
+      handler,
+      config,
+    }
+  }
+
+  static data(data: WasmEventData): ExtractorData<WasmEventData> {
+    return {
+      type: this.type,
+      data,
+    }
   }
 
   private _equalsOrContains(a: string | string[], b: string): boolean {
     return Array.isArray(a) ? a.includes(b) : a === b
   }
 
-  match({ events }: ExtractorMatchInput): WasmEventDataSourceData[] {
+  match({ events }: ExtractableTxInput): WasmEventData[] {
     return events.flatMap(({ type, attributes }) =>
       type === 'wasm' &&
       attributes.some(

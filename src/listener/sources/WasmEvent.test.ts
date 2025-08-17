@@ -1,14 +1,14 @@
 import { Event } from '@cosmjs/stargate'
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { ExtractorMatchInput } from '@/types'
+import { ExtractableTxInput } from '@/types'
 
 import { WasmEventDataSource, WasmEventDataSourceConfig } from './WasmEvent'
 
 describe('WasmEventDataSource', () => {
   let dataSource: WasmEventDataSource
 
-  const createMockExtractorInput = (events: Event[]): ExtractorMatchInput => ({
+  const createMockExtractorInput = (events: Event[]): ExtractableTxInput => ({
     hash: 'test-hash',
     tx: {} as any,
     messages: [],
@@ -473,6 +473,45 @@ describe('WasmEventDataSource', () => {
       expect(result).toHaveLength(1)
       expect(result[0].key).toBe('operation')
       expect(result[0].value).toBe('call')
+    })
+  })
+
+  describe('static methods', () => {
+    it('should have static source method', () => {
+      const source = WasmEventDataSource.source('testHandler', {
+        key: 'action',
+        value: 'execute',
+        otherAttributes: ['proposal_id'],
+      })
+
+      expect(source).toEqual({
+        type: 'wasm/event',
+        handler: 'testHandler',
+        config: {
+          key: 'action',
+          value: 'execute',
+          otherAttributes: ['proposal_id'],
+        },
+      })
+    })
+
+    it('should have static data method', () => {
+      const testData = {
+        address: 'juno1test123',
+        key: 'action',
+        value: 'execute',
+        attributes: [
+          { key: 'action', value: 'execute' },
+          { key: 'sender', value: 'juno1sender123' },
+        ],
+      }
+
+      const data = WasmEventDataSource.data(testData)
+
+      expect(data).toEqual({
+        type: 'wasm/event',
+        data: testData,
+      })
     })
   })
 })

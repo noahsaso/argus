@@ -1,2 +1,2 @@
 export * from './WasmEvent'
-export * from './WasmInstantiate'
+export * from './WasmInstantiateOrMigrate'
