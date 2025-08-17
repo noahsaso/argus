@@ -1,4 +1,4 @@
-import { ExtractorMaker, ExtractorMakerOptions, NamedExtractor } from '@/types'
+import { ExtractorEnv, ExtractorMaker, NamedExtractor } from '@/types'
 
 import { contract } from './contract'
 import { dao } from './dao'
@@ -11,11 +11,11 @@ export const extractorMakers: Record<string, ExtractorMaker<any>> = {
 }
 
 export const makeExtractors = async (
-  options: ExtractorMakerOptions
+  env: ExtractorEnv
 ): Promise<NamedExtractor[]> =>
   Promise.all(
     Object.entries(extractorMakers).map(async ([name, extractorMaker]) => ({
       name,
-      extractor: await extractorMaker(options),
+      extractor: await extractorMaker(env),
     }))
   )

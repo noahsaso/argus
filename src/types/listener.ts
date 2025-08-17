@@ -42,14 +42,14 @@ export type Extractor<Data extends unknown = unknown> = {
   sync?: () => Promise<Data[]>
 }
 
-export type ExtractorMakerOptions = {
+export type ExtractorEnv = {
   config: Config
   sendWebhooks: boolean
   autoCosmWasmClient: AutoCosmWasmClient
 }
 
 export type ExtractorMaker<Data extends unknown = unknown> = (
-  options: ExtractorMakerOptions
+  env: ExtractorEnv
 ) => Promise<Extractor<Data>>
 
 export type NamedExtractor = {
