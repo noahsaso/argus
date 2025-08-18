@@ -1,16 +1,11 @@
-import retry from 'async-await-retry'
 import { Job, Queue } from 'bullmq'
 import { Sequelize } from 'sequelize'
 
 import { Block, State } from '@/db'
 import { getExtractorMap } from '@/listener'
 import { queueMeilisearchIndexUpdates } from '@/search'
-import {
-  DependableEventModel,
-  ExtractorEnv,
-  ExtractorHandleableData,
-} from '@/types'
-import { AutoCosmWasmClient } from '@/utils'
+import { ExtractorEnv, ExtractorHandleableData } from '@/types'
+import { AutoCosmWasmClient, retry } from '@/utils'
 import { queueWebhooks } from '@/webhooks'
 
 import { BaseQueue } from '../base'
@@ -76,15 +71,10 @@ export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
           ...job.data.env,
         })
 
-        // Retry 3 times with exponential backoff starting at 100ms delay.
-        const models: DependableEventModel[] = await retry(
-          extractor.extract,
-          [job.data.data],
-          {
-            retriesMax: 3,
-            exponential: true,
-            interval: 100,
-          }
+        const models = await retry(
+          3,
+          () => extractor.extract([job.data.data]),
+          100
         )
 
         if (models && Array.isArray(models) && models.length) {
