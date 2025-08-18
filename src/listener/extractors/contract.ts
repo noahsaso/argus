@@ -3,8 +3,10 @@ import { fromUtf8, toUtf8 } from '@cosmjs/encoding'
 import { Contract } from '@/db'
 import {
   ExtractorDataSource,
+  ExtractorHandleableData,
   ExtractorHandler,
   ExtractorHandlerOutput,
+  ExtractorSyncEnv,
 } from '@/types'
 
 import {
@@ -14,11 +16,8 @@ import {
 import { Extractor } from './base'
 
 export class ContractExtractor extends Extractor {
-  static get type(): string {
-    return 'contract'
-  }
-
-  sources: ExtractorDataSource[] = [
+  static type = 'contract'
+  static sources: ExtractorDataSource[] = [
     WasmInstantiateOrMigrateDataSource.source('instantiate', {}),
   ]
 
@@ -75,8 +74,10 @@ export class ContractExtractor extends Extractor {
     ]
   }
 
-  async _sync() {
-    const client = this.env.autoCosmWasmClient.client
+  static async sync({
+    autoCosmWasmClient,
+  }: ExtractorSyncEnv): Promise<ExtractorHandleableData[]> {
+    const client = autoCosmWasmClient.client
     if (!client) {
       throw new Error('CosmWasm client not connected')
     }
@@ -96,7 +97,7 @@ export class ContractExtractor extends Extractor {
     }
 
     return contracts.map((contract) =>
-      WasmInstantiateOrMigrateDataSource.data({
+      WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
         type: 'instantiate',
         address: contract.address,
         codeId: contract.codeId,

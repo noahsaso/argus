@@ -3,7 +3,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ConfigManager } from '@/config'
 import { Contract, Extraction } from '@/db'
 import { WasmCodeService } from '@/services'
-import { ExtractorData, ExtractorEnv } from '@/types'
+import { ExtractorEnv, ExtractorHandleableData } from '@/types'
 import { AutoCosmWasmClient } from '@/utils'
 
 import {
@@ -104,8 +104,8 @@ describe('DAO Extractor', () => {
     }
 
     it('should extract DAO information successfully from instantiate data', async () => {
-      const data: ExtractorData[] = [
-        WasmInstantiateOrMigrateDataSource.data({
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
           type: 'instantiate',
           address: 'juno1dao123contract456',
           codeId: 4862,
@@ -164,8 +164,8 @@ describe('DAO Extractor', () => {
     })
 
     it('should extract DAO information successfully from execute data', async () => {
-      const data: ExtractorData[] = [
-        WasmEventDataSource.data({
+      const data: ExtractorHandleableData[] = [
+        WasmEventDataSource.handleable('execute', {
           address: 'juno1dao123contract456',
           key: 'action',
           value: 'execute_update_config',
@@ -237,14 +237,14 @@ describe('DAO Extractor', () => {
     })
 
     it('should handle multiple DAO addresses', async () => {
-      const data: ExtractorData[] = [
-        WasmInstantiateOrMigrateDataSource.data({
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
           type: 'instantiate',
           address: 'juno1dao123contract456',
           codeId: 4862,
           codeIdsKeys: ['dao-dao-core'],
         }),
-        WasmInstantiateOrMigrateDataSource.data({
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
           type: 'instantiate',
           address: 'juno1dao789contract012',
           codeId: 4862,
@@ -288,14 +288,14 @@ describe('DAO Extractor', () => {
     })
 
     it('should not extract if contract is not a dao-dao-core contract', async () => {
-      const data: ExtractorData[] = [
-        WasmInstantiateOrMigrateDataSource.data({
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
           type: 'instantiate',
           address: 'juno1dao123contract456',
           codeId: 4862,
           codeIdsKeys: ['dao-dao-core'],
         }),
-        WasmInstantiateOrMigrateDataSource.data({
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
           type: 'instantiate',
           address: 'juno1dao789contract012',
           codeId: 9999,
@@ -371,8 +371,8 @@ describe('DAO Extractor', () => {
     })
 
     it('should create contracts in database with correct information', async () => {
-      const data: ExtractorData[] = [
-        WasmInstantiateOrMigrateDataSource.data({
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
           type: 'instantiate',
           address: 'juno1dao123contract456',
           codeId: 4862,
@@ -428,8 +428,8 @@ describe('DAO Extractor', () => {
 
       const brokenExtractor = new DaoExtractor(brokenEnv)
 
-      const data: ExtractorData[] = [
-        WasmInstantiateOrMigrateDataSource.data({
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
           type: 'instantiate',
           address: 'juno1dao123contract456',
           codeId: 4862,
@@ -457,24 +457,29 @@ describe('DAO Extractor', () => {
         }
       )
 
-      const result = await extractor._sync!()
+      const result = await DaoExtractor.sync!({
+        config: extractor.env.config,
+        autoCosmWasmClient: extractor.env.autoCosmWasmClient,
+      })
       expect(result).toEqual([
         {
-          type: WasmInstantiateOrMigrateDataSource.type,
+          source: WasmInstantiateOrMigrateDataSource.type,
+          handler: 'instantiate',
           data: {
             type: 'instantiate',
             address: 'juno1dao123contract456',
-            codeId: 0,
-            codeIdsKeys: [],
+            codeId: 4862,
+            codeIdsKeys: ['dao-dao-core'],
           },
         },
         {
-          type: WasmInstantiateOrMigrateDataSource.type,
+          source: WasmInstantiateOrMigrateDataSource.type,
+          handler: 'instantiate',
           data: {
             type: 'instantiate',
             address: 'juno1dao789contract012',
-            codeId: 0,
-            codeIdsKeys: [],
+            codeId: 163,
+            codeIdsKeys: ['dao-dao-core'],
           },
         },
       ])

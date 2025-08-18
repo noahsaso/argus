@@ -3,17 +3,20 @@ import { Mock, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ConfigManager } from '@/config'
 import { Extraction } from '@/db'
-import { extractorMakers } from '@/listener'
+import * as listenerModule from '@/listener'
 import * as search from '@/search'
+import { AutoCosmWasmClient } from '@/utils'
 import * as webhooks from '@/webhooks'
 
 import { ExtractQueue, ExtractQueuePayload } from './extract'
 
 describe('ExtractQueue', () => {
   let extractQueue: ExtractQueue
-  let mockExtractor: any
+  let mockExtractor: ReturnType<typeof vi.fn>
+  let mockExtract: ReturnType<typeof vi.fn>
   let mockJob: Job<ExtractQueuePayload>
   let logSpy: Mock
+  let mockGetExtractorMap = vi.fn()
 
   beforeEach(async () => {
     vi.clearAllMocks()
@@ -24,25 +27,37 @@ describe('ExtractQueue', () => {
     vi.spyOn(webhooks, 'queueWebhooks').mockResolvedValue(1)
 
     // Mock extractor
-    mockExtractor = {
-      match: vi.fn(),
-      extract: vi.fn().mockResolvedValue([
-        await Extraction.build({
-          address: 'juno1test123',
-          name: 'info',
-          blockHeight: '1000',
-          blockTimeUnixMs: '1640995200000',
-          txHash: 'test-hash',
-          data: { test: 'data' },
-        }),
-      ]),
-    }
 
-    // Mock extractor makers
-    extractorMakers.dao = vi.fn()
-    extractorMakers.testExtractor = vi.fn()
-    vi.mocked(extractorMakers.dao).mockResolvedValue(mockExtractor)
-    vi.mocked(extractorMakers.testExtractor).mockResolvedValue(mockExtractor)
+    mockExtract = vi.fn().mockResolvedValue([
+      Extraction.build({
+        address: 'juno1test123',
+        name: 'info',
+        blockHeight: '1000',
+        blockTimeUnixMs: '1640995200000',
+        txHash: 'test-hash',
+        data: { test: 'data' },
+      }),
+    ])
+
+    mockExtractor = vi.fn(() => ({
+      extract: mockExtract,
+    }))
+
+    // Mock extractors
+    vi.spyOn(listenerModule, 'getExtractorMap').mockImplementation(
+      mockGetExtractorMap
+    )
+    mockGetExtractorMap.mockImplementation(() => ({
+      test: mockExtractor,
+    }))
+
+    vi.spyOn(AutoCosmWasmClient.prototype, 'update').mockImplementation(vi.fn())
+    vi.spyOn(AutoCosmWasmClient.prototype, 'client', 'get').mockImplementation(
+      () =>
+        ({
+          getContract: vi.fn(),
+        } as any)
+    )
 
     // Create extract queue
     extractQueue = new ExtractQueue({
@@ -55,16 +70,20 @@ describe('ExtractQueue', () => {
     // Mock job
     mockJob = {
       data: {
-        extractor: 'dao',
+        extractor: 'test',
         data: {
+          source: 'test',
+          handler: 'test',
+          data: {
+            test: 'data',
+          },
+        },
+        env: {
           txHash: 'test-hash-123',
           block: {
             height: '1000',
             timeUnixMs: '1640995200000',
             timestamp: '2022-01-01T00:00:00Z',
-          },
-          data: {
-            addresses: ['juno1test123contract456'],
           },
         },
       },
@@ -72,48 +91,15 @@ describe('ExtractQueue', () => {
     } as Job<ExtractQueuePayload>
   })
 
-  describe('init', () => {
-    it('should initialize extractors', async () => {
-      expect(vi.mocked(extractorMakers.dao)).toHaveBeenCalledWith({
-        config: ConfigManager.load(),
-        sendWebhooks: true,
-        autoCosmWasmClient: expect.any(Object),
-      })
-    })
-
-    it('should handle extractor initialization failure', async () => {
-      const failingExtractorMaker = vi
-        .fn()
-        .mockRejectedValue(new Error('Extractor init failed'))
-
-      const failingQueue = new ExtractQueue({
-        config: ConfigManager.load(),
-        sendWebhooks: false,
-      })
-
-      // Add failing extractor maker
-      extractorMakers.failingExtractor = failingExtractorMaker
-
-      await expect(failingQueue.init()).rejects.toThrow()
-
-      // Remove failing extractor maker
-      delete extractorMakers.failingExtractor
-    })
-  })
-
   describe('process', () => {
     it('should process extraction job successfully', async () => {
       await extractQueue.process(mockJob)
 
-      expect(mockExtractor.extract).toHaveBeenCalledWith({
-        txHash: 'test-hash-123',
-        block: {
-          height: '1000',
-          timeUnixMs: '1640995200000',
-          timestamp: '2022-01-01T00:00:00Z',
-        },
+      expect(mockExtract).toHaveBeenCalledWith({
+        source: 'test',
+        handler: 'test',
         data: {
-          addresses: ['juno1test123contract456'],
+          test: 'data',
         },
       })
 
@@ -130,13 +116,19 @@ describe('ExtractQueue', () => {
         data: {
           extractor: 'nonexistent',
           data: {
+            source: 'test',
+            handler: 'test',
+            data: {
+              test: 'data',
+            },
+          },
+          env: {
             txHash: 'test-hash',
             block: {
               height: '1000',
               timeUnixMs: '1640995200000',
               timestamp: '2022-01-01T00:00:00Z',
             },
-            data: {},
           },
         },
         log: async (_) => 0,
@@ -149,7 +141,7 @@ describe('ExtractQueue', () => {
 
     it('should retry extraction on failure', async () => {
       let attempts = 0
-      mockExtractor.extract.mockImplementation(() => {
+      mockExtract.mockImplementation(() => {
         attempts++
         if (attempts < 3) {
           throw new Error('Temporary failure')
@@ -169,41 +161,41 @@ describe('ExtractQueue', () => {
       await extractQueue.process(mockJob)
 
       expect(attempts).toBe(3) // Should have retried 3 times total
-      expect(mockExtractor.extract).toHaveBeenCalledTimes(3)
+      expect(mockExtract).toHaveBeenCalledTimes(3)
     })
 
     it('should fail after maximum retries', async () => {
-      mockExtractor.extract.mockRejectedValue(new Error('Persistent failure'))
+      mockExtract.mockRejectedValue(new Error('Persistent failure'))
 
       await expect(extractQueue.process(mockJob)).rejects.toThrow(
         'Persistent failure'
       )
 
-      expect(mockExtractor.extract).toHaveBeenCalledTimes(3)
+      expect(mockExtract).toHaveBeenCalledTimes(3)
     })
 
     it('should handle empty extraction results', async () => {
-      mockExtractor.extract.mockResolvedValue([])
+      mockExtract.mockResolvedValue([])
 
       await extractQueue.process(mockJob)
 
       // Should complete without errors
-      expect(mockExtractor.extract).toHaveBeenCalledOnce()
+      expect(mockExtract).toHaveBeenCalledOnce()
     })
 
     it('should handle non-array extraction results', async () => {
-      mockExtractor.extract.mockResolvedValue(null)
+      mockExtract.mockResolvedValue(null)
 
       await extractQueue.process(mockJob)
 
       // Should complete without errors
-      expect(mockExtractor.extract).toHaveBeenCalledOnce()
+      expect(mockExtract).toHaveBeenCalledOnce()
     })
 
     it('should timeout after 30 seconds', async () => {
       vi.useFakeTimers()
 
-      mockExtractor.extract.mockImplementation(
+      mockExtract.mockImplementation(
         () =>
           new Promise(() => {
             // Never resolve to simulate hanging
@@ -244,7 +236,7 @@ describe('ExtractQueue', () => {
       // Should still complete the job even if meilisearch fails
       await extractQueue.process(mockJob)
 
-      expect(mockExtractor.extract).toHaveBeenCalledOnce()
+      expect(mockExtract).toHaveBeenCalledOnce()
     })
 
     it('should handle webhook queueing failures gracefully', async () => {
@@ -255,7 +247,7 @@ describe('ExtractQueue', () => {
       // Should still complete the job even if webhook queueing fails
       await extractQueue.process(mockJob)
 
-      expect(mockExtractor.extract).toHaveBeenCalledOnce()
+      expect(mockExtract).toHaveBeenCalledOnce()
     })
 
     it('should log search index updates when queued', async () => {
@@ -288,23 +280,14 @@ describe('ExtractQueue', () => {
     })
 
     it('should process multiple extractors', async () => {
-      const secondExtractor = {
-        match: vi.fn(),
-        extract: vi.fn().mockResolvedValue([
-          Extraction.build({
-            address: 'juno1test456',
-            name: 'test/data',
-            blockHeight: '1001',
-            blockTimeUnixMs: '1640995260000',
-            txHash: 'test-hash-2',
-            data: { test: 'data2' },
-          }),
-        ]),
-      }
+      const secondExtractor = vi.fn(() => ({
+        extract: mockExtract,
+      }))
 
-      vi.mocked(extractorMakers.testExtractor).mockResolvedValue(
-        secondExtractor
-      )
+      mockGetExtractorMap.mockImplementation(() => ({
+        test: mockExtractor,
+        testExtractor: secondExtractor,
+      }))
 
       const testQueue = new ExtractQueue({
         config: ConfigManager.load(),
@@ -316,13 +299,19 @@ describe('ExtractQueue', () => {
         data: {
           extractor: 'testExtractor',
           data: {
+            source: 'test',
+            handler: 'test',
+            data: {
+              test: 'payload',
+            },
+          },
+          env: {
             txHash: 'test-hash-456',
             block: {
               height: '1001',
               timeUnixMs: '1640995260000',
               timestamp: '2022-01-01T00:00:00Z',
             },
-            data: { test: 'payload' },
           },
         },
         log: logSpy as (message: string) => Promise<number>,
@@ -330,14 +319,24 @@ describe('ExtractQueue', () => {
 
       await testQueue.process(testJob)
 
-      expect(secondExtractor.extract).toHaveBeenCalledWith({
+      expect(secondExtractor).toHaveBeenCalledWith({
+        config: expect.any(Object),
+        sendWebhooks: false,
+        autoCosmWasmClient: expect.any(Object),
         txHash: 'test-hash-456',
         block: {
           height: '1001',
           timeUnixMs: '1640995260000',
           timestamp: '2022-01-01T00:00:00Z',
         },
-        data: { test: 'payload' },
+      })
+
+      expect(mockExtract).toHaveBeenCalledWith({
+        source: 'test',
+        handler: 'test',
+        data: {
+          test: 'payload',
+        },
       })
     })
   })

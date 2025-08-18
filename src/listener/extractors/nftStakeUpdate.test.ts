@@ -3,7 +3,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ConfigManager } from '@/config'
 import { Extraction } from '@/db'
 import { WasmCodeService } from '@/services'
-import { ExtractorData, ExtractorEnv } from '@/types'
+import { ExtractorEnv, ExtractorHandleableData } from '@/types'
 import { AutoCosmWasmClient } from '@/utils'
 
 import { WasmEventDataSource } from '../sources'
@@ -85,8 +85,8 @@ describe('NFT Stake Update Extractor', () => {
 
   describe('extract function', () => {
     it('should extract NFT stake update information successfully', async () => {
-      const data: ExtractorData[] = [
-        WasmEventDataSource.data({
+      const data: ExtractorHandleableData[] = [
+        WasmEventDataSource.handleable('stake', {
           address: 'juno1nftvoting123contract456',
           key: 'action',
           value: 'stake',
@@ -218,8 +218,8 @@ describe('NFT Stake Update Extractor', () => {
     })
 
     it('should handle multiple NFT stake updates', async () => {
-      const data: ExtractorData[] = [
-        WasmEventDataSource.data({
+      const data: ExtractorHandleableData[] = [
+        WasmEventDataSource.handleable('stake', {
           address: 'juno1nftvoting123contract456',
           key: 'action',
           value: 'stake',
@@ -235,7 +235,7 @@ describe('NFT Stake Update Extractor', () => {
             { key: 'token_id', value: '123' },
           ],
         }),
-        WasmEventDataSource.data({
+        WasmEventDataSource.handleable('unstake', {
           address: 'juno1nftvoting789contract012',
           key: 'action',
           value: 'unstake',
@@ -405,8 +405,8 @@ describe('NFT Stake Update Extractor', () => {
     })
 
     it('should throw error on contract query failure', async () => {
-      const data: ExtractorData[] = [
-        WasmEventDataSource.data({
+      const data: ExtractorHandleableData[] = [
+        WasmEventDataSource.handleable('stake', {
           address: 'juno1nftvoting123contract456',
           key: 'action',
           value: 'stake',
@@ -421,7 +421,7 @@ describe('NFT Stake Update Extractor', () => {
             { key: 'token_id', value: '123' },
           ],
         }),
-        WasmEventDataSource.data({
+        WasmEventDataSource.handleable('stake', {
           address: 'juno1nftvoting789contract012',
           key: 'action',
           value: 'stake',
@@ -487,8 +487,8 @@ describe('NFT Stake Update Extractor', () => {
     })
 
     it('should not extract if contract is not a dao-voting-cw721-staked contract', async () => {
-      const data: ExtractorData[] = [
-        WasmEventDataSource.data({
+      const data: ExtractorHandleableData[] = [
+        WasmEventDataSource.handleable('stake', {
           address: 'juno1nftvoting123contract456',
           key: 'action',
           value: 'stake',
@@ -503,7 +503,7 @@ describe('NFT Stake Update Extractor', () => {
             { key: 'token_id', value: '123' },
           ],
         }),
-        WasmEventDataSource.data({
+        WasmEventDataSource.handleable('stake', {
           address: 'juno1nftvoting789contract012',
           key: 'action',
           value: 'stake',
@@ -638,8 +638,8 @@ describe('NFT Stake Update Extractor', () => {
 
       const brokenExtractor = new NftStakeUpdateExtractor(brokenEnv)
 
-      const data: ExtractorData[] = [
-        WasmEventDataSource.data({
+      const data: ExtractorHandleableData[] = [
+        WasmEventDataSource.handleable('stake', {
           address: 'juno1nftvoting123contract456',
           key: 'action',
           value: 'stake',

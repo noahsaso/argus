@@ -1,4 +1,8 @@
-import { ExtractableTxInput, ExtractorData, ExtractorDataSource } from '@/types'
+import {
+  ExtractableTxInput,
+  ExtractorDataSource,
+  ExtractorHandleableData,
+} from '@/types'
 
 import { DataSource } from './base'
 
@@ -69,9 +73,13 @@ export class WasmEventDataSource extends DataSource<
     }
   }
 
-  static data(data: WasmEventData): ExtractorData<WasmEventData> {
+  static handleable(
+    handler: string,
+    data: WasmEventData
+  ): ExtractorHandleableData<WasmEventData> {
     return {
-      type: this.type,
+      source: this.type,
+      handler,
       data,
     }
   }

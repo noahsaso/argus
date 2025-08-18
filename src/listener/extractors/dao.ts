@@ -2,8 +2,10 @@ import { Contract } from '@/db'
 import { WasmCodeService } from '@/services'
 import {
   ExtractorDataSource,
+  ExtractorHandleableData,
   ExtractorHandler,
   ExtractorHandlerOutput,
+  ExtractorSyncEnv,
 } from '@/types'
 
 import {
@@ -15,11 +17,8 @@ import {
 import { Extractor } from './base'
 
 export class DaoExtractor extends Extractor {
-  static get type(): string {
-    return 'dao'
-  }
-
-  sources: ExtractorDataSource[] = [
+  static type = 'dao'
+  static sources: ExtractorDataSource[] = [
     WasmInstantiateOrMigrateDataSource.source('instantiate', {
       codeIdsKeys: ['dao-dao-core'],
     }),
@@ -112,8 +111,10 @@ export class DaoExtractor extends Extractor {
     ]
   }
 
-  async _sync() {
-    const client = this.env.autoCosmWasmClient.client
+  static async sync({
+    autoCosmWasmClient,
+  }: ExtractorSyncEnv): Promise<ExtractorHandleableData[]> {
+    const client = autoCosmWasmClient.client
     if (!client) {
       throw new Error('CosmWasm client not connected')
     }
@@ -122,18 +123,22 @@ export class DaoExtractor extends Extractor {
       WasmCodeService.instance.findWasmCodeIdsByKeys('dao-dao-core')
 
     // Find all DAO contracts on the chain.
-    const addresses: string[] = []
+    const contracts: { codeId: number; address: string }[] = []
     for (const codeId of daoDaoCoreCodeIds) {
-      const contracts = await client.getContracts(codeId)
-      addresses.push(...contracts)
+      contracts.push(
+        ...(await client.getContracts(codeId)).map((address) => ({
+          address,
+          codeId,
+        }))
+      )
     }
 
-    return addresses.map((address) =>
-      WasmInstantiateOrMigrateDataSource.data({
+    return contracts.map(({ address, codeId }) =>
+      WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
         type: 'instantiate',
         address,
-        codeId: 0,
-        codeIdsKeys: [],
+        codeId,
+        codeIdsKeys: ['dao-dao-core'],
       })
     )
   }

@@ -3,7 +3,7 @@ import { MockInstance, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ConfigManager } from '@/config'
 import { Contract, Extraction } from '@/db'
-import { ExtractorData, ExtractorEnv } from '@/types'
+import { ExtractorEnv, ExtractorHandleableData } from '@/types'
 import { AutoCosmWasmClient } from '@/utils'
 
 import { WasmInstantiateOrMigrateDataSource } from '../sources'
@@ -73,8 +73,8 @@ describe('Contracts Extractor', () => {
     }
 
     it('should extract contract information from instantiate data successfully', async () => {
-      const data: ExtractorData[] = [
-        WasmInstantiateOrMigrateDataSource.data({
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
           type: 'instantiate',
           address: 'juno123contract456',
           codeId: 4862,
@@ -118,8 +118,8 @@ describe('Contracts Extractor', () => {
     })
 
     it('should extract contract information from migrate data successfully', async () => {
-      const data: ExtractorData[] = [
-        WasmInstantiateOrMigrateDataSource.data({
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
           type: 'migrate',
           address: 'juno123contract456',
           codeId: 4862,
@@ -163,14 +163,14 @@ describe('Contracts Extractor', () => {
     })
 
     it('should handle multiple addresses', async () => {
-      const data: ExtractorData[] = [
-        WasmInstantiateOrMigrateDataSource.data({
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
           type: 'instantiate',
           address: 'juno123contract456',
           codeId: 4862,
           codeIdsKeys: [],
         }),
-        WasmInstantiateOrMigrateDataSource.data({
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
           type: 'instantiate',
           address: 'juno789contract012',
           codeId: 4862,
@@ -216,14 +216,14 @@ describe('Contracts Extractor', () => {
     })
 
     it('should throw error on contract query failure', async () => {
-      const data: ExtractorData[] = [
-        WasmInstantiateOrMigrateDataSource.data({
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
           type: 'instantiate',
           address: 'juno123contract456',
           codeId: 4862,
           codeIdsKeys: [],
         }),
-        WasmInstantiateOrMigrateDataSource.data({
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
           type: 'instantiate',
           address: 'juno789contract012',
           codeId: 4862,
@@ -273,8 +273,8 @@ describe('Contracts Extractor', () => {
     })
 
     it('should create contracts in database with correct information', async () => {
-      const data: ExtractorData[] = [
-        WasmInstantiateOrMigrateDataSource.data({
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
           type: 'instantiate',
           address: 'juno123contract456',
           codeId: 4862,
@@ -310,8 +310,8 @@ describe('Contracts Extractor', () => {
     })
 
     it('should not extract when contract info query returns empty data', async () => {
-      const data: ExtractorData[] = [
-        WasmInstantiateOrMigrateDataSource.data({
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
           type: 'instantiate',
           address: 'juno123contract456',
           codeId: 4862,
@@ -360,8 +360,8 @@ describe('Contracts Extractor', () => {
 
       const brokenExtractor = new ContractExtractor(brokenEnv)
 
-      const data: ExtractorData[] = [
-        WasmInstantiateOrMigrateDataSource.data({
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
           type: 'instantiate',
           address: 'juno123contract456',
           codeId: 4862,
@@ -394,10 +394,14 @@ describe('Contracts Extractor', () => {
         }
       )
 
-      const result = await extractor._sync!()
+      const result = await ContractExtractor.sync!({
+        config: extractor.env.config,
+        autoCosmWasmClient: extractor.env.autoCosmWasmClient,
+      })
       expect(result).toEqual([
         {
-          type: WasmInstantiateOrMigrateDataSource.type,
+          source: WasmInstantiateOrMigrateDataSource.type,
+          handler: 'instantiate',
           data: {
             type: 'instantiate',
             address: 'juno1contract100',
@@ -406,7 +410,8 @@ describe('Contracts Extractor', () => {
           },
         },
         {
-          type: WasmInstantiateOrMigrateDataSource.type,
+          source: WasmInstantiateOrMigrateDataSource.type,
+          handler: 'instantiate',
           data: {
             type: 'instantiate',
             address: 'juno1contract200',

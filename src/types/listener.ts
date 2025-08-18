@@ -30,6 +30,14 @@ export type ExtractorEnv = {
 }
 
 /**
+ * The sync environment for each extractor.
+ */
+export type ExtractorSyncEnv = {
+  config: Config
+  autoCosmWasmClient: AutoCosmWasmClient
+}
+
+/**
  * A data source configuration for an extractor.
  */
 export type ExtractorDataSource<
@@ -65,9 +73,19 @@ export type ExtractorHandler<Data extends unknown = unknown> = (
 ) => Promise<ExtractorHandlerOutput[]>
 
 /**
- * The data extracted by a data source, to be passed to an extractor handler.
+ * The data filtered by a data source to be passed to
  */
 export type ExtractorData<Data extends unknown = unknown> = {
   type: string
+  data: Data
+}
+
+/**
+ * The data that has been matched by a data source and is ready to be passed to
+ * an extractor handler.
+ */
+export type ExtractorHandleableData<Data extends unknown = unknown> = {
+  source: string
+  handler: string
   data: Data
 }

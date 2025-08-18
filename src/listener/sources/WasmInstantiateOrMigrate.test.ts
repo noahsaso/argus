@@ -39,7 +39,7 @@ describe('WasmInstantiateOrMigrateDataSource', () => {
       findWasmCodeKeysById: vi.fn(),
     }
 
-    vi.spyOn(WasmCodeService, 'getInstance').mockReturnValue(
+    vi.spyOn(WasmCodeService, 'instance', 'get').mockReturnValue(
       mockWasmCodeService as any
     )
   })
@@ -913,7 +913,7 @@ describe('WasmInstantiateOrMigrateDataSource', () => {
       })
     })
 
-    it('should have static data method', () => {
+    it('should have static handeable method', () => {
       const testData = {
         type: 'instantiate' as const,
         address: 'juno1test123',
@@ -921,10 +921,14 @@ describe('WasmInstantiateOrMigrateDataSource', () => {
         codeIdsKeys: ['dao-dao-core'],
       }
 
-      const data = WasmInstantiateOrMigrateDataSource.data(testData)
+      const data = WasmInstantiateOrMigrateDataSource.handleable(
+        'instantiate',
+        testData
+      )
 
       expect(data).toEqual({
-        type: 'wasm/instantiate-or-migrate',
+        source: 'wasm/instantiate-or-migrate',
+        handler: 'instantiate',
         data: testData,
       })
     })

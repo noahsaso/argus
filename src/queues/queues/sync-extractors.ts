@@ -1,7 +1,7 @@
 import { Job, Queue } from 'bullmq'
 
-import { makeExtractors } from '@/listener'
-import { NamedExtractor } from '@/types'
+import { getExtractors } from '@/listener'
+import { ExtractorSyncEnv } from '@/types'
 import { AutoCosmWasmClient } from '@/utils'
 
 import { BaseQueue } from '../base'
@@ -30,31 +30,23 @@ export class SyncExtractorsQueue extends BaseQueue<SyncExtractorsQueuePayload> {
   static close = () => closeBullQueue(this.queueName)
 
   private autoCosmWasmClient!: AutoCosmWasmClient
-  private extractors: NamedExtractor[] = []
 
   async init(): Promise<void> {
     this.autoCosmWasmClient = new AutoCosmWasmClient(
       this.options.config.remoteRpc
     )
     await this.autoCosmWasmClient.update()
-
-    // Set up extractors.
-    const extractors = await makeExtractors({
-      ...this.options,
-      autoCosmWasmClient: this.autoCosmWasmClient,
-    })
-
-    this.extractors = extractors
   }
 
   async process(job: Job<SyncExtractorsQueuePayload>): Promise<void> {
     const now = Date.now()
 
+    const extractors = getExtractors()
     const toSync =
       job.data.extractors === 'ALL'
-        ? this.extractors
-        : this.extractors.filter((extractor) =>
-            job.data.extractors.includes(extractor.name)
+        ? extractors
+        : extractors.filter((extractor) =>
+            job.data.extractors.includes(extractor.type)
           )
 
     if (toSync.length === 0) {
@@ -73,23 +65,28 @@ export class SyncExtractorsQueue extends BaseQueue<SyncExtractorsQueuePayload> {
     const block = await client.getBlock()
     let count = 0
 
-    for (const { name, extractor } of toSync) {
-      job.log(`syncing ${name}...`)
-      const syncData = await extractor.sync?.()
+    const env: ExtractorSyncEnv = {
+      config: this.options.config,
+      autoCosmWasmClient: this.autoCosmWasmClient,
+    }
+
+    for (const Extractor of toSync) {
+      job.log(`syncing ${Extractor.type}...`)
+      const syncData = await Extractor.sync?.(env)
       if (syncData) {
         await ExtractQueue.addBulk(
-          syncData.map((data, index) => ({
-            name: `sync-${name}-${now}-${index}`,
+          syncData.map((data) => ({
+            name: `sync_${Extractor.type}_${now}`,
             data: {
-              extractor: name,
-              data: {
+              extractor: Extractor.type,
+              data,
+              env: {
                 txHash: '',
                 block: {
                   height: BigInt(block.header.height).toString(),
                   timeUnixMs: BigInt(Date.parse(block.header.time)).toString(),
                   timestamp: new Date(block.header.time).toISOString(),
                 },
-                data,
               },
             },
           }))

@@ -9,11 +9,8 @@ import { WasmEventData, WasmEventDataSource } from '../sources'
 import { Extractor } from './base'
 
 export class NftStakeUpdateExtractor extends Extractor {
-  static get type(): string {
-    return 'nftStakeUpdate'
-  }
-
-  sources: ExtractorDataSource[] = [
+  static type = 'nftStakeUpdate'
+  static sources: ExtractorDataSource[] = [
     WasmEventDataSource.source('stake', {
       key: 'action',
       value: 'stake',

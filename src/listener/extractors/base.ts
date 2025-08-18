@@ -1,24 +1,31 @@
 import { Extraction } from '@/db'
 import {
   DependableEventModel,
-  ExtractorData,
+  ExtractableTxInput,
   ExtractorDataSource,
   ExtractorEnv,
+  ExtractorHandleableData,
   ExtractorHandler,
+  ExtractorSyncEnv,
 } from '@/types'
+
+import { getDataSources } from '../sources'
 
 export abstract class Extractor {
   /**
-   * The unique identifier for the data source type.
+   * The unique identifier for the extractor.
    */
-  static get type(): string {
-    throw new Error('Not implemented')
-  }
+  static type: string
 
   /**
    * The data sources for the extractor.
    */
-  abstract sources: ExtractorDataSource[]
+  static sources: ExtractorDataSource[]
+
+  /**
+   * An optional function to sync extractions in order to backfill data.
+   */
+  static sync?(env: ExtractorSyncEnv): Promise<ExtractorHandleableData[]>
 
   /**
    * The environment for the extractor.
@@ -30,33 +37,66 @@ export abstract class Extractor {
   }
 
   /**
-   * The function that extracts data that's been matched by data sources.
+   * The unique identifier for the extractor type (accessible on instances).
    */
-  async extract(data: ExtractorData[]): Promise<DependableEventModel[]> {
+  get type(): string {
+    return (this.constructor as typeof Extractor).type
+  }
+
+  /**
+   * The data sources for the extractor (accessible on instances).
+   */
+  get sources(): ExtractorDataSource[] {
+    return (this.constructor as typeof Extractor).sources
+  }
+
+  /**
+   * A function that uses data sources to filter an input and produce data
+   * that's ready to be passed to a handler.
+   */
+  static match(input: ExtractableTxInput): ExtractorHandleableData[] {
+    const availableDataSources = getDataSources()
+    return this.sources.flatMap(({ type, handler, config }) => {
+      const Source = availableDataSources[type]
+      if (!Source) {
+        throw new Error(`Source ${type} not found.`)
+      }
+
+      const source = new Source(config as any)
+      return source.match(input).map((data) => ({
+        source: type,
+        handler,
+        data,
+      }))
+    })
+  }
+
+  /**
+   * A function that extracts data that's been matched by data sources by
+   * calling the handler functions for each matched data.
+   */
+  async extract(
+    data: ExtractorHandleableData[]
+  ): Promise<DependableEventModel[]> {
     return (
       await Promise.all(
-        data.map(async ({ type, data }) => {
-          // Find the source for this data.
-          const source = this.sources.find((s) => s.type === type)
-          if (!source) {
-            throw new Error(`Source ${type} not found.`)
-          }
-
+        data.map(async ({ handler: _handler, data }) => {
           // Find the handler for this data.
           const handler =
-            source.handler in this
+            _handler in this
               ? (this[
-                  source.handler as keyof Extractor
+                  _handler as keyof Extractor
                 ] as unknown as ExtractorHandler)
               : undefined
 
           // Ensure the handler is a function.
           if (!handler || typeof handler !== 'function') {
-            throw new Error(`Handler function ${source.handler} not found.`)
+            throw new Error(`Handler function ${_handler} not found.`)
           }
 
           // Call the handler and save the output extractions.
           const extractions = await handler(data)
+
           return Extraction.bulkCreate(
             extractions.map((extraction) => ({
               ...extraction,
@@ -74,9 +114,4 @@ export abstract class Extractor {
       )
     ).flat()
   }
-
-  /**
-   * The optional function to sync extractions.
-   */
-  _sync?(): Promise<ExtractorData[]>
 }

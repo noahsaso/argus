@@ -502,7 +502,7 @@ describe('WasmEventDataSource', () => {
       })
     })
 
-    it('should have static data method', () => {
+    it('should have static handleable method', () => {
       const testData = {
         address: 'juno1test123',
         key: 'action',
@@ -518,10 +518,11 @@ describe('WasmEventDataSource', () => {
         ],
       }
 
-      const data = WasmEventDataSource.data(testData)
+      const data = WasmEventDataSource.handleable('testHandler', testData)
 
       expect(data).toEqual({
-        type: 'wasm/event',
+        source: 'wasm/event',
+        handler: 'testHandler',
         data: testData,
       })
     })

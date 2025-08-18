@@ -3,12 +3,12 @@ import { Job, Queue } from 'bullmq'
 import { Sequelize } from 'sequelize'
 
 import { Block, State } from '@/db'
-import { makeExtractors } from '@/listener'
+import { getExtractorMap } from '@/listener'
 import { queueMeilisearchIndexUpdates } from '@/search'
 import {
   DependableEventModel,
-  ExtractorExtractInput,
-  NamedExtractor,
+  ExtractorEnv,
+  ExtractorHandleableData,
 } from '@/types'
 import { AutoCosmWasmClient } from '@/utils'
 import { queueWebhooks } from '@/webhooks'
@@ -18,7 +18,8 @@ import { closeBullQueue, getBullQueue, getBullQueueEvents } from '../connection'
 
 export type ExtractQueuePayload = {
   extractor: string
-  data: ExtractorExtractInput
+  data: ExtractorHandleableData
+  env: Pick<ExtractorEnv, 'txHash' | 'block'>
 }
 
 export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
@@ -35,24 +36,25 @@ export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
   ) => (await this.getQueue()).addBulk(...params)
   static close = () => closeBullQueue(this.queueName)
 
-  private extractors: NamedExtractor[] = []
+  private autoCosmWasmClient!: AutoCosmWasmClient
 
   async init(): Promise<void> {
-    const autoCosmWasmClient = new AutoCosmWasmClient(
+    this.autoCosmWasmClient = new AutoCosmWasmClient(
       this.options.config.remoteRpc
     )
-    await autoCosmWasmClient.update()
-
-    // Set up extractors.
-    const extractors = await makeExtractors({
-      ...this.options,
-      autoCosmWasmClient,
-    })
-
-    this.extractors = extractors
+    await this.autoCosmWasmClient.update()
   }
 
-  process(job: Job<ExtractQueuePayload>): Promise<void> {
+  async process(job: Job<ExtractQueuePayload>): Promise<void> {
+    if (!this.autoCosmWasmClient.client) {
+      await this.autoCosmWasmClient.update()
+      if (!this.autoCosmWasmClient.client) {
+        throw new Error('CosmWasm client not connected')
+      }
+    }
+
+    const extractors = getExtractorMap()
+
     return new Promise<void>(async (resolve, reject) => {
       // Time out if takes more than 30 seconds.
       let timeout: NodeJS.Timeout | null = setTimeout(() => {
@@ -62,12 +64,17 @@ export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
 
       try {
         // Process data.
-        const extractor = this.extractors.find(
-          (e) => e.name === job.data.extractor
-        )?.extractor
-        if (!extractor) {
+        const Extractor = extractors[job.data.extractor]
+        if (!Extractor) {
           throw new Error(`Extractor ${job.data.extractor} not found.`)
         }
+
+        const extractor = new Extractor({
+          config: this.options.config,
+          sendWebhooks: this.options.sendWebhooks,
+          autoCosmWasmClient: this.autoCosmWasmClient,
+          ...job.data.env,
+        })
 
         // Retry 3 times with exponential backoff starting at 100ms delay.
         const models: DependableEventModel[] = await retry(

@@ -1,5 +1,9 @@
 import { WasmCodeService } from '@/services'
-import { ExtractableTxInput, ExtractorData, ExtractorDataSource } from '@/types'
+import {
+  ExtractableTxInput,
+  ExtractorDataSource,
+  ExtractorHandleableData,
+} from '@/types'
 
 import { DataSource } from './base'
 
@@ -53,11 +57,13 @@ export class WasmInstantiateOrMigrateDataSource extends DataSource<
     }
   }
 
-  static data(
+  static handleable(
+    handler: string,
     data: WasmInstantiateOrMigrateData
-  ): ExtractorData<WasmInstantiateOrMigrateData> {
+  ): ExtractorHandleableData<WasmInstantiateOrMigrateData> {
     return {
-      type: this.type,
+      source: this.type,
+      handler,
       data,
     }
   }
