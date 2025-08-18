@@ -40,7 +40,7 @@ export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
     await this.autoCosmWasmClient.update()
   }
 
-  async process(job: Job<ExtractQueuePayload>): Promise<void> {
+  async process(job: Job<ExtractQueuePayload>) {
     if (!this.autoCosmWasmClient.client) {
       await this.autoCosmWasmClient.update()
       if (!this.autoCosmWasmClient.client) {
@@ -50,7 +50,7 @@ export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
 
     const extractors = getExtractorMap()
 
-    return new Promise<void>(async (resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       // Time out if takes more than 30 seconds.
       let timeout: NodeJS.Timeout | null = setTimeout(() => {
         timeout = null
@@ -77,7 +77,7 @@ export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
           100
         )
 
-        if (models && Array.isArray(models) && models.length) {
+        if (models.length > 0) {
           const latestBlock = models.sort(
             (a, b) => Number(a.block.height) - Number(b.block.height)
           )[models.length - 1]
@@ -143,7 +143,7 @@ export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
         }
 
         if (timeout !== null) {
-          resolve()
+          resolve(models.map((model) => model.toJSON()))
         }
       } catch (err) {
         if (timeout !== null) {
