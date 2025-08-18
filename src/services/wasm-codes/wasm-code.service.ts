@@ -16,7 +16,7 @@ export class WasmCodeService implements WasmCodeAdapter {
   /**
    * Singleton instance.
    */
-  static instance: WasmCodeService | undefined
+  private static _instance: WasmCodeService | undefined
 
   /**
    * Wasm codes that are always added to the list, even when wasm codes are
@@ -48,19 +48,28 @@ export class WasmCodeService implements WasmCodeAdapter {
    * Return whether or not the service is initialized.
    */
   static get isInitialized(): boolean {
-    return !!this.instance
+    return !!this._instance
   }
 
   /**
    * Return the singleton created by the setUpInstance method, throwing an error
    * if not yet setup.
    */
-  static getInstance(): WasmCodeService {
-    if (!this.instance) {
+  static get instance(): WasmCodeService {
+    if (!this._instance) {
       throw new Error(
         'WasmCodeService not initialized because WasmCodeService.setUpInstance was never called'
       )
     }
+    return this._instance
+  }
+
+  /**
+   * Backwards compatibility for old code.
+   *
+   * @deprecated Use WasmCodeService.instance instead.
+   */
+  static getInstance(): WasmCodeService {
     return this.instance
   }
 
@@ -78,22 +87,22 @@ export class WasmCodeService implements WasmCodeAdapter {
      */
     withUpdater?: boolean
   } = {}): Promise<WasmCodeService> {
-    if (this.instance) {
-      return this.instance
+    if (this._instance) {
+      return this._instance
     }
 
     const config = ConfigManager.load()
     // Update default wasm codes when config changes.
     ConfigManager.instance.onChange((config) => {
-      this.instance?.setDefaultWasmCodes(config.codeIds)
+      this._instance?.setDefaultWasmCodes(config.codeIds)
     })
 
-    this.instance = new WasmCodeService(config.codeIds)
+    this._instance = new WasmCodeService(config.codeIds)
     if (withUpdater) {
-      await this.instance.startUpdater()
+      await this._instance.startUpdater()
     }
 
-    return this.instance
+    return this._instance
   }
 
   /**
@@ -213,6 +222,13 @@ export class WasmCodeService implements WasmCodeAdapter {
     return this._wasmCodes
       .filter((wasmCode: WasmCode) => wasmCode.codeIds.includes(codeId))
       .map((wasmCode: WasmCode) => wasmCode.codeKey)
+  }
+
+  /**
+   * Whether or not the given code ID matches any of the given keys.
+   */
+  matchesWasmCodeKeys(codeId: number, ...keys: string[]): boolean {
+    return this.findWasmCodeIdsByKeys(...keys).includes(codeId)
   }
 
   /**

@@ -932,7 +932,7 @@ export const getEnv = ({
   }
 
   const getCodeIdsForKeys = (...keys: string[]): number[] =>
-    WasmCodeService.getInstance().findWasmCodeIdsByKeys(...keys)
+    WasmCodeService.instance.findWasmCodeIdsByKeys(...keys)
 
   const contractMatchesCodeIdKeys: FormulaContractMatchesCodeIdKeysGetter =
     async (contractAddress, ...keys) =>

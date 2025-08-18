@@ -35,9 +35,10 @@ export class ContractExtractor extends Extractor {
       client.getContract(address),
       // Skip redundant getContract query in the normal
       // queryContractRaw.
-      client['forceGetQueryClient']()
-        .wasm.queryContractRaw(address, toUtf8('contract_info'))
-        .catch(() => null),
+      client['forceGetQueryClient']().wasm.queryContractRaw(
+        address,
+        toUtf8('contract_info')
+      ),
     ])
 
     if (!response?.data.length) {

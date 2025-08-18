@@ -31,9 +31,14 @@ export type WasmEventData = {
    */
   value: string
   /**
-   * The attributes of the event, EXCLUDING the `_contract_address` attribute.
+   * A map of attribute key to all values (since there can be multiple values
+   * for the same key).
    */
-  attributes: {
+  attributes: Partial<Record<string, string[]>>
+  /**
+   * The attributes of the event.
+   */
+  _attributes: {
     /**
      * The key of the attribute.
      */
@@ -94,9 +99,14 @@ export class WasmEventDataSource extends DataSource<
                   )!.value,
                   key,
                   value,
-                  attributes: attributes.filter(
-                    ({ key }) => key !== '_contract_address'
+                  attributes: attributes.reduce(
+                    (acc, { key, value }) => ({
+                      ...acc,
+                      [key]: [...(acc[key] || []), value],
+                    }),
+                    {} as Record<string, string[]>
                   ),
+                  _attributes: [...attributes],
                 }
               : []
           )

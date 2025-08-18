@@ -58,9 +58,13 @@ export class DaoExtractor extends Extractor {
 
     const contract = await client.getContract(address)
 
-    const daoDaoCoreCodeIds =
-      WasmCodeService.getInstance().findWasmCodeIdsByKeys('dao-dao-core')
-    if (!daoDaoCoreCodeIds.includes(contract.codeId)) {
+    // Only process if the contract is a dao-dao-core contract.
+    if (
+      !WasmCodeService.instance.matchesWasmCodeKeys(
+        contract.codeId,
+        'dao-dao-core'
+      )
+    ) {
       return []
     }
 
@@ -115,7 +119,7 @@ export class DaoExtractor extends Extractor {
     }
 
     const daoDaoCoreCodeIds =
-      WasmCodeService.getInstance().findWasmCodeIdsByKeys('dao-dao-core')
+      WasmCodeService.instance.findWasmCodeIdsByKeys('dao-dao-core')
 
     // Find all DAO contracts on the chain.
     const addresses: string[] = []

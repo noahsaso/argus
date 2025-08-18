@@ -47,7 +47,13 @@ describe('WasmEventDataSource', () => {
           address: 'juno1contract123',
           key: 'action',
           value: 'instantiate',
-          attributes: [
+          attributes: {
+            _contract_address: ['juno1contract123'],
+            action: ['instantiate'],
+            owner: ['juno1owner123'],
+          },
+          _attributes: [
+            { key: '_contract_address', value: 'juno1contract123' },
             { key: 'action', value: 'instantiate' },
             { key: 'owner', value: 'juno1owner123' },
           ],
@@ -114,10 +120,11 @@ describe('WasmEventDataSource', () => {
 
       const result = dataSource.match(createMockExtractorInput(events))
 
-      expect(result[0].attributes).toEqual([
-        { key: 'action', value: 'instantiate' },
-        { key: 'sender', value: 'juno1sender123' },
-      ])
+      expect(result[0].attributes).toEqual({
+        _contract_address: ['juno1contract123'],
+        action: ['instantiate'],
+        sender: ['juno1sender123'],
+      })
     })
   })
 
@@ -500,7 +507,12 @@ describe('WasmEventDataSource', () => {
         address: 'juno1test123',
         key: 'action',
         value: 'execute',
-        attributes: [
+        attributes: {
+          action: ['execute'],
+          sender: ['juno1sender123'],
+        },
+        _attributes: [
+          { key: '_contract_address', value: 'juno1test123' },
           { key: 'action', value: 'execute' },
           { key: 'sender', value: 'juno1sender123' },
         ],

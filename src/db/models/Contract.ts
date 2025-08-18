@@ -71,8 +71,6 @@ export class Contract extends Model {
    * from the config.
    */
   matchesCodeIdKeys(...keys: string[]): boolean {
-    return WasmCodeService.getInstance()
-      .findWasmCodeIdsByKeys(...keys)
-      .includes(this.codeId)
+    return WasmCodeService.instance.matchesWasmCodeKeys(this.codeId, ...keys)
   }
 }
