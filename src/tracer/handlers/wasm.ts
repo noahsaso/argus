@@ -1,28 +1,15 @@
 import { fromBase64, fromUtf8, toBech32 } from '@cosmjs/encoding'
 import { ContractInfo } from '@dao-dao/types/protobuf/codegen/cosmwasm/wasm/v1/types'
 import * as Sentry from '@sentry/node'
-import retry from 'async-await-retry'
 import { LRUCache } from 'lru-cache'
 import { Sequelize } from 'sequelize'
 
-import {
-  AccountWebhook,
-  Block,
-  Contract,
-  State,
-  WasmStateEvent,
-  WasmStateEventTransformation,
-} from '@/db'
+import { AccountWebhook, Block, Contract, State, WasmStateEvent } from '@/db'
 import { WasmCodeTrackersQueue } from '@/queues/queues'
 import { WasmCodeService } from '@/services'
 import { transformParsedStateEvents } from '@/transformers'
-import {
-  Handler,
-  HandlerMaker,
-  ParsedWasmStateEvent,
-  WasmExportData,
-} from '@/types'
-import { dbKeyForKeys } from '@/utils'
+import { Handler, HandlerMaker, WasmExportData } from '@/types'
+import { dbKeyForKeys, retry } from '@/utils'
 
 const STORE_NAME = 'wasm'
 const DEFAULT_CONTRACT_BYTE_LENGTH = 32
@@ -121,12 +108,7 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
     }
 
     try {
-      // Retry 3 times with exponential backoff starting at 100ms delay.
-      await retry(loadIntoCache, [], {
-        retriesMax: 3,
-        exponential: true,
-        interval: 100,
-      })
+      await retry(3, loadIntoCache, 100)
     } catch (err) {
       console.error(
         '-------\nFailed to get code ID:\n',
@@ -325,7 +307,12 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
 
     // Export state.
     let stateEvents = events.flatMap((event) =>
-      event.type === 'state' ? event.data : []
+      event.type === 'state'
+        ? {
+            ...event.data,
+            blockTimestamp: new Date(Number(event.data.blockTimeUnixMs)),
+          }
+        : []
     )
 
     // Attempt to track code keys based on BOTH contract and state event
@@ -341,13 +328,6 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
     if (!stateEvents.length) {
       return []
     }
-
-    stateEvents = stateEvents.map(
-      (e): ParsedWasmStateEvent => ({
-        ...e,
-        blockTimestamp: new Date(Number(e.blockTimeUnixMs)),
-      })
-    )
 
     const uniqueContracts = [
       ...new Set(stateEvents.map((stateEvent) => stateEvent.contractAddress)),
@@ -484,18 +464,11 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
     }
 
     // Retry 3 times with exponential backoff starting at 100ms delay.
-    let { contracts, events: exportedEvents } = (await retry(
+    let { contracts, events: exportedEvents } = await retry(
+      3,
       exportContractsAndEvents,
-      [],
-      {
-        retriesMax: 3,
-        exponential: true,
-        interval: 100,
-      }
-    )) as {
-      contracts: Contract[]
-      events: WasmStateEvent[]
-    }
+      100
+    )
 
     const contractMap: Record<string, Contract | undefined> =
       Object.fromEntries(
@@ -540,16 +513,11 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
     stateEvents = stateEvents.filter((stateEvent) => stateEvent.codeId > 0)
 
     // Transform events as needed.
-    // Retry 3 times with exponential backoff starting at 100ms delay.
-    const transformations = (await retry(
-      transformParsedStateEvents,
-      [stateEvents],
-      {
-        retriesMax: 3,
-        exponential: true,
-        interval: 100,
-      }
-    )) as WasmStateEventTransformation[]
+    const transformations = await retry(
+      3,
+      () => transformParsedStateEvents(stateEvents),
+      100
+    )
 
     // Add contract to transformations.
     await Promise.all(
