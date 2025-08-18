@@ -2,6 +2,7 @@ import { Op, WhereOptions } from 'sequelize'
 import {
   AllowNull,
   AutoIncrement,
+  BelongsTo,
   Column,
   DataType,
   PrimaryKey,
@@ -76,6 +77,17 @@ export class Extraction extends DependableEventModel {
   @AllowNull(false)
   @Column(DataType.TEXT)
   declare address: string
+
+  /**
+   * The contract that this extraction is related to, if any.
+   */
+  @BelongsTo(() => Contract, {
+    foreignKey: 'address',
+    // Don't enforce this on the database level, since the address may not refer
+    // to a contract.
+    constraints: false,
+  })
+  declare contract: Contract | null
 
   /**
    * The name of the extraction.
@@ -155,7 +167,8 @@ export class Extraction extends DependableEventModel {
     if (!this.address) {
       return null
     }
-    return Contract.findByPk(this.address)
+    this.contract ??= await Contract.findByPk(this.address)
+    return this.contract
   }
 
   static dependentKeyNamespace = DependentKeyNamespace.Extraction

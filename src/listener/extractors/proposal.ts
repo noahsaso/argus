@@ -198,6 +198,8 @@ export class ProposalExtractor extends Extractor {
     // Find all proposals on the chain.
     const allProposals: {
       address: string
+      codeId: number
+      codeIdsKeys: string[]
       proposals: {
         id: number
         voters: string[]
@@ -206,6 +208,8 @@ export class ProposalExtractor extends Extractor {
 
     for (const codeId of daoProposalCodeIds) {
       const contracts = await client.getContracts(codeId)
+      const codeIdsKeys = WasmCodeService.instance.findWasmCodeKeysById(codeId)
+
       for (const contract of contracts) {
         const moduleProposals: {
           id: number
@@ -236,22 +240,18 @@ export class ProposalExtractor extends Extractor {
         }
 
         // Fetch voters for each proposal.
-        for (const proposal of moduleProposals) {
+        for (const { id, voters } of moduleProposals) {
           while (true) {
             const { votes: page } = await client.queryContractSmart(contract, {
               list_votes: {
-                proposal_id: proposal.id,
+                proposal_id: id,
                 start_after:
-                  proposal.voters.length > 0
-                    ? proposal.voters[proposal.voters.length - 1]
-                    : undefined,
+                  voters.length > 0 ? voters[voters.length - 1] : undefined,
                 limit: 30,
               },
             })
 
-            proposal.voters.push(
-              ...page.map(({ voter }: { voter: string }) => voter)
-            )
+            voters.push(...page.map(({ voter }: { voter: string }) => voter))
 
             // Stop if there are no more votes.
             if (page.length < limit) {
@@ -262,56 +262,54 @@ export class ProposalExtractor extends Extractor {
 
         allProposals.push({
           address: contract,
+          codeId,
+          codeIdsKeys,
           proposals: moduleProposals,
         })
       }
     }
 
-    return allProposals.flatMap(({ address, proposals }) => [
-      WasmEventDataSource.handleable('config', {
-        address,
-        key: 'action',
-        value: 'update_config',
-        attributes: {
-          action: ['update_config'],
-          // Only the presence of this key is needed for filtering.
-          sender: ['placeholder'],
-        },
-        // Not used.
-        _attributes: [],
-      }),
-      ...proposals.flatMap(({ id, voters }) => [
-        WasmEventDataSource.handleable('proposal', {
+    return allProposals.flatMap(
+      ({ address, codeId, codeIdsKeys, proposals }) => [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
+          type: 'instantiate',
           address,
-          key: 'action',
-          value: 'propose',
-          attributes: {
-            action: ['propose'],
-            proposal_id: [id.toString()],
-            // Only the presence of this key is needed for filtering.
-            sender: ['placeholder'],
-          },
-          // Not used.
-          _attributes: [],
+          codeId,
+          codeIdsKeys,
         }),
-        ...voters.map((voter) =>
+        ...proposals.flatMap(({ id, voters }) => [
           WasmEventDataSource.handleable('proposal', {
             address,
             key: 'action',
-            value: 'vote',
+            value: 'propose',
             attributes: {
-              action: ['vote'],
+              action: ['propose'],
               proposal_id: [id.toString()],
-              sender: [voter],
-              // Only the presence of this key is needed for filtering. The
-              // actual vote will be queried from the contract.
-              position: ['placeholder'],
+              // Only the presence of this key is needed for filtering.
+              sender: ['placeholder'],
             },
             // Not used.
             _attributes: [],
-          })
-        ),
-      ]),
-    ])
+          }),
+          ...voters.map((voter) =>
+            WasmEventDataSource.handleable('proposal', {
+              address,
+              key: 'action',
+              value: 'vote',
+              attributes: {
+                action: ['vote'],
+                proposal_id: [id.toString()],
+                sender: [voter],
+                // Only the presence of this key is needed for filtering. The
+                // actual vote will be queried from the contract.
+                position: ['placeholder'],
+              },
+              // Not used.
+              _attributes: [],
+            })
+          ),
+        ]),
+      ]
+    )
   }
 }

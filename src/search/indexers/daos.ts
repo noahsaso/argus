@@ -62,16 +62,18 @@ export const daos: MeilisearchIndexer = {
       daoAddress = await getDaoAddressForProposalModule(env)
     }
 
-    return (
-      !!daoAddress && {
-        id: daoAddress,
-        formula: {
-          type: FormulaType.Contract,
-          name: 'daoCore/dumpState',
-          targetAddress: daoAddress,
-        },
-      }
-    )
+    if (!daoAddress) {
+      return
+    }
+
+    return {
+      id: daoAddress,
+      formula: {
+        type: FormulaType.Contract,
+        name: 'daoCore/dumpState',
+        targetAddress: daoAddress,
+      },
+    }
   },
   getBulkUpdates: async () => {
     const codeIds =
@@ -116,39 +118,46 @@ export const daoProposals: MeilisearchIndexer = {
     'value.proposal.status',
   ],
   sortableAttributes: ['value.proposal.start_height'],
-  matches: ({ event }) => {
+  matches: async ({ event }) => {
     if (
-      !(
-        event instanceof WasmStateEventTransformation &&
-        event.name.startsWith('proposal:') &&
-        event.contract
-      )
+      (!(event instanceof WasmStateEventTransformation && event.contract) &&
+        !(event instanceof Extraction)) ||
+      !event.name.startsWith('proposal:')
     ) {
       return
     }
 
+    const contract =
+      event instanceof WasmStateEventTransformation
+        ? event.contract
+        : event instanceof Extraction
+        ? await event.getContract()
+        : undefined
+
+    if (!contract) {
+      return
+    }
+
     let name: string
-    if (event.contract.matchesCodeIdKeys('dao-proposal-single')) {
+    if (contract.matchesCodeIdKeys('dao-proposal-single')) {
       name = 'daoProposalSingle/proposal'
-    } else if (event.contract.matchesCodeIdKeys('dao-proposal-multiple')) {
+    } else if (contract.matchesCodeIdKeys('dao-proposal-multiple')) {
       name = 'daoProposalMultiple/proposal'
     } else {
       return
     }
 
-    return (
-      event.name.startsWith('proposal:') && {
-        id: event.contractAddress + '_' + event.name.split(':')[1],
-        formula: {
-          type: FormulaType.Contract,
-          name,
-          targetAddress: event.contractAddress,
-          args: {
-            id: event.name.split(':')[1],
-          },
+    return {
+      id: contract.address + '_' + event.name.split(':')[1],
+      formula: {
+        type: FormulaType.Contract,
+        name,
+        targetAddress: contract.address,
+        args: {
+          id: event.name.split(':')[1],
         },
-      }
-    )
+      },
+    }
   },
   getBulkUpdates: async () => {
     const singleCodeIds = WasmCodeService.instance.findWasmCodeIdsByKeys(
@@ -161,65 +170,122 @@ export const daoProposals: MeilisearchIndexer = {
       return []
     }
 
-    const events = await WasmStateEventTransformation.findAll({
-      attributes: [
-        // DISTINCT ON is not directly supported by Sequelize, so we need to
-        // cast to unknown and back to string to insert this at the beginning of
-        // the query. This ensures we use the most recent version of the name
-        // for each contract.
-        Sequelize.literal(
-          'DISTINCT ON("name", "contractAddress") \'\''
-        ) as unknown as string,
-        // Include `id` so that Sequelize doesn't prepend it to the query before
-        // the DISTINCT ON, which must come first.
-        'id',
-        'name',
-        'contractAddress',
-        'blockHeight',
-        'blockTimeUnixMs',
-        'value',
-      ],
-      where: {
-        name: {
-          [Op.like]: 'proposal:%',
+    const [transformations, extractions] = await Promise.all([
+      WasmStateEventTransformation.findAll({
+        attributes: [
+          // DISTINCT ON is not directly supported by Sequelize, so we need to
+          // cast to unknown and back to string to insert this at the beginning
+          // of the query. This ensures we use the most recent version of the
+          // name for each contract.
+          Sequelize.literal(
+            'DISTINCT ON("name", "contractAddress") \'\''
+          ) as unknown as string,
+          // Include `id` so that Sequelize doesn't prepend it to the query
+          // before the DISTINCT ON, which must come first.
+          'id',
+          'name',
+          'contractAddress',
+          'blockHeight',
+          'blockTimeUnixMs',
+          'value',
+        ],
+        where: {
+          name: {
+            [Op.like]: 'proposal:%',
+          },
+        },
+        order: [
+          // Needs to be first so we can use DISTINCT ON.
+          ['name', 'ASC'],
+          ['contractAddress', 'ASC'],
+          // Descending block height ensures we get the most recent
+          // transformation for the (contractAddress,name) pair.
+          ['blockHeight', 'DESC'],
+        ],
+        include: [
+          {
+            model: Contract,
+            required: true,
+            where: {
+              codeId: [...singleCodeIds, ...multipleCodeIds],
+            },
+          },
+        ],
+      }),
+      Extraction.findAll({
+        attributes: [
+          // DISTINCT ON is not directly supported by Sequelize, so we need to
+          // cast to unknown and back to string to insert this at the beginning
+          // of the query. This ensures we use the most recent version of the
+          // name for each contract.
+          Sequelize.literal(
+            'DISTINCT ON("name", "address") \'\''
+          ) as unknown as string,
+          // Include `id` so that Sequelize doesn't prepend it to the query
+          // before the DISTINCT ON, which must come first.
+          'id',
+          'name',
+          'address',
+          'blockHeight',
+          'blockTimeUnixMs',
+          'data',
+        ],
+        where: {
+          name: {
+            [Op.like]: 'proposal:%',
+          },
+        },
+        order: [
+          // Needs to be first so we can use DISTINCT ON.
+          ['name', 'ASC'],
+          ['address', 'ASC'],
+          // Descending block height ensures we get the most recent
+          // transformation for the (contractAddress,name) pair.
+          ['blockHeight', 'DESC'],
+        ],
+        include: [
+          {
+            model: Contract,
+            required: true,
+            where: {
+              codeId: [...singleCodeIds, ...multipleCodeIds],
+            },
+          },
+        ],
+      }),
+    ])
+
+    const getUpdate = (
+      contractAddress: string,
+      name: string,
+      { codeId }: Contract
+    ) => ({
+      id: contractAddress + '_' + name.split(':')[1],
+      formula: {
+        type: FormulaType.Contract,
+        name: singleCodeIds.includes(codeId)
+          ? 'daoProposalSingle/proposal'
+          : multipleCodeIds.includes(codeId)
+          ? 'daoProposalMultiple/proposal'
+          : // Should never happen.
+            '',
+        targetAddress: contractAddress,
+        args: {
+          id: name.split(':')[1],
         },
       },
-      order: [
-        // Needs to be first so we can use DISTINCT ON.
-        ['name', 'ASC'],
-        ['contractAddress', 'ASC'],
-        // Descending block height ensures we get the most recent transformation
-        // for the (contractAddress,name) pair.
-        ['blockHeight', 'DESC'],
-      ],
-      include: [
-        {
-          model: Contract,
-          required: true,
-          where: {
-            codeId: [...singleCodeIds, ...multipleCodeIds],
-          },
-        },
-      ],
     })
 
-    return events.map(
-      ({ contractAddress, name, contract }): MeilisearchIndexUpdate => ({
-        id: contractAddress + '_' + name.split(':')[1],
-        formula: {
-          type: FormulaType.Contract,
-          name: singleCodeIds.includes(contract.codeId)
-            ? 'daoProposalSingle/proposal'
-            : multipleCodeIds.includes(contract.codeId)
-            ? 'daoProposalMultiple/proposal'
-            : // Should never happen.
-              '',
-          targetAddress: contractAddress,
-          args: {
-            id: name.split(':')[1],
-          },
-        },
-      })
+    const transformationUpdates = transformations.map(
+      ({ contractAddress, name, contract }): MeilisearchIndexUpdate =>
+        getUpdate(contractAddress, name, contract)
     )
+
+    const extractionUpdates = extractions.flatMap(
+      ({ address, name, contract }): MeilisearchIndexUpdate | [] =>
+        contract ? getUpdate(address, name, contract) : []
+    )
+
+    return [...transformationUpdates, ...extractionUpdates]
   },
 }

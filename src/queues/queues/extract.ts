@@ -19,7 +19,7 @@ export type ExtractQueuePayload = {
 
 export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
   static queueName = 'extract'
-  static concurrency = 5
+  static concurrency = 10
 
   static getQueue = () => getBullQueue<ExtractQueuePayload>(this.queueName)
   static getQueueEvents = () => getBullQueueEvents(this.queueName)

@@ -2,13 +2,14 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ConfigManager } from '@/config'
 import { Contract, Extraction } from '@/db'
-import { WasmCodeService } from '@/services'
+import { WasmCode, WasmCodeService } from '@/services'
 import { ExtractorEnv, ExtractorHandleableData } from '@/types'
 import { AutoCosmWasmClient } from '@/utils'
 
 import {
   WasmEventData,
   WasmEventDataSource,
+  WasmInstantiateOrMigrateData,
   WasmInstantiateOrMigrateDataSource,
 } from '../sources'
 import { ProposalExtractor } from './proposal'
@@ -19,27 +20,9 @@ describe('Proposal Extractor', () => {
 
   beforeAll(async () => {
     const instance = await WasmCodeService.setUpInstance()
-    vi.spyOn(instance, 'findWasmCodeIdsByKeys').mockImplementation(
-      (...keys: string[]) => {
-        if (
-          keys.includes('dao-proposal-single') ||
-          keys.includes('dao-proposal-multiple')
-        ) {
-          return [4863, 4864] // Mocked code IDs for proposal contracts
-        }
-        return []
-      }
-    )
-    vi.spyOn(instance, 'matchesWasmCodeKeys').mockImplementation(
-      (codeId: number, ...keys: string[]) => {
-        if (
-          keys.includes('dao-proposal-single') ||
-          keys.includes('dao-proposal-multiple')
-        ) {
-          return [4863, 4864].includes(codeId)
-        }
-        return false
-      }
+    instance.addDefaultWasmCodes(
+      new WasmCode('dao-proposal-single', [4863]),
+      new WasmCode('dao-proposal-multiple', [4864])
     )
   })
 
@@ -650,39 +633,48 @@ describe('Proposal Extractor', () => {
       })
 
       // Should return handleable data for:
-      // - 1 config from first contract
+      // - 1 instantiate from first contract
       // - 2 proposals from first contract + 2 votes each = 6 items
-      // - 1 config from second contract
+      // - 1 instantiate from second contract
       // - 1 proposal from second contract + 2 votes = 3 items
       // Total: 11 items
       expect(result).toHaveLength(11)
 
       // Check structure of returned data
-      const configHandleables = result.filter((r) => {
-        const data = r.data as WasmEventData
-        return data.attributes.action?.[0] === 'update_config'
+      const instantiateHandleables = result.filter((r) => {
+        return r.source === WasmInstantiateOrMigrateDataSource.type
       })
       const proposalHandleables = result.filter((r) => {
-        const data = r.data as WasmEventData
-        return data.attributes.action?.[0] === 'propose'
+        return (
+          r.source === WasmEventDataSource.type &&
+          (r.data as WasmEventData).attributes.action?.[0] === 'propose'
+        )
       })
       const voteHandleables = result.filter((r) => {
-        const data = r.data as WasmEventData
-        return data.attributes.action?.[0] === 'vote'
+        return (
+          r.source === WasmEventDataSource.type &&
+          (r.data as WasmEventData).attributes.action?.[0] === 'vote'
+        )
       })
 
-      expect(configHandleables).toHaveLength(2) // 2 configs total
+      expect(instantiateHandleables).toHaveLength(2) // 2 instantiates total
       expect(proposalHandleables).toHaveLength(3) // 3 proposals total
       expect(voteHandleables).toHaveLength(6) // 6 votes total
 
-      // Check specific config handleable
-      const firstConfig = configHandleables.find((r) => {
-        const data = r.data as WasmEventData
+      // Check specific instantiate handleable
+      const firstInstantiate = instantiateHandleables.find((r) => {
+        const data = r.data as WasmInstantiateOrMigrateData
         return data.address === 'juno1proposal123contract456'
       })
-      expect(firstConfig).toBeDefined()
-      const firstConfigData = firstConfig!.data as WasmEventData
-      expect(firstConfigData.attributes.action).toEqual(['update_config'])
+      expect(firstInstantiate).toBeDefined()
+      const firstInstantiateData = firstInstantiate!
+        .data as WasmInstantiateOrMigrateData
+      expect(firstInstantiateData.type).toEqual('instantiate')
+      expect(firstInstantiateData.address).toEqual(
+        'juno1proposal123contract456'
+      )
+      expect(firstInstantiateData.codeId).toEqual(4863)
+      expect(firstInstantiateData.codeIdsKeys).toEqual(['dao-proposal-single'])
 
       // Check specific proposal handleable
       const firstProposal = proposalHandleables.find((r) => {
@@ -770,7 +762,7 @@ describe('Proposal Extractor', () => {
       // Should have called list_votes twice for each of the 31 proposals
       expect(voteCallCount).toBe(62)
 
-      // Should return 1 config + 31 proposals + (31 * 31) votes = 993 items
+      // Should return 1 instantiate + 31 proposals + (31 * 31) votes = 993 items
       expect(result).toHaveLength(993)
     })
 
