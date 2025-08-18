@@ -119,14 +119,14 @@ const main = async () => {
     console.log(`\n[${new Date().toISOString()}] Shutting down...`)
 
     // Stop services.
-    WasmCodeService.getInstance().stopUpdater()
+    WasmCodeService.instance.stopUpdater()
     blockIterator.stopIterating()
   })
   process.on('SIGTERM', async () => {
     console.log(`\n[${new Date().toISOString()}] Shutting down...`)
 
     // Stop services.
-    WasmCodeService.getInstance().stopUpdater()
+    WasmCodeService.instance.stopUpdater()
     blockIterator.stopIterating()
   })
 

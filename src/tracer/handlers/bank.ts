@@ -143,7 +143,7 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
 
       // Find contracts for all addresses matching code IDs so we know which
       // addresses to save history for.
-      const codeIds = WasmCodeService.getInstance().findWasmCodeIdsByKeys(
+      const codeIds = WasmCodeService.instance.findWasmCodeIdsByKeys(
         ...BANK_HISTORY_CODE_IDS_KEYS
       )
       const addressesToKeepHistoryFor = codeIds.length

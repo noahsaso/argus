@@ -72,7 +72,7 @@ export class WasmInstantiateOrMigrateDataSource extends DataSource<
     super(config)
     this.codeIds =
       config.codeIdsKeys &&
-      WasmCodeService.getInstance().findWasmCodeIdsByKeys(...config.codeIdsKeys)
+      WasmCodeService.instance.findWasmCodeIdsByKeys(...config.codeIdsKeys)
   }
 
   match({ events }: ExtractableTxInput): WasmInstantiateOrMigrateData[] {
@@ -106,8 +106,7 @@ export class WasmInstantiateOrMigrateDataSource extends DataSource<
           type: type as 'instantiate' | 'migrate',
           address: attributes.find((a) => a.key === '_contract_address')!.value,
           codeId,
-          codeIdsKeys:
-            WasmCodeService.getInstance().findWasmCodeKeysById(codeId),
+          codeIdsKeys: WasmCodeService.instance.findWasmCodeKeysById(codeId),
         }
       })
   }

@@ -75,7 +75,7 @@ export const daos: MeilisearchIndexer = {
   },
   getBulkUpdates: async () => {
     const codeIds =
-      WasmCodeService.getInstance().findWasmCodeIdsByKeys('dao-dao-core')
+      WasmCodeService.instance.findWasmCodeIdsByKeys('dao-dao-core')
     if (!codeIds.length) {
       return []
     }
@@ -151,10 +151,10 @@ export const daoProposals: MeilisearchIndexer = {
     )
   },
   getBulkUpdates: async () => {
-    const singleCodeIds = WasmCodeService.getInstance().findWasmCodeIdsByKeys(
+    const singleCodeIds = WasmCodeService.instance.findWasmCodeIdsByKeys(
       'dao-proposal-single'
     )
-    const multipleCodeIds = WasmCodeService.getInstance().findWasmCodeIdsByKeys(
+    const multipleCodeIds = WasmCodeService.instance.findWasmCodeIdsByKeys(
       'dao-proposal-multiple'
     )
     if (singleCodeIds.length + multipleCodeIds.length === 0) {

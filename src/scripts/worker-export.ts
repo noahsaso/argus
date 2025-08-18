@@ -65,7 +65,7 @@ const main = async () => {
   })
 
   // Stop services.
-  WasmCodeService.getInstance().stopUpdater()
+  WasmCodeService.instance.stopUpdater()
 
   // Close DB connections.
   await dataSequelize.close()

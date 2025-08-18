@@ -65,15 +65,6 @@ export class WasmCodeService implements WasmCodeAdapter {
   }
 
   /**
-   * Backwards compatibility for old code.
-   *
-   * @deprecated Use WasmCodeService.instance instead.
-   */
-  static getInstance(): WasmCodeService {
-    return this.instance
-  }
-
-  /**
    * Set up the wasm code service by loading defaults from the config and
    * optionally starting the DB updater.
    *

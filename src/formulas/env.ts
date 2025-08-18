@@ -948,7 +948,7 @@ export const getEnv = ({
       return
     }
 
-    return WasmCodeService.getInstance().findWasmCodeKeysById(codeId)[0]
+    return WasmCodeService.instance.findWasmCodeKeysById(codeId)[0]
   }
 
   const getSlashEvents: FormulaSlashEventsGetter = async (

@@ -434,7 +434,7 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
       const allowlist = stateEventAllowlist
         ?.map(({ codeIdsKeys, ...rest }) => ({
           ...rest,
-          codeIds: WasmCodeService.getInstance().findWasmCodeIdsByKeys(
+          codeIds: WasmCodeService.instance.findWasmCodeIdsByKeys(
             ...codeIdsKeys
           ),
         }))
@@ -460,7 +460,7 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
       // are unknown.
       if (onlyExportKnownCodeIds) {
         const knownCodeIds = new Set(
-          WasmCodeService.getInstance().wasmCodes.flatMap((c) => c.codeIds)
+          WasmCodeService.instance.wasmCodes.flatMap((c) => c.codeIds)
         )
         stateEvents = stateEvents.filter((event) => {
           const codeId = contractMap[event.contractAddress]?.codeId
