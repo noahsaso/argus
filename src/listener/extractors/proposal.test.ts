@@ -6,7 +6,11 @@ import { WasmCodeService } from '@/services'
 import { ExtractorEnv, ExtractorHandleableData } from '@/types'
 import { AutoCosmWasmClient } from '@/utils'
 
-import { WasmEventData, WasmEventDataSource } from '../sources'
+import {
+  WasmEventData,
+  WasmEventDataSource,
+  WasmInstantiateOrMigrateDataSource,
+} from '../sources'
 import { ProposalExtractor } from './proposal'
 
 describe('Proposal Extractor', () => {
@@ -70,7 +74,30 @@ describe('Proposal Extractor', () => {
 
   describe('data sources configuration', () => {
     it('should have correct data sources configured', () => {
-      expect(extractor.sources).toHaveLength(2)
+      expect(extractor.sources).toHaveLength(4)
+
+      const instantiateSource = extractor.sources.find(
+        (s) => s.type === WasmInstantiateOrMigrateDataSource.type
+      )
+      expect(instantiateSource).toBeDefined()
+      expect(instantiateSource!.handler).toBe('instantiate')
+      expect(instantiateSource!.config).toEqual({
+        type: 'instantiate',
+        codeIdsKeys: ['dao-proposal-single', 'dao-proposal-multiple'],
+      })
+
+      const configSource = extractor.sources.find(
+        (s) =>
+          s.type === WasmEventDataSource.type &&
+          s.config.value === 'update_config'
+      )
+      expect(configSource).toBeDefined()
+      expect(configSource!.handler).toBe('config')
+      expect(configSource!.config).toEqual({
+        key: 'action',
+        value: 'update_config',
+        otherAttributes: ['sender'],
+      })
 
       const proposalActionSource = extractor.sources.find(
         (s) =>
@@ -79,7 +106,7 @@ describe('Proposal Extractor', () => {
           s.config.value.includes('propose')
       )
       expect(proposalActionSource).toBeDefined()
-      expect(proposalActionSource!.handler).toBe('execute')
+      expect(proposalActionSource!.handler).toBe('proposal')
       expect(proposalActionSource!.config).toEqual({
         key: 'action',
         value: ['propose', 'execute', 'vote', 'close'],
@@ -90,7 +117,7 @@ describe('Proposal Extractor', () => {
         (s) => s.type === WasmEventDataSource.type && s.config.value === 'veto'
       )
       expect(vetoSource).toBeDefined()
-      expect(vetoSource!.handler).toBe('execute')
+      expect(vetoSource!.handler).toBe('proposal')
       expect(vetoSource!.config).toEqual({
         key: 'action',
         value: 'veto',
@@ -109,6 +136,10 @@ describe('Proposal Extractor', () => {
         contract: 'crates.io:dao-proposal-single',
         version: '2.4.0',
       },
+    }
+
+    const mockConfig = {
+      some_config: 'item',
     }
 
     const mockProposal = {
@@ -140,9 +171,58 @@ describe('Proposal Extractor', () => {
       })
     })
 
+    it('should extract config information successfully from instantiate', async () => {
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
+          type: 'instantiate',
+          address: 'juno1proposal123contract456',
+          codeId: 4863,
+          codeIdsKeys: ['dao-proposal-single', 'dao-proposal-multiple'],
+        }),
+      ]
+
+      vi.mocked(
+        mockAutoCosmWasmClient.client!.queryContractSmart
+      ).mockResolvedValueOnce(mockConfig) // config query
+
+      const result = (await extractor.extract(data)) as Extraction[]
+
+      expect(result).toHaveLength(1)
+      expect(result[0].name).toBe('config')
+      expect(result[0].data).toEqual(mockConfig)
+    })
+
+    it('should extract proposal information successfully from config update action', async () => {
+      const data: ExtractorHandleableData[] = [
+        WasmEventDataSource.handleable('config', {
+          address: 'juno1proposal123contract456',
+          key: 'action',
+          value: 'update_config',
+          attributes: {
+            action: ['update_config'],
+            sender: ['juno1proposer123'],
+          },
+          _attributes: [
+            { key: 'action', value: 'update_config' },
+            { key: 'sender', value: 'juno1proposer123' },
+          ],
+        }),
+      ]
+
+      vi.mocked(
+        mockAutoCosmWasmClient.client!.queryContractSmart
+      ).mockResolvedValueOnce(mockConfig) // config query
+
+      const result = (await extractor.extract(data)) as Extraction[]
+
+      expect(result).toHaveLength(1)
+      expect(result[0].name).toBe('config')
+      expect(result[0].data).toEqual(mockConfig)
+    })
+
     it('should extract proposal information successfully from propose action', async () => {
       const data: ExtractorHandleableData[] = [
-        WasmEventDataSource.handleable('execute', {
+        WasmEventDataSource.handleable('proposal', {
           address: 'juno1proposal123contract456',
           key: 'action',
           value: 'propose',
@@ -191,7 +271,7 @@ describe('Proposal Extractor', () => {
 
     it('should extract vote information when vote is cast', async () => {
       const data: ExtractorHandleableData[] = [
-        WasmEventDataSource.handleable('execute', {
+        WasmEventDataSource.handleable('proposal', {
           address: 'juno1proposal123contract456',
           key: 'action',
           value: 'vote',
@@ -235,7 +315,7 @@ describe('Proposal Extractor', () => {
 
     it('should handle veto action without sender', async () => {
       const data: ExtractorHandleableData[] = [
-        WasmEventDataSource.handleable('execute', {
+        WasmEventDataSource.handleable('proposal', {
           address: 'juno1proposal123contract456',
           key: 'action',
           value: 'veto',
@@ -273,7 +353,7 @@ describe('Proposal Extractor', () => {
       }
 
       const data: ExtractorHandleableData[] = [
-        WasmEventDataSource.handleable('execute', {
+        WasmEventDataSource.handleable('proposal', {
           address: 'juno1proposal123contract456',
           key: 'action',
           value: 'vote',
@@ -321,7 +401,7 @@ describe('Proposal Extractor', () => {
       }
 
       const data: ExtractorHandleableData[] = [
-        WasmEventDataSource.handleable('execute', {
+        WasmEventDataSource.handleable('proposal', {
           address: 'juno1proposal123contract456',
           key: 'action',
           value: 'vote',
@@ -362,7 +442,7 @@ describe('Proposal Extractor', () => {
 
     it('should not extract if contract is not a proposal contract', async () => {
       const data: ExtractorHandleableData[] = [
-        WasmEventDataSource.handleable('execute', {
+        WasmEventDataSource.handleable('proposal', {
           address: 'juno1other123contract456',
           key: 'action',
           value: 'propose',
@@ -399,7 +479,7 @@ describe('Proposal Extractor', () => {
 
     it('should create contracts in database with correct information', async () => {
       const data: ExtractorHandleableData[] = [
-        WasmEventDataSource.handleable('execute', {
+        WasmEventDataSource.handleable('proposal', {
           address: 'juno1proposal123contract456',
           key: 'action',
           value: 'propose',
@@ -436,7 +516,7 @@ describe('Proposal Extractor', () => {
 
     it('should throw error when proposal_id is missing', async () => {
       const data: ExtractorHandleableData[] = [
-        WasmEventDataSource.handleable('execute', {
+        WasmEventDataSource.handleable('proposal', {
           address: 'juno1proposal123contract456',
           key: 'action',
           value: 'propose',
@@ -458,7 +538,7 @@ describe('Proposal Extractor', () => {
 
     it('should throw error when proposal_id is invalid', async () => {
       const data: ExtractorHandleableData[] = [
-        WasmEventDataSource.handleable('execute', {
+        WasmEventDataSource.handleable('proposal', {
           address: 'juno1proposal123contract456',
           key: 'action',
           value: 'propose',
@@ -502,7 +582,7 @@ describe('Proposal Extractor', () => {
       const brokenExtractor = new ProposalExtractor(brokenEnv)
 
       const data: ExtractorHandleableData[] = [
-        WasmEventDataSource.handleable('execute', {
+        WasmEventDataSource.handleable('proposal', {
           address: 'juno1proposal123contract456',
           key: 'action',
           value: 'propose',
@@ -526,7 +606,7 @@ describe('Proposal Extractor', () => {
   })
 
   describe('sync function', () => {
-    it('should sync proposal and vote data for all contracts', async () => {
+    it('should sync config, proposal, and vote data for all contracts', async () => {
       // Mock contracts for both proposal contract types
       vi.mocked(mockAutoCosmWasmClient.client!.getContracts).mockImplementation(
         async (codeId: number) => {
@@ -570,12 +650,18 @@ describe('Proposal Extractor', () => {
       })
 
       // Should return handleable data for:
+      // - 1 config from first contract
       // - 2 proposals from first contract + 2 votes each = 6 items
+      // - 1 config from second contract
       // - 1 proposal from second contract + 2 votes = 3 items
-      // Total: 9 items
-      expect(result).toHaveLength(9)
+      // Total: 11 items
+      expect(result).toHaveLength(11)
 
       // Check structure of returned data
+      const configHandleables = result.filter((r) => {
+        const data = r.data as WasmEventData
+        return data.attributes.action?.[0] === 'update_config'
+      })
       const proposalHandleables = result.filter((r) => {
         const data = r.data as WasmEventData
         return data.attributes.action?.[0] === 'propose'
@@ -585,8 +671,18 @@ describe('Proposal Extractor', () => {
         return data.attributes.action?.[0] === 'vote'
       })
 
+      expect(configHandleables).toHaveLength(2) // 2 configs total
       expect(proposalHandleables).toHaveLength(3) // 3 proposals total
       expect(voteHandleables).toHaveLength(6) // 6 votes total
+
+      // Check specific config handleable
+      const firstConfig = configHandleables.find((r) => {
+        const data = r.data as WasmEventData
+        return data.address === 'juno1proposal123contract456'
+      })
+      expect(firstConfig).toBeDefined()
+      const firstConfigData = firstConfig!.data as WasmEventData
+      expect(firstConfigData.attributes.action).toEqual(['update_config'])
 
       // Check specific proposal handleable
       const firstProposal = proposalHandleables.find((r) => {
@@ -674,8 +770,8 @@ describe('Proposal Extractor', () => {
       // Should have called list_votes twice for each of the 31 proposals
       expect(voteCallCount).toBe(62)
 
-      // Should return 31 proposals + (31 * 31) votes = 992 items
-      expect(result).toHaveLength(992)
+      // Should return 1 config + 31 proposals + (31 * 31) votes = 993 items
+      expect(result).toHaveLength(993)
     })
 
     it('should throw error when client is not connected in sync', async () => {

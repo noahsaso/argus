@@ -8,18 +8,32 @@ import {
   ExtractorSyncEnv,
 } from '@/types'
 
-import { WasmEventData, WasmEventDataSource } from '../sources'
+import {
+  WasmEventData,
+  WasmEventDataSource,
+  WasmInstantiateOrMigrateData,
+  WasmInstantiateOrMigrateDataSource,
+} from '../sources'
 import { Extractor } from './base'
 
 export class ProposalExtractor extends Extractor {
   static type = 'proposal'
   static sources: ExtractorDataSource[] = [
-    WasmEventDataSource.source('execute', {
+    WasmInstantiateOrMigrateDataSource.source('instantiate', {
+      type: 'instantiate',
+      codeIdsKeys: ['dao-proposal-single', 'dao-proposal-multiple'],
+    }),
+    WasmEventDataSource.source('config', {
+      key: 'action',
+      value: 'update_config',
+      otherAttributes: ['sender'],
+    }),
+    WasmEventDataSource.source('proposal', {
       key: 'action',
       value: ['propose', 'execute', 'vote', 'close'],
       otherAttributes: ['sender', 'proposal_id'],
     }),
-    WasmEventDataSource.source('execute', {
+    WasmEventDataSource.source('proposal', {
       key: 'action',
       value: 'veto',
       otherAttributes: ['proposal_id'],
@@ -27,12 +41,36 @@ export class ProposalExtractor extends Extractor {
   ]
 
   // Handlers.
-  protected execute: ExtractorHandler<WasmEventData> = ({
+  protected instantiate: ExtractorHandler<WasmInstantiateOrMigrateData> = ({
+    address,
+  }) => this.saveConfig(address)
+  protected config: ExtractorHandler<WasmEventData> = ({ address }) =>
+    this.saveConfig(address)
+  protected proposal: ExtractorHandler<WasmEventData> = ({
     address,
     attributes,
-  }) => this.save(address, attributes)
+  }) => this.saveProposal(address, attributes)
 
-  private async save(
+  private async saveConfig(address: string): Promise<ExtractorHandlerOutput[]> {
+    const client = this.env.autoCosmWasmClient.client
+    if (!client) {
+      throw new Error('CosmWasm client not connected')
+    }
+
+    const config = await client.queryContractSmart(address, {
+      config: {},
+    })
+
+    return [
+      {
+        address,
+        name: 'config',
+        data: config,
+      },
+    ]
+  }
+
+  private async saveProposal(
     address: string,
     attributes: Partial<Record<string, string[]>>
   ): Promise<ExtractorHandlerOutput[]> {
@@ -229,9 +267,21 @@ export class ProposalExtractor extends Extractor {
       }
     }
 
-    return allProposals.flatMap(({ address, proposals }) =>
-      proposals.flatMap(({ id, voters }) => [
-        WasmEventDataSource.handleable('execute', {
+    return allProposals.flatMap(({ address, proposals }) => [
+      WasmEventDataSource.handleable('config', {
+        address,
+        key: 'action',
+        value: 'update_config',
+        attributes: {
+          action: ['update_config'],
+          // Only the presence of this key is needed for filtering.
+          sender: ['placeholder'],
+        },
+        // Not used.
+        _attributes: [],
+      }),
+      ...proposals.flatMap(({ id, voters }) => [
+        WasmEventDataSource.handleable('proposal', {
           address,
           key: 'action',
           value: 'propose',
@@ -245,7 +295,7 @@ export class ProposalExtractor extends Extractor {
           _attributes: [],
         }),
         ...voters.map((voter) =>
-          WasmEventDataSource.handleable('execute', {
+          WasmEventDataSource.handleable('proposal', {
             address,
             key: 'action',
             value: 'vote',
@@ -261,7 +311,7 @@ export class ProposalExtractor extends Extractor {
             _attributes: [],
           })
         ),
-      ])
-    )
+      ]),
+    ])
   }
 }
