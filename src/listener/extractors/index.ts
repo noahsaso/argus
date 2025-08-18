@@ -3,10 +3,12 @@ import { ExtractorEnv } from '@/types'
 import { ContractExtractor } from './contract'
 import { DaoExtractor } from './dao'
 import { NftStakeUpdateExtractor } from './nftStakeUpdate'
+import { ProposalExtractor } from './proposal'
 
 export const getExtractors = () => [
-  DaoExtractor,
   ContractExtractor,
+  DaoExtractor,
+  ProposalExtractor,
   NftStakeUpdateExtractor,
   // Add more extractors here.
 ]
