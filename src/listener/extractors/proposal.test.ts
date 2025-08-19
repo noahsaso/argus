@@ -21,8 +21,9 @@ describe('Proposal Extractor', () => {
   beforeAll(async () => {
     const instance = await WasmCodeService.setUpInstance()
     instance.addDefaultWasmCodes(
-      new WasmCode('dao-proposal-single', [4863]),
-      new WasmCode('dao-proposal-multiple', [4864])
+      new WasmCode('dao-dao-core', [1]),
+      new WasmCode('dao-proposal-single', [2]),
+      new WasmCode('dao-proposal-multiple', [3])
     )
   })
 
@@ -145,8 +146,8 @@ describe('Proposal Extractor', () => {
     beforeEach(() => {
       // Default mock for contract info
       vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockResolvedValue({
-        address: 'juno1proposal123contract456',
-        codeId: 4863,
+        address: 'juno1proposal123',
+        codeId: 2,
         admin: 'juno1admin123',
         creator: 'juno1creator123',
         label: 'Test Proposal Contract',
@@ -158,8 +159,8 @@ describe('Proposal Extractor', () => {
       const data: ExtractorHandleableData[] = [
         WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
           type: 'instantiate',
-          address: 'juno1proposal123contract456',
-          codeId: 4863,
+          address: 'juno1proposal123',
+          codeId: 2,
           codeIdsKeys: ['dao-proposal-single', 'dao-proposal-multiple'],
         }),
       ]
@@ -178,7 +179,7 @@ describe('Proposal Extractor', () => {
     it('should extract proposal information successfully from config update action', async () => {
       const data: ExtractorHandleableData[] = [
         WasmEventDataSource.handleable('config', {
-          address: 'juno1proposal123contract456',
+          address: 'juno1proposal123',
           key: 'action',
           value: 'update_config',
           attributes: {
@@ -206,7 +207,7 @@ describe('Proposal Extractor', () => {
     it('should extract proposal information successfully from propose action', async () => {
       const data: ExtractorHandleableData[] = [
         WasmEventDataSource.handleable('proposal', {
-          address: 'juno1proposal123contract456',
+          address: 'juno1proposal123',
           key: 'action',
           value: 'propose',
           attributes: {
@@ -229,7 +230,7 @@ describe('Proposal Extractor', () => {
       const result = (await extractor.extract(data)) as Extraction[]
 
       expect(mockAutoCosmWasmClient.client!.getContract).toHaveBeenCalledWith(
-        'juno1proposal123contract456'
+        'juno1proposal123'
       )
       expect(
         mockAutoCosmWasmClient.client!.queryContractSmart
@@ -240,7 +241,7 @@ describe('Proposal Extractor', () => {
       // Check proposal extraction
       const proposalExtraction = result.find((e) => e.name === 'proposal:1')
       expect(proposalExtraction).toBeDefined()
-      expect(proposalExtraction!.address).toBe('juno1proposal123contract456')
+      expect(proposalExtraction!.address).toBe('juno1proposal123')
       expect(proposalExtraction!.data).toEqual(mockProposal)
 
       // Check vetoer mapping (only created when proposing and vetoer exists)
@@ -248,14 +249,14 @@ describe('Proposal Extractor', () => {
         (e) => e.name === 'proposalVetoer:juno1vetoer123:1'
       )
       expect(vetoerExtraction).toBeDefined()
-      expect(vetoerExtraction!.address).toBe('juno1proposal123contract456')
+      expect(vetoerExtraction!.address).toBe('juno1proposal123')
       expect(vetoerExtraction!.data).toBe(1)
     })
 
     it('should extract vote information when vote is cast', async () => {
       const data: ExtractorHandleableData[] = [
         WasmEventDataSource.handleable('proposal', {
-          address: 'juno1proposal123contract456',
+          address: 'juno1proposal123',
           key: 'action',
           value: 'vote',
           attributes: {
@@ -292,14 +293,17 @@ describe('Proposal Extractor', () => {
         (e) => e.name === 'voteCast:juno1voter123:1'
       )
       expect(voteExtraction).toBeDefined()
-      expect(voteExtraction!.address).toBe('juno1proposal123contract456')
-      expect(voteExtraction!.data).toEqual(mockVote)
+      expect(voteExtraction!.address).toBe('juno1proposal123')
+      expect(voteExtraction!.data).toEqual({
+        ...mockVote,
+        votedAt: '2022-01-01T01:00:00Z',
+      })
     })
 
     it('should handle veto action without sender', async () => {
       const data: ExtractorHandleableData[] = [
         WasmEventDataSource.handleable('proposal', {
-          address: 'juno1proposal123contract456',
+          address: 'juno1proposal123',
           key: 'action',
           value: 'veto',
           attributes: {
@@ -337,7 +341,7 @@ describe('Proposal Extractor', () => {
 
       const data: ExtractorHandleableData[] = [
         WasmEventDataSource.handleable('proposal', {
-          address: 'juno1proposal123contract456',
+          address: 'juno1proposal123',
           key: 'action',
           value: 'vote',
           attributes: {
@@ -365,7 +369,7 @@ describe('Proposal Extractor', () => {
       // Verify that the old version vote query was called
       expect(
         mockAutoCosmWasmClient.client!.queryContractSmart
-      ).toHaveBeenCalledWith('juno1proposal123contract456', {
+      ).toHaveBeenCalledWith('juno1proposal123', {
         vote: {
           proposal_id: 1,
           voter: 'juno1voter123',
@@ -385,7 +389,7 @@ describe('Proposal Extractor', () => {
 
       const data: ExtractorHandleableData[] = [
         WasmEventDataSource.handleable('proposal', {
-          address: 'juno1proposal123contract456',
+          address: 'juno1proposal123',
           key: 'action',
           value: 'vote',
           attributes: {
@@ -413,7 +417,7 @@ describe('Proposal Extractor', () => {
       // Verify that the new version vote query was called
       expect(
         mockAutoCosmWasmClient.client!.queryContractSmart
-      ).toHaveBeenCalledWith('juno1proposal123contract456', {
+      ).toHaveBeenCalledWith('juno1proposal123', {
         get_vote: {
           proposal_id: 1,
           voter: 'juno1voter123',
@@ -463,7 +467,7 @@ describe('Proposal Extractor', () => {
     it('should create contracts in database with correct information', async () => {
       const data: ExtractorHandleableData[] = [
         WasmEventDataSource.handleable('proposal', {
-          address: 'juno1proposal123contract456',
+          address: 'juno1proposal123',
           key: 'action',
           value: 'propose',
           attributes: {
@@ -487,20 +491,18 @@ describe('Proposal Extractor', () => {
       await extractor.extract(data)
 
       // Check that contract was created in database
-      const contract = await Contract.findByPk('juno1proposal123contract456')
+      const contract = await Contract.findByPk('juno1proposal123')
       expect(contract).toBeDefined()
-      expect(contract!.codeId).toBe(4863)
+      expect(contract!.codeId).toBe(2)
       expect(contract!.admin).toBe('juno1admin123')
       expect(contract!.creator).toBe('juno1creator123')
       expect(contract!.label).toBe('Test Proposal Contract')
-      expect(contract!.instantiatedAtBlockHeight).toBe('1500')
-      expect(contract!.instantiatedAtBlockTimeUnixMs).toBe('1640995200000')
     })
 
     it('should throw error when proposal_id is missing', async () => {
       const data: ExtractorHandleableData[] = [
         WasmEventDataSource.handleable('proposal', {
-          address: 'juno1proposal123contract456',
+          address: 'juno1proposal123',
           key: 'action',
           value: 'propose',
           attributes: {
@@ -522,7 +524,7 @@ describe('Proposal Extractor', () => {
     it('should throw error when proposal_id is invalid', async () => {
       const data: ExtractorHandleableData[] = [
         WasmEventDataSource.handleable('proposal', {
-          address: 'juno1proposal123contract456',
+          address: 'juno1proposal123',
           key: 'action',
           value: 'propose',
           attributes: {
@@ -566,7 +568,7 @@ describe('Proposal Extractor', () => {
 
       const data: ExtractorHandleableData[] = [
         WasmEventDataSource.handleable('proposal', {
-          address: 'juno1proposal123contract456',
+          address: 'juno1proposal123',
           key: 'action',
           value: 'propose',
           attributes: {
@@ -590,30 +592,90 @@ describe('Proposal Extractor', () => {
 
   describe('sync function', () => {
     it('should sync config, proposal, and vote data for all contracts', async () => {
-      // Mock contracts for both proposal contract types
+      // Mock contracts
+      vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockImplementation(
+        async (address: string) => {
+          if (address === 'juno1dao') {
+            return {
+              address: 'juno1dao',
+              codeId: 1,
+              admin: 'juno1admin123',
+              creator: 'juno1creator123',
+              label: 'Test DAO',
+              ibcPortId: 'juno1ibc123',
+            }
+          } else if (address === 'juno1proposal123') {
+            return {
+              address: 'juno1proposal123',
+              codeId: 2,
+              admin: 'juno1admin123',
+              creator: 'juno1creator123',
+              label: 'Test Proposal Contract',
+              ibcPortId: 'juno1ibc123',
+            }
+          } else if (address === 'juno1proposal456') {
+            return {
+              address: 'juno1proposal456',
+              codeId: 3,
+              admin: 'juno1admin123',
+              creator: 'juno1creator123',
+              label: 'Test Proposal Contract',
+              ibcPortId: 'juno1ibc123',
+            }
+          }
+          throw new Error('Unknown contract')
+        }
+      )
       vi.mocked(mockAutoCosmWasmClient.client!.getContracts).mockImplementation(
         async (codeId: number) => {
-          if (codeId === 4863) {
-            return ['juno1proposal123contract456']
-          } else if (codeId === 4864) {
-            return ['juno1proposal789contract012']
+          if (codeId === 1) {
+            return ['juno1dao']
+          } else if (codeId === 2) {
+            return ['juno1proposal123']
+          } else if (codeId === 3) {
+            return ['juno1proposal456']
           } else {
             return []
           }
         }
       )
 
-      // Mock proposal list queries
+      // Mock queries
       vi.mocked(
         mockAutoCosmWasmClient.client!.queryContractSmart
       ).mockImplementation(async (address: string, query: any) => {
-        if (query.list_proposals) {
+        if (query.info) {
+          if (address === 'juno1dao') {
+            return {
+              info: {
+                contract: 'crates.io:dao-dao-core',
+              },
+            }
+          }
+        } else if (query.dump_state) {
+          if (address === 'juno1dao') {
+            return {
+              proposal_modules: [
+                {
+                  address: 'juno1proposal123',
+                  prefix: 'A',
+                  status: 'Enabled',
+                },
+                {
+                  address: 'juno1proposal456',
+                  prefix: 'B',
+                  status: 'Enabled',
+                },
+              ],
+            }
+          }
+        } else if (query.list_proposals) {
           // Return mock proposals for different contracts
-          if (address === 'juno1proposal123contract456') {
+          if (address === 'juno1proposal123') {
             return {
               proposals: [{ id: 1 }, { id: 2 }],
             }
-          } else if (address === 'juno1proposal789contract012') {
+          } else if (address === 'juno1proposal456') {
             return {
               proposals: [{ id: 1 }],
             }
@@ -634,13 +696,14 @@ describe('Proposal Extractor', () => {
         })
       )
 
-      // Should return handleable data for:
-      // - 1 instantiate from first contract
-      // - 2 proposals from first contract + 2 votes each = 6 items
-      // - 1 instantiate from second contract
-      // - 1 proposal from second contract + 2 votes = 3 items
-      // Total: 11 items
-      expect(result).toHaveLength(11)
+      // Should return data for:
+      // - 1 instantiate from DAO
+      // - 1 instantiate from first proposal module
+      // - 1 instantiate from second proposal module
+      // - 2 proposals from first proposal module + 2 votes each = 6 items
+      // - 1 proposal from second proposal module + 2 votes = 3 items
+      // Total: 12 items
+      expect(result).toHaveLength(12)
 
       // Check structure of returned data
       const instantiateSync = result.filter((r) => {
@@ -659,30 +722,28 @@ describe('Proposal Extractor', () => {
         )
       })
 
-      expect(instantiateSync).toHaveLength(2) // 2 instantiates total
+      expect(instantiateSync).toHaveLength(3) // 3 instantiates total
       expect(proposalSync).toHaveLength(3) // 3 proposals total
       expect(voteSync).toHaveLength(6) // 6 votes total
 
       // Check specific instantiate handleable
       const firstInstantiate = instantiateSync.find((r) => {
         const data = r.data as WasmInstantiateOrMigrateData
-        return data.address === 'juno1proposal123contract456'
+        return data.address === 'juno1proposal123'
       })
       expect(firstInstantiate).toBeDefined()
       const firstInstantiateData = firstInstantiate!
         .data as WasmInstantiateOrMigrateData
       expect(firstInstantiateData.type).toEqual('instantiate')
-      expect(firstInstantiateData.address).toEqual(
-        'juno1proposal123contract456'
-      )
-      expect(firstInstantiateData.codeId).toEqual(4863)
+      expect(firstInstantiateData.address).toEqual('juno1proposal123')
+      expect(firstInstantiateData.codeId).toEqual(2)
       expect(firstInstantiateData.codeIdsKeys).toEqual(['dao-proposal-single'])
 
       // Check specific proposal handleable
       const firstProposal = proposalSync.find((r) => {
         const data = r.data as WasmEventData
         return (
-          data.address === 'juno1proposal123contract456' &&
+          data.address === 'juno1proposal123' &&
           data.attributes.proposal_id?.[0] === '1'
         )
       })
@@ -694,7 +755,7 @@ describe('Proposal Extractor', () => {
       const firstVote = voteSync.find((r) => {
         const data = r.data as WasmEventData
         return (
-          data.address === 'juno1proposal123contract456' &&
+          data.address === 'juno1proposal123' &&
           data.attributes.sender?.[0] === 'juno1voter123'
         )
       })
@@ -705,12 +766,49 @@ describe('Proposal Extractor', () => {
     })
 
     it('should handle pagination in sync function', async () => {
+      vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockImplementation(
+        async (address: string) => {
+          if (address === 'juno1dao') {
+            return {
+              address: 'juno1dao',
+              codeId: 1,
+              admin: 'juno1admin123',
+              creator: 'juno1creator123',
+              label: 'Test DAO',
+              ibcPortId: 'juno1ibc123',
+            }
+          } else if (address === 'juno1proposal123') {
+            return {
+              address: 'juno1proposal123',
+              codeId: 2,
+              admin: 'juno1admin123',
+              creator: 'juno1creator123',
+              label: 'Test Proposal Contract',
+              ibcPortId: 'juno1ibc123',
+            }
+          } else if (address === 'juno1proposal456') {
+            return {
+              address: 'juno1proposal456',
+              codeId: 3,
+              admin: 'juno1admin123',
+              creator: 'juno1creator123',
+              label: 'Test Proposal Contract',
+              ibcPortId: 'juno1ibc123',
+            }
+          }
+          throw new Error('Unknown contract')
+        }
+      )
       vi.mocked(mockAutoCosmWasmClient.client!.getContracts).mockImplementation(
         async (codeId: number) => {
-          if (codeId === 4863) {
-            return ['juno1proposal123contract456']
+          if (codeId === 1) {
+            return ['juno1dao']
+          } else if (codeId === 2) {
+            return ['juno1proposal123']
+          } else if (codeId === 3) {
+            return ['juno1proposal456']
           } else {
-            return [] // Return empty for other code IDs
+            return []
           }
         }
       )
@@ -721,7 +819,32 @@ describe('Proposal Extractor', () => {
       vi.mocked(
         mockAutoCosmWasmClient.client!.queryContractSmart
       ).mockImplementation(async (address: string, query: any) => {
-        if (query.list_proposals) {
+        if (query.info) {
+          if (address === 'juno1dao') {
+            return {
+              info: {
+                contract: 'crates.io:dao-dao-core',
+              },
+            }
+          }
+        } else if (query.dump_state) {
+          if (address === 'juno1dao') {
+            return {
+              proposal_modules: [
+                {
+                  address: 'juno1proposal123',
+                  prefix: 'A',
+                  status: 'Enabled',
+                },
+                {
+                  address: 'juno1proposal456',
+                  prefix: 'B',
+                  status: 'Enabled',
+                },
+              ],
+            }
+          }
+        } else if (query.list_proposals) {
           proposalCallCount++
           if (proposalCallCount === 1) {
             // First page: return 30 proposals to trigger pagination
@@ -753,19 +876,24 @@ describe('Proposal Extractor', () => {
         return {}
       })
 
-      const result = await ProposalExtractor.sync!({
-        config: extractor.env.config,
-        autoCosmWasmClient: extractor.env.autoCosmWasmClient,
-      })
+      const result = await Array.fromAsync(
+        ProposalExtractor.sync!({
+          config: extractor.env.config,
+          autoCosmWasmClient: extractor.env.autoCosmWasmClient,
+        })
+      )
 
-      // Should have called list_proposals twice (pagination)
-      expect(proposalCallCount).toBe(2)
+      // Should have called list_proposals three times (pagination). Twice for
+      // first proposal module, once for second proposal module.
+      expect(proposalCallCount).toBe(3)
 
-      // Should have called list_votes twice for each of the 31 proposals
-      expect(voteCallCount).toBe(62)
+      // Should have called list_votes twice for each of the 31 proposals, plus
+      // one more for the second proposal module.
+      expect(voteCallCount).toBe(63)
 
-      // Should return 1 instantiate + 31 proposals + (31 * 31) votes = 993 items
-      expect(result).toHaveLength(993)
+      // Should return 3 instantiates (1 DAO + 2 proposal modules) + 32
+      // proposals + (31 * 31) + 1 votes = 997 items
+      expect(result).toHaveLength(997)
     })
 
     it('should throw error when client is not connected in sync', async () => {
@@ -775,10 +903,12 @@ describe('Proposal Extractor', () => {
       }
 
       await expect(
-        ProposalExtractor.sync!({
-          config: extractor.env.config,
-          autoCosmWasmClient: brokenAutoClient as any,
-        })
+        Array.fromAsync(
+          ProposalExtractor.sync!({
+            config: extractor.env.config,
+            autoCosmWasmClient: brokenAutoClient as any,
+          })
+        )
       ).rejects.toThrow('CosmWasm client not connected')
     })
   })

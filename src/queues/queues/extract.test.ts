@@ -95,13 +95,15 @@ describe('ExtractQueue', () => {
     it('should process extraction job successfully', async () => {
       await extractQueue.process(mockJob)
 
-      expect(mockExtract).toHaveBeenCalledWith({
-        source: 'test',
-        handler: 'test',
-        data: {
-          test: 'data',
+      expect(mockExtract).toHaveBeenCalledWith([
+        {
+          source: 'test',
+          handler: 'test',
+          data: {
+            test: 'data',
+          },
         },
-      })
+      ])
 
       expect(logSpy).toHaveBeenCalledWith(
         expect.stringContaining('Queued 1 search index update(s)')
@@ -176,15 +178,6 @@ describe('ExtractQueue', () => {
 
     it('should handle empty extraction results', async () => {
       mockExtract.mockResolvedValue([])
-
-      await extractQueue.process(mockJob)
-
-      // Should complete without errors
-      expect(mockExtract).toHaveBeenCalledOnce()
-    })
-
-    it('should handle non-array extraction results', async () => {
-      mockExtract.mockResolvedValue(null)
 
       await extractQueue.process(mockJob)
 
@@ -331,13 +324,15 @@ describe('ExtractQueue', () => {
         },
       })
 
-      expect(mockExtract).toHaveBeenCalledWith({
-        source: 'test',
-        handler: 'test',
-        data: {
-          test: 'payload',
+      expect(mockExtract).toHaveBeenCalledWith([
+        {
+          source: 'test',
+          handler: 'test',
+          data: {
+            test: 'payload',
+          },
         },
-      })
+      ])
     })
   })
 

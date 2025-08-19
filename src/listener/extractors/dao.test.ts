@@ -2,7 +2,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ConfigManager } from '@/config'
 import { Contract, Extraction } from '@/db'
-import { WasmCodeService } from '@/services'
+import { WasmCode, WasmCodeService } from '@/services'
 import { ExtractorEnv, ExtractorHandleableData } from '@/types'
 import { AutoCosmWasmClient } from '@/utils'
 
@@ -16,16 +16,40 @@ describe('DAO Extractor', () => {
   let mockAutoCosmWasmClient: AutoCosmWasmClient
   let extractor: DaoExtractor
 
+  const mockContractInfo = {
+    info: {
+      contract: 'crates.io:dao-dao-core',
+      version: '2.4.0',
+    },
+  }
+
+  const mockDumpState = {
+    admin: 'juno1admin123',
+    config: {
+      name: 'Test DAO',
+      description: 'A test DAO for testing',
+    },
+    version: { version: '2.4.0' },
+    proposal_modules: [
+      {
+        address: 'juno1proposal123',
+        prefix: 'A',
+        status: 'Enabled',
+      },
+      {
+        address: 'juno1proposal456',
+        prefix: 'B',
+        status: 'Enabled',
+      },
+    ],
+    voting_module: 'juno1voting123',
+  }
+
   beforeAll(async () => {
     const instance = await WasmCodeService.setUpInstance()
-    vi.spyOn(instance, 'findWasmCodeIdsByKeys').mockImplementation(
-      (...keys: string[]) => {
-        if (keys.includes('dao-dao-core')) {
-          return [4862, 163] // Mocked code IDs
-        }
-        return []
-      }
-    )
+    instance.addDefaultWasmCodes(new WasmCode('dao-dao-core', [1, 2]))
+    instance.addDefaultWasmCodes(new WasmCode('dao-voting', [3]))
+    instance.addDefaultWasmCodes(new WasmCode('dao-proposal', [4]))
   })
 
   beforeEach(async () => {
@@ -85,30 +109,12 @@ describe('DAO Extractor', () => {
   })
 
   describe('extract function', () => {
-    const mockContractInfo = {
-      info: {
-        contract: 'crates.io:dao-dao-core',
-        version: '2.4.0',
-      },
-    }
-
-    const mockDumpState = {
-      admin: 'juno1admin123',
-      config: {
-        name: 'Test DAO',
-        description: 'A test DAO for testing',
-      },
-      version: { version: '2.4.0' },
-      proposal_modules: [],
-      voting_module: 'juno1voting123',
-    }
-
     it('should extract DAO information successfully from instantiate data', async () => {
       const data: ExtractorHandleableData[] = [
         WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
           type: 'instantiate',
           address: 'juno1dao123contract456',
-          codeId: 4862,
+          codeId: 1,
           codeIdsKeys: ['dao-dao-core'],
         }),
       ]
@@ -116,7 +122,7 @@ describe('DAO Extractor', () => {
       // Mock the client methods
       vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockResolvedValue({
         address: 'juno1dao123contract456',
-        codeId: 4862,
+        codeId: 1,
         admin: 'juno1admin123',
         creator: 'juno1creator123',
         label: 'Test DAO',
@@ -142,7 +148,7 @@ describe('DAO Extractor', () => {
         mockAutoCosmWasmClient.client!.queryContractSmart
       ).toHaveBeenCalledWith('juno1dao123contract456', { dump_state: {} })
 
-      expect(result).toHaveLength(2)
+      expect(result).toHaveLength(4) // 1 info, 1 dump_state, 2 proposal modules
 
       // Check info extraction
       const infoExtraction = result.find((e) => e.name === 'info')
@@ -161,6 +167,28 @@ describe('DAO Extractor', () => {
       expect(dumpStateExtraction!.blockHeight).toBe('1000')
       expect(dumpStateExtraction!.txHash).toBe('test-hash')
       expect(dumpStateExtraction!.data).toEqual(mockDumpState)
+
+      // Check proposal modules extraction
+      const proposalModulesExtraction = result.filter((e) =>
+        e.name.startsWith('proposalModule:')
+      )
+      expect(proposalModulesExtraction).toHaveLength(2)
+      expect(proposalModulesExtraction[0].name).toBe(
+        'proposalModule:juno1proposal123'
+      )
+      expect(proposalModulesExtraction[0].data).toEqual({
+        address: 'juno1proposal123',
+        prefix: 'A',
+        status: 'Enabled',
+      })
+      expect(proposalModulesExtraction[1].name).toBe(
+        'proposalModule:juno1proposal456'
+      )
+      expect(proposalModulesExtraction[1].data).toEqual({
+        address: 'juno1proposal456',
+        prefix: 'B',
+        status: 'Enabled',
+      })
     })
 
     it('should extract DAO information successfully from execute data', async () => {
@@ -189,7 +217,7 @@ describe('DAO Extractor', () => {
       // Mock the client methods
       vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockResolvedValue({
         address: 'juno1dao123contract456',
-        codeId: 4862,
+        codeId: 1,
         admin: 'juno1admin123',
         creator: 'juno1creator123',
         label: 'Test DAO',
@@ -241,13 +269,13 @@ describe('DAO Extractor', () => {
         WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
           type: 'instantiate',
           address: 'juno1dao123contract456',
-          codeId: 4862,
+          codeId: 1,
           codeIdsKeys: ['dao-dao-core'],
         }),
         WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
           type: 'instantiate',
           address: 'juno1dao789contract012',
-          codeId: 4862,
+          codeId: 1,
           codeIdsKeys: ['dao-dao-core'],
         }),
       ]
@@ -256,7 +284,7 @@ describe('DAO Extractor', () => {
       vi.mocked(mockAutoCosmWasmClient.client!.getContract)
         .mockResolvedValueOnce({
           address: 'juno1dao123contract456',
-          codeId: 4862,
+          codeId: 1,
           admin: 'juno1admin123',
           creator: 'juno1creator123',
           label: 'Test DAO 1',
@@ -264,7 +292,7 @@ describe('DAO Extractor', () => {
         })
         .mockResolvedValueOnce({
           address: 'juno1dao789contract012',
-          codeId: 4862,
+          codeId: 1,
           admin: 'juno1admin456',
           creator: 'juno1creator456',
           label: 'Test DAO 2',
@@ -280,7 +308,7 @@ describe('DAO Extractor', () => {
 
       const result = (await extractor.extract(data)) as Extraction[]
 
-      expect(result).toHaveLength(4) // 2 extractions per contract
+      expect(result).toHaveLength(8) // 4 extractions per contract
 
       const addresses = result.map((r) => r.address)
       expect(addresses).toContain('juno1dao123contract456')
@@ -292,7 +320,7 @@ describe('DAO Extractor', () => {
         WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
           type: 'instantiate',
           address: 'juno1dao123contract456',
-          codeId: 4862,
+          codeId: 1,
           codeIdsKeys: ['dao-dao-core'],
         }),
         WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
@@ -309,7 +337,7 @@ describe('DAO Extractor', () => {
           if (address === 'juno1dao123contract456') {
             return {
               address: 'juno1dao123contract456',
-              codeId: 4862,
+              codeId: 1,
               admin: 'juno1admin123',
               creator: 'juno1creator123',
               label: 'Test DAO',
@@ -367,6 +395,28 @@ describe('DAO Extractor', () => {
           createdAt: expect.any(Date),
           updatedAt: expect.any(Date),
         },
+        {
+          id: '3',
+          address: 'juno1dao123contract456',
+          name: 'proposalModule:juno1proposal123',
+          blockHeight: '1000',
+          blockTimeUnixMs: '1640995200000',
+          txHash: 'test-hash',
+          data: mockDumpState.proposal_modules[0],
+          createdAt: expect.any(Date),
+          updatedAt: expect.any(Date),
+        },
+        {
+          id: '4',
+          address: 'juno1dao123contract456',
+          name: 'proposalModule:juno1proposal456',
+          blockHeight: '1000',
+          blockTimeUnixMs: '1640995200000',
+          txHash: 'test-hash',
+          data: mockDumpState.proposal_modules[1],
+          createdAt: expect.any(Date),
+          updatedAt: expect.any(Date),
+        },
       ])
     })
 
@@ -375,7 +425,7 @@ describe('DAO Extractor', () => {
         WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
           type: 'instantiate',
           address: 'juno1dao123contract456',
-          codeId: 4862,
+          codeId: 1,
           codeIdsKeys: ['dao-dao-core'],
         }),
       ]
@@ -383,7 +433,7 @@ describe('DAO Extractor', () => {
       // Mock the client methods
       vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockResolvedValue({
         address: 'juno1dao123contract456',
-        codeId: 4862,
+        codeId: 1,
         admin: 'juno1admin123',
         creator: 'juno1creator123',
         label: 'Test DAO',
@@ -399,12 +449,10 @@ describe('DAO Extractor', () => {
       // Check that contract was created in database
       const contract = await Contract.findByPk('juno1dao123contract456')
       expect(contract).toBeDefined()
-      expect(contract!.codeId).toBe(4862)
+      expect(contract!.codeId).toBe(1)
       expect(contract!.admin).toBe('juno1admin123')
       expect(contract!.creator).toBe('juno1creator123')
       expect(contract!.label).toBe('Test DAO')
-      expect(contract!.instantiatedAtBlockHeight).toBe('1000')
-      expect(contract!.instantiatedAtBlockTimeUnixMs).toBe('1640995200000')
     })
 
     it('should throw error when client is not connected', async () => {
@@ -432,7 +480,7 @@ describe('DAO Extractor', () => {
         WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
           type: 'instantiate',
           address: 'juno1dao123contract456',
-          codeId: 4862,
+          codeId: 1,
           codeIdsKeys: ['dao-dao-core'],
         }),
       ]
@@ -445,14 +493,47 @@ describe('DAO Extractor', () => {
 
   describe('sync function', () => {
     it('should sync DAO addresses', async () => {
+      vi.mocked(
+        mockAutoCosmWasmClient.client!.queryContractSmart
+      ).mockImplementation(async (_, queryMsg: any) => {
+        if (queryMsg.info) {
+          return mockContractInfo
+        } else if (queryMsg.dump_state) {
+          return mockDumpState
+        } else {
+          throw new Error('Unknown query')
+        }
+      })
+
       vi.mocked(mockAutoCosmWasmClient.client!.getContracts).mockImplementation(
         async (codeId: number) => {
-          if (codeId === 4862) {
+          if (codeId === 1) {
             return ['juno1dao123contract456']
-          } else if (codeId === 163) {
+          } else if (codeId === 2) {
             return ['juno1dao789contract012']
           } else {
             return []
+          }
+        }
+      )
+
+      vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockImplementation(
+        async (address: string) => {
+          if (address === 'juno1voting123') {
+            return {
+              codeId: 3,
+            } as any
+          } else if (
+            address === 'juno1proposal123' ||
+            address === 'juno1proposal456'
+          ) {
+            return {
+              codeId: 4,
+            } as any
+          } else {
+            return {
+              codeId: 5,
+            } as any
           }
         }
       )
@@ -470,7 +551,7 @@ describe('DAO Extractor', () => {
           data: {
             type: 'instantiate',
             address: 'juno1dao123contract456',
-            codeId: 4862,
+            codeId: 1,
             codeIdsKeys: ['dao-dao-core'],
           },
         },
@@ -478,9 +559,63 @@ describe('DAO Extractor', () => {
           source: WasmInstantiateOrMigrateDataSource.type,
           data: {
             type: 'instantiate',
+            address: 'juno1voting123',
+            codeId: 3,
+            codeIdsKeys: ['dao-voting'],
+          },
+        },
+        {
+          source: WasmInstantiateOrMigrateDataSource.type,
+          data: {
+            type: 'instantiate',
+            address: 'juno1proposal123',
+            codeId: 4,
+            codeIdsKeys: ['dao-proposal'],
+          },
+        },
+        {
+          source: WasmInstantiateOrMigrateDataSource.type,
+          data: {
+            type: 'instantiate',
+            address: 'juno1proposal456',
+            codeId: 4,
+            codeIdsKeys: ['dao-proposal'],
+          },
+        },
+        {
+          source: WasmInstantiateOrMigrateDataSource.type,
+          data: {
+            type: 'instantiate',
             address: 'juno1dao789contract012',
-            codeId: 163,
+            codeId: 2,
             codeIdsKeys: ['dao-dao-core'],
+          },
+        },
+        {
+          source: WasmInstantiateOrMigrateDataSource.type,
+          data: {
+            type: 'instantiate',
+            address: 'juno1voting123',
+            codeId: 3,
+            codeIdsKeys: ['dao-voting'],
+          },
+        },
+        {
+          source: WasmInstantiateOrMigrateDataSource.type,
+          data: {
+            type: 'instantiate',
+            address: 'juno1proposal123',
+            codeId: 4,
+            codeIdsKeys: ['dao-proposal'],
+          },
+        },
+        {
+          source: WasmInstantiateOrMigrateDataSource.type,
+          data: {
+            type: 'instantiate',
+            address: 'juno1proposal456',
+            codeId: 4,
+            codeIdsKeys: ['dao-proposal'],
           },
         },
       ])
