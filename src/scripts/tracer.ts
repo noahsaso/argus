@@ -273,7 +273,7 @@ const main = async () => {
   await manager.awaitFlush()
 
   // Stop services.
-  WasmCodeService.getInstance().stopUpdater()
+  WasmCodeService.instance.stopUpdater()
   webSocketListener.disconnect()
 
   // Close database connection.

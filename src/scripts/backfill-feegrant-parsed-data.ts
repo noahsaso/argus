@@ -13,7 +13,7 @@ import { parseAllowanceData } from '@/utils'
 async function backfillFeegrantParsedData() {
   console.log('Starting feegrant parsed data backfill...')
 
-  const db = await loadDb({
+  await loadDb({
     type: DbType.Data,
   })
 

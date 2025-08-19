@@ -1,9 +1,4 @@
 import { ProposalStatus } from '@dao-dao/types/protobuf/codegen/cosmos/gov/v1/gov'
-import {
-  getConfiguredChainConfig,
-  getDisplayNameForChainId,
-  getImageUrlForChainId,
-} from '@dao-dao/utils'
 
 import { GovProposal } from '@/db'
 import { WebhookMaker, WebhookType } from '@/types'
@@ -52,9 +47,9 @@ export const makeInboxGovProposalCreated: WebhookMaker<GovProposal> = (
       type: 'proposal_created',
       data: {
         chainId: state.chainId,
-        dao: getConfiguredChainConfig(state.chainId)?.name || 'GOV_PLACEHOLDER',
-        daoName: getDisplayNameForChainId(state.chainId),
-        imageUrl: getImageUrlForChainId(state.chainId),
+        dao: 'GOV',
+        daoName: state.chainId,
+        imageUrl: 'GOV_PLACEHOLDER',
         proposalId: event.proposalId,
         proposalTitle: proposal ? title : event.proposalId,
         fromApprover: false,
@@ -109,9 +104,9 @@ export const makeInboxGovProposalPassed: WebhookMaker<GovProposal> = (
       type: 'proposal_executed',
       data: {
         chainId: state.chainId,
-        dao: getConfiguredChainConfig(state.chainId)?.name || 'GOV_PLACEHOLDER',
-        daoName: getDisplayNameForChainId(state.chainId),
-        imageUrl: getImageUrlForChainId(state.chainId),
+        dao: 'GOV',
+        daoName: state.chainId,
+        imageUrl: 'GOV_PLACEHOLDER',
         proposalId: event.proposalId,
         proposalTitle: proposal ? title : event.proposalId,
         fromApprover: false,
@@ -162,9 +157,9 @@ export const makeInboxGovProposalRejected: WebhookMaker<GovProposal> = (
       type: 'proposal_closed',
       data: {
         chainId: state.chainId,
-        dao: getConfiguredChainConfig(state.chainId)?.name || 'GOV_PLACEHOLDER',
-        daoName: getDisplayNameForChainId(state.chainId),
-        imageUrl: getImageUrlForChainId(state.chainId),
+        dao: 'GOV',
+        daoName: state.chainId,
+        imageUrl: 'GOV_PLACEHOLDER',
         proposalId: event.proposalId,
         proposalTitle: proposal ? title : event.proposalId,
         fromApprover: false,

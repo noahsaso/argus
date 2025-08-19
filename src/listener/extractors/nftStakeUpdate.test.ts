@@ -1,25 +1,24 @@
-import { Event } from '@cosmjs/stargate'
-import { DecodedStargateMsg } from '@dao-dao/types'
-import { Tx } from '@dao-dao/types/protobuf/codegen/cosmos/tx/v1beta1/tx'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ConfigManager } from '@/config'
 import { Extraction } from '@/db'
 import { WasmCodeService } from '@/services'
+import { ExtractorEnv, ExtractorHandleableData } from '@/types'
 import { AutoCosmWasmClient } from '@/utils'
 
-import { NftStakeUpdateExtractorData, nftStakeUpdate } from './nftStakeUpdate'
+import { WasmEventDataSource } from '../sources'
+import { NftStakeUpdateExtractor } from './nftStakeUpdate'
 
 describe('NFT Stake Update Extractor', () => {
   let mockAutoCosmWasmClient: AutoCosmWasmClient
-  let extractor: Awaited<ReturnType<typeof nftStakeUpdate>>
+  let extractor: NftStakeUpdateExtractor
 
   beforeAll(async () => {
     const instance = await WasmCodeService.setUpInstance()
     vi.spyOn(instance, 'findWasmCodeIdsByKeys').mockImplementation(
-      (key: string) => {
-        if (key === 'dao-voting-cw721-staked') {
-          return [123, 456] // Mock code IDs for dao-voting-cw721-staked
+      (...keys: string[]) => {
+        if (keys.includes('dao-voting-cw721-staked')) {
+          return [123, 456] // Mocked code IDs
         }
         return []
       }
@@ -38,109 +37,72 @@ describe('NFT Stake Update Extractor', () => {
       },
     } as any
 
-    // Set up the extractor
-    extractor = await nftStakeUpdate({
+    // Set up the extractor environment
+    const env: ExtractorEnv = {
       config: ConfigManager.load(),
       sendWebhooks: false,
-      autoCosmWasmClient: mockAutoCosmWasmClient,
-    })
+      autoCosmWasmClient: mockAutoCosmWasmClient as any,
+      txHash: 'test-hash',
+      block: {
+        height: '1000',
+        timeUnixMs: '1640995200000',
+        timestamp: '2022-01-01T01:00:00Z',
+      },
+    }
+
+    extractor = new NftStakeUpdateExtractor(env)
   })
 
-  describe('match function', () => {
-    const createMockTx = (): Tx => ({
-      body: {
-        messages: [],
-        memo: '',
-        timeoutHeight: 0n,
-        extensionOptions: [],
-        nonCriticalExtensionOptions: [],
-      },
-      authInfo: {
-        signerInfos: [],
-        fee: {
-          amount: [],
-          gasLimit: 0n,
-          payer: '',
-          granter: '',
-        },
-      },
-      signatures: [],
-    })
+  describe('data sources configuration', () => {
+    it('should have correct data sources configured', () => {
+      expect(extractor.sources).toHaveLength(2)
 
-    const createMockMessages = (): DecodedStargateMsg['stargate'][] => []
-
-    it('should match NFT stake update events', () => {
-      const events: Event[] = [
-        {
-          type: 'wasm',
-          attributes: [
-            { key: '_contract_address', value: 'juno1nftvoting123contract456' },
-            { key: 'action', value: 'stake' },
-            { key: 'from', value: 'juno1staker123' },
-            { key: 'token_id', value: '123' },
-          ],
-        },
-        {
-          type: 'wasm',
-          attributes: [
-            { key: '_contract_address', value: 'juno1nftvoting123contract456' },
-            { key: 'action', value: 'unstake' },
-            { key: 'from', value: 'juno1staker123' },
-          ],
-        },
-      ]
-
-      const result = extractor.match({
-        hash: 'test-hash',
-        tx: createMockTx(),
-        messages: createMockMessages(),
-        events,
+      const stakeSource = extractor.sources.find((s) => s.handler === 'stake')
+      expect(stakeSource).toBeDefined()
+      expect(stakeSource!.type).toBe(WasmEventDataSource.type)
+      expect(stakeSource!.config).toEqual({
+        key: 'action',
+        value: 'stake',
+        otherAttributes: ['from', 'token_id'],
       })
 
-      expect(result).toEqual({
-        updates: [
-          {
-            contractAddress: 'juno1nftvoting123contract456',
-            staked: [{ from: 'juno1staker123', tokenId: '123' }],
-            unstaked: [{ from: 'juno1staker123' }],
-          },
-        ],
+      const unstakeSource = extractor.sources.find(
+        (s) => s.handler === 'unstake'
+      )
+      expect(unstakeSource).toBeDefined()
+      expect(unstakeSource!.type).toBe(WasmEventDataSource.type)
+      expect(unstakeSource!.config).toEqual({
+        key: 'action',
+        value: 'unstake',
+        otherAttributes: ['from'],
       })
     })
 
-    it('should not match non-NFT stake update events', () => {
-      const events: Event[] = [
-        {
-          type: 'wasm',
-          attributes: [
-            { key: '_contract_address', value: 'juno1other123contract456' },
-            { key: 'action', value: 'some_other_action' },
-          ],
-        },
-      ]
-
-      const result = extractor.match({
-        hash: 'test-hash',
-        tx: createMockTx(),
-        messages: createMockMessages(),
-        events,
-      })
-
-      expect(result).toBeUndefined()
+    it('should have correct static type', () => {
+      expect(NftStakeUpdateExtractor.type).toBe('nftStakeUpdate')
     })
   })
 
   describe('extract function', () => {
     it('should extract NFT stake update information successfully', async () => {
-      const data: NftStakeUpdateExtractorData = {
-        updates: [
-          {
-            contractAddress: 'juno1nftvoting123contract456',
-            staked: [{ from: 'juno1staker123', tokenId: '123' }],
-            unstaked: [{ from: 'juno1staker123' }],
+      const data: ExtractorHandleableData[] = [
+        WasmEventDataSource.handleable('stake', {
+          address: 'juno1nftvoting123contract456',
+          key: 'action',
+          value: 'stake',
+          attributes: {
+            action: ['stake'],
+            from: ['juno1staker123'],
+            token_id: ['123'],
           },
-        ],
-      }
+          _attributes: [
+            { key: '_contract_address', value: 'juno1nftvoting123contract456' },
+            { key: 'action', value: 'stake' },
+            { key: 'from', value: 'juno1staker123' },
+            { key: 'token_id', value: '123' },
+          ],
+        }),
+      ]
 
       // Mock the client methods
       vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockResolvedValue({
@@ -174,17 +136,8 @@ describe('NFT Stake Update Extractor', () => {
         throw new Error('Unknown query')
       })
 
-      const result = (await extractor.extract({
-        txHash: 'test-hash-123',
-        block: {
-          height: '1000',
-          timeUnixMs: '1640995200000',
-          timestamp: '2022-01-01T01:00:00Z',
-        },
-        data,
-      })) as Extraction[]
+      const result = (await extractor.extract(data)) as Extraction[]
 
-      expect(mockAutoCosmWasmClient.update).toHaveBeenCalled()
       expect(mockAutoCosmWasmClient.client!.getContract).toHaveBeenCalledWith(
         'juno1nftvoting123contract456'
       )
@@ -220,7 +173,7 @@ describe('NFT Stake Update Extractor', () => {
           name: 'total_power_at_height:1000',
           blockHeight: '1000',
           blockTimeUnixMs: '1640995200000',
-          txHash: 'test-hash-123',
+          txHash: 'test-hash',
           data: '200',
           createdAt: expect.any(Date),
           updatedAt: expect.any(Date),
@@ -231,7 +184,7 @@ describe('NFT Stake Update Extractor', () => {
           name: 'staker:juno1staker123',
           blockHeight: '1000',
           blockTimeUnixMs: '1640995200000',
-          txHash: 'test-hash-123',
+          txHash: 'test-hash',
           data: {
             votingPower: '200',
             stakedTokenIds: ['123', '789'],
@@ -245,7 +198,7 @@ describe('NFT Stake Update Extractor', () => {
           name: 'stakedNftOwner:123',
           blockHeight: '1000',
           blockTimeUnixMs: '1640995200000',
-          txHash: 'test-hash-123',
+          txHash: 'test-hash',
           data: 'juno1staker123',
           createdAt: expect.any(Date),
           updatedAt: expect.any(Date),
@@ -256,7 +209,7 @@ describe('NFT Stake Update Extractor', () => {
           name: 'stakedNftOwner:789',
           blockHeight: '1000',
           blockTimeUnixMs: '1640995200000',
-          txHash: 'test-hash-123',
+          txHash: 'test-hash',
           data: 'juno1staker123',
           createdAt: expect.any(Date),
           updatedAt: expect.any(Date),
@@ -265,20 +218,38 @@ describe('NFT Stake Update Extractor', () => {
     })
 
     it('should handle multiple NFT stake updates', async () => {
-      const data: NftStakeUpdateExtractorData = {
-        updates: [
-          {
-            contractAddress: 'juno1nftvoting123contract456',
-            staked: [{ from: 'juno1staker123', tokenId: '123' }],
-            unstaked: [],
+      const data: ExtractorHandleableData[] = [
+        WasmEventDataSource.handleable('stake', {
+          address: 'juno1nftvoting123contract456',
+          key: 'action',
+          value: 'stake',
+          attributes: {
+            action: ['stake'],
+            from: ['juno1staker123'],
+            token_id: ['123'],
           },
-          {
-            contractAddress: 'juno1nftvoting789contract012',
-            staked: [],
-            unstaked: [{ from: 'juno1staker456' }],
+          _attributes: [
+            { key: '_contract_address', value: 'juno1nftvoting123contract456' },
+            { key: 'action', value: 'stake' },
+            { key: 'from', value: 'juno1staker123' },
+            { key: 'token_id', value: '123' },
+          ],
+        }),
+        WasmEventDataSource.handleable('unstake', {
+          address: 'juno1nftvoting789contract012',
+          key: 'action',
+          value: 'unstake',
+          attributes: {
+            action: ['unstake'],
+            from: ['juno1staker456'],
           },
-        ],
-      }
+          _attributes: [
+            { key: '_contract_address', value: 'juno1nftvoting789contract012' },
+            { key: 'action', value: 'unstake' },
+            { key: 'from', value: 'juno1staker456' },
+          ],
+        }),
+      ]
 
       // Mock additional contract calls
       vi.mocked(mockAutoCosmWasmClient.client!.getContract)
@@ -334,17 +305,9 @@ describe('NFT Stake Update Extractor', () => {
         throw new Error('Unknown query')
       })
 
-      const result = (
-        (await extractor.extract({
-          txHash: 'test-hash-456',
-          block: {
-            height: '1000',
-            timeUnixMs: '1640995200000',
-            timestamp: '2022-01-01T01:00:00Z',
-          },
-          data,
-        })) as Extraction[]
-      ).sort((a, b) => a.name.localeCompare(b.name))
+      const result = ((await extractor.extract(data)) as Extraction[]).sort(
+        (a, b) => a.name.localeCompare(b.name)
+      )
 
       expect(
         result
@@ -361,7 +324,7 @@ describe('NFT Stake Update Extractor', () => {
           name: 'total_power_at_height:1000',
           blockHeight: '1000',
           blockTimeUnixMs: '1640995200000',
-          txHash: 'test-hash-456',
+          txHash: 'test-hash',
           data: '200',
           createdAt: expect.any(Date),
           updatedAt: expect.any(Date),
@@ -372,7 +335,7 @@ describe('NFT Stake Update Extractor', () => {
           name: 'staker:juno1staker123',
           blockHeight: '1000',
           blockTimeUnixMs: '1640995200000',
-          txHash: 'test-hash-456',
+          txHash: 'test-hash',
           data: {
             votingPower: '200',
             stakedTokenIds: ['123', '789'],
@@ -386,7 +349,7 @@ describe('NFT Stake Update Extractor', () => {
           name: 'stakedNftOwner:789',
           blockHeight: '1000',
           blockTimeUnixMs: '1640995200000',
-          txHash: 'test-hash-456',
+          txHash: 'test-hash',
           data: 'juno1staker123',
           createdAt: expect.any(Date),
           updatedAt: expect.any(Date),
@@ -397,7 +360,7 @@ describe('NFT Stake Update Extractor', () => {
           name: 'stakedNftOwner:123',
           blockHeight: '1000',
           blockTimeUnixMs: '1640995200000',
-          txHash: 'test-hash-456',
+          txHash: 'test-hash',
           data: 'juno1staker123',
           createdAt: expect.any(Date),
           updatedAt: expect.any(Date),
@@ -408,7 +371,7 @@ describe('NFT Stake Update Extractor', () => {
           name: 'total_power_at_height:1000',
           blockHeight: '1000',
           blockTimeUnixMs: '1640995200000',
-          txHash: 'test-hash-456',
+          txHash: 'test-hash',
           data: '100',
           createdAt: expect.any(Date),
           updatedAt: expect.any(Date),
@@ -419,7 +382,7 @@ describe('NFT Stake Update Extractor', () => {
           name: 'staker:juno1staker456',
           blockHeight: '1000',
           blockTimeUnixMs: '1640995200000',
-          txHash: 'test-hash-456',
+          txHash: 'test-hash',
           data: {
             votingPower: '100',
             stakedTokenIds: ['999'],
@@ -433,7 +396,7 @@ describe('NFT Stake Update Extractor', () => {
           name: 'stakedNftOwner:999',
           blockHeight: '1000',
           blockTimeUnixMs: '1640995200000',
-          txHash: 'test-hash-456',
+          txHash: 'test-hash',
           data: 'juno1staker456',
           createdAt: expect.any(Date),
           updatedAt: expect.any(Date),
@@ -441,21 +404,39 @@ describe('NFT Stake Update Extractor', () => {
       ])
     })
 
-    it('should handle contract query failures gracefully', async () => {
-      const data: NftStakeUpdateExtractorData = {
-        updates: [
-          {
-            contractAddress: 'juno1nftvoting123contract456',
-            staked: [{ from: 'juno1staker123', tokenId: '123' }],
-            unstaked: [],
+    it('should throw error on contract query failure', async () => {
+      const data: ExtractorHandleableData[] = [
+        WasmEventDataSource.handleable('stake', {
+          address: 'juno1nftvoting123contract456',
+          key: 'action',
+          value: 'stake',
+          attributes: {
+            action: ['stake'],
+            from: ['juno1staker123'],
+            token_id: ['123'],
           },
-          {
-            contractAddress: 'juno1nftvoting789contract012',
-            staked: [{ from: 'juno1staker456', tokenId: '999' }],
-            unstaked: [],
+          _attributes: [
+            { key: 'action', value: 'stake' },
+            { key: 'from', value: 'juno1staker123' },
+            { key: 'token_id', value: '123' },
+          ],
+        }),
+        WasmEventDataSource.handleable('stake', {
+          address: 'juno1nftvoting789contract012',
+          key: 'action',
+          value: 'stake',
+          attributes: {
+            action: ['stake'],
+            from: ['juno1staker456'],
+            token_id: ['999'],
           },
-        ],
-      }
+          _attributes: [
+            { key: 'action', value: 'stake' },
+            { key: 'from', value: 'juno1staker456' },
+            { key: 'token_id', value: '999' },
+          ],
+        }),
+      ]
 
       // Mock one successful and one failing contract
       vi.mocked(mockAutoCosmWasmClient.client!.getContract)
@@ -502,83 +483,42 @@ describe('NFT Stake Update Extractor', () => {
         throw new Error('Query failed')
       })
 
-      const result = (await extractor.extract({
-        txHash: 'test-hash-789',
-        block: {
-          height: '1000',
-          timeUnixMs: '1640995200000',
-          timestamp: '2022-01-01T01:00:00Z',
-        },
-        data,
-      })) as Extraction[]
-
-      // Should only have extraction for the successful contract
-      expect(result.map((r) => r.toJSON())).toEqual([
-        {
-          id: '1',
-          address: 'juno1nftvoting123contract456',
-          name: 'total_power_at_height:1000',
-          blockHeight: '1000',
-          blockTimeUnixMs: '1640995200000',
-          txHash: 'test-hash-789',
-          data: '200',
-          createdAt: expect.any(Date),
-          updatedAt: expect.any(Date),
-        },
-        {
-          id: '2',
-          address: 'juno1nftvoting123contract456',
-          name: 'staker:juno1staker123',
-          blockHeight: '1000',
-          blockTimeUnixMs: '1640995200000',
-          txHash: 'test-hash-789',
-          data: {
-            votingPower: '200',
-            stakedTokenIds: ['123', '789'],
-          },
-          createdAt: expect.any(Date),
-          updatedAt: expect.any(Date),
-        },
-        {
-          id: '3',
-          address: 'juno1nftvoting123contract456',
-          name: 'stakedNftOwner:123',
-          blockHeight: '1000',
-          blockTimeUnixMs: '1640995200000',
-          txHash: 'test-hash-789',
-          data: 'juno1staker123',
-          createdAt: expect.any(Date),
-          updatedAt: expect.any(Date),
-        },
-        {
-          id: '4',
-          address: 'juno1nftvoting123contract456',
-          name: 'stakedNftOwner:789',
-          blockHeight: '1000',
-          blockTimeUnixMs: '1640995200000',
-          txHash: 'test-hash-789',
-          data: 'juno1staker123',
-          createdAt: expect.any(Date),
-          updatedAt: expect.any(Date),
-        },
-      ])
+      await expect(extractor.extract(data)).rejects.toThrow('Query failed')
     })
 
     it('should not extract if contract is not a dao-voting-cw721-staked contract', async () => {
-      const data: NftStakeUpdateExtractorData = {
-        updates: [
-          {
-            contractAddress: 'juno1nftvoting123contract456',
-            staked: [{ from: 'juno1staker123', tokenId: '123' }],
-            unstaked: [],
+      const data: ExtractorHandleableData[] = [
+        WasmEventDataSource.handleable('stake', {
+          address: 'juno1nftvoting123contract456',
+          key: 'action',
+          value: 'stake',
+          attributes: {
+            action: ['stake'],
+            from: ['juno1staker123'],
+            token_id: ['123'],
           },
-          {
-            contractAddress: 'juno1nftvoting789contract012',
-            staked: [{ from: 'juno1staker456', tokenId: '999' }],
-            unstaked: [],
+          _attributes: [
+            { key: 'action', value: 'stake' },
+            { key: 'from', value: 'juno1staker123' },
+            { key: 'token_id', value: '123' },
+          ],
+        }),
+        WasmEventDataSource.handleable('stake', {
+          address: 'juno1nftvoting789contract012',
+          key: 'action',
+          value: 'stake',
+          attributes: {
+            action: ['stake'],
+            from: ['juno1staker456'],
+            token_id: ['999'],
           },
-        ],
-      }
+          _attributes: [
+            { key: 'action', value: 'stake' },
+            { key: 'from', value: 'juno1staker456' },
+            { key: 'token_id', value: '999' },
+          ],
+        }),
+      ]
 
       // Mock one correct code ID and one incorrect code ID
       vi.mocked(mockAutoCosmWasmClient.client!.getContract)
@@ -599,7 +539,7 @@ describe('NFT Stake Update Extractor', () => {
           ibcPortId: undefined,
         })
 
-      // Mock successful queries for first contract, failed for second
+      // Mock successful queries for first contract only
       vi.mocked(
         mockAutoCosmWasmClient.client!.queryContractSmart
       ).mockImplementation(async (address: string, queryMsg: any) => {
@@ -623,15 +563,7 @@ describe('NFT Stake Update Extractor', () => {
         throw new Error('Unknown query')
       })
 
-      const result = (await extractor.extract({
-        txHash: 'test-hash-789',
-        block: {
-          height: '1000',
-          timeUnixMs: '1640995200000',
-          timestamp: '2022-01-01T01:00:00Z',
-        },
-        data,
-      })) as Extraction[]
+      const result = (await extractor.extract(data)) as Extraction[]
 
       // Should only have extraction for the correct code ID
       expect(result.map((r) => r.toJSON())).toEqual([
@@ -641,7 +573,7 @@ describe('NFT Stake Update Extractor', () => {
           name: 'total_power_at_height:1000',
           blockHeight: '1000',
           blockTimeUnixMs: '1640995200000',
-          txHash: 'test-hash-789',
+          txHash: 'test-hash',
           data: '200',
           createdAt: expect.any(Date),
           updatedAt: expect.any(Date),
@@ -652,7 +584,7 @@ describe('NFT Stake Update Extractor', () => {
           name: 'staker:juno1staker123',
           blockHeight: '1000',
           blockTimeUnixMs: '1640995200000',
-          txHash: 'test-hash-789',
+          txHash: 'test-hash',
           data: {
             votingPower: '200',
             stakedTokenIds: ['123', '789'],
@@ -666,7 +598,7 @@ describe('NFT Stake Update Extractor', () => {
           name: 'stakedNftOwner:123',
           blockHeight: '1000',
           blockTimeUnixMs: '1640995200000',
-          txHash: 'test-hash-789',
+          txHash: 'test-hash',
           data: 'juno1staker123',
           createdAt: expect.any(Date),
           updatedAt: expect.any(Date),
@@ -677,7 +609,7 @@ describe('NFT Stake Update Extractor', () => {
           name: 'stakedNftOwner:789',
           blockHeight: '1000',
           blockTimeUnixMs: '1640995200000',
-          txHash: 'test-hash-789',
+          txHash: 'test-hash',
           data: 'juno1staker123',
           createdAt: expect.any(Date),
           updatedAt: expect.any(Date),
@@ -692,33 +624,41 @@ describe('NFT Stake Update Extractor', () => {
         client: undefined,
       }
 
-      const brokenExtractor = await nftStakeUpdate({
+      const brokenEnv: ExtractorEnv = {
         config: ConfigManager.load(),
         sendWebhooks: false,
         autoCosmWasmClient: brokenAutoClient as any,
-      })
-
-      const data: NftStakeUpdateExtractorData = {
-        updates: [
-          {
-            contractAddress: 'juno1nftvoting123contract456',
-            staked: [{ from: 'juno1staker123', tokenId: '123' }],
-            unstaked: [],
-          },
-        ],
+        txHash: 'test-hash-error',
+        block: {
+          height: '1000',
+          timeUnixMs: '1640995200000',
+          timestamp: '2022-01-01T01:00:00Z',
+        },
       }
 
-      await expect(
-        brokenExtractor.extract({
-          txHash: 'test-hash-error',
-          block: {
-            height: '1000',
-            timeUnixMs: '1640995200000',
-            timestamp: '2022-01-01T01:00:00Z',
+      const brokenExtractor = new NftStakeUpdateExtractor(brokenEnv)
+
+      const data: ExtractorHandleableData[] = [
+        WasmEventDataSource.handleable('stake', {
+          address: 'juno1nftvoting123contract456',
+          key: 'action',
+          value: 'stake',
+          attributes: {
+            action: ['stake'],
+            from: ['juno1staker123'],
+            token_id: ['123'],
           },
-          data,
-        })
-      ).rejects.toThrow('CosmWasm client not connected')
+          _attributes: [
+            { key: 'action', value: 'stake' },
+            { key: 'from', value: 'juno1staker123' },
+            { key: 'token_id', value: '123' },
+          ],
+        }),
+      ]
+
+      await expect(brokenExtractor.extract(data)).rejects.toThrow(
+        'CosmWasm client not connected'
+      )
     })
   })
 })

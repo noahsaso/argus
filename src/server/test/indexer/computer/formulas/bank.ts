@@ -17,7 +17,7 @@ export const loadBankTests = (options: ComputerTestOptions) => {
         await Contract.create({
           address: 'address',
           // Code ID that we keep bank history for.
-          codeId: WasmCodeService.getInstance().findWasmCodeIdsByKeys(
+          codeId: WasmCodeService.instance.findWasmCodeIdsByKeys(
             BANK_HISTORY_CODE_IDS_KEYS[0]
           )[0],
           instantiatedAtBlockHeight: 1,
@@ -405,7 +405,7 @@ export const loadBankTests = (options: ComputerTestOptions) => {
           address:
             'juno10h0hc64jv006rr8qy0zhlu4jsxct8qwa0vtaleayh0ujz0zynf2s2r7v8q',
           // Code ID that we keep bank history for.
-          codeId: WasmCodeService.getInstance().findWasmCodeIdsByKeys(
+          codeId: WasmCodeService.instance.findWasmCodeIdsByKeys(
             BANK_HISTORY_CODE_IDS_KEYS[0]
           )[0],
           instantiatedAtBlockHeight: 1,

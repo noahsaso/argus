@@ -91,7 +91,7 @@ export const main = async () => {
   } else if (options.ids?.length || options.codeIdsKeys?.length) {
     const codeIds = [
       ...(options.ids || []),
-      ...WasmCodeService.getInstance().findWasmCodeIdsByKeys(
+      ...WasmCodeService.instance.findWasmCodeIdsByKeys(
         options.codeIdsKeys || []
       ),
     ]

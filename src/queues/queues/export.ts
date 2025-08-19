@@ -1,4 +1,3 @@
-import retry from 'async-await-retry'
 import { Job, Queue } from 'bullmq'
 
 import { ConfigManager } from '@/config'
@@ -6,7 +5,7 @@ import { State } from '@/db'
 import { queueMeilisearchIndexUpdates } from '@/search'
 import { makeHandlers } from '@/tracer'
 import { NamedHandler } from '@/types'
-import { AutoCosmWasmClient } from '@/utils'
+import { AutoCosmWasmClient, retry } from '@/utils'
 import { queueWebhooks } from '@/webhooks'
 
 import { BaseQueue } from '../base'
@@ -84,18 +83,21 @@ export class ExportQueue extends BaseQueue<ExportQueuePayload> {
               return
             }
 
-            // Retry 3 times with exponential backoff starting at 100ms delay.
-            const models = await retry(handler.process, [events], {
-              retriesMax: 3,
-              exponential: true,
-              interval: 100,
-            })
+            const models = await retry(3, () => handler.process!(events), 100)
 
-            if (models && Array.isArray(models) && models.length) {
+            if (models.length > 0) {
               // Queue Meilisearch index updates.
               const queued = (
                 await Promise.all(
-                  models.map((event) => queueMeilisearchIndexUpdates(event))
+                  models.map((event) =>
+                    queueMeilisearchIndexUpdates(event).catch((err) => {
+                      console.error(
+                        `[${new Date().toISOString()}] Error queuing search index updates:`,
+                        err
+                      )
+                      return 0
+                    })
+                  )
                 )
               ).reduce((acc, q) => acc + q, 0)
 
@@ -109,7 +111,8 @@ export class ExportQueue extends BaseQueue<ExportQueuePayload> {
               if (this.options.sendWebhooks) {
                 const queued = await queueWebhooks(models).catch((err) => {
                   console.error(
-                    `[${new Date().toISOString()}] Error queuing webhooks: ${err}`
+                    `[${new Date().toISOString()}] Error queuing webhooks:`,
+                    err
                   )
                   return 0
                 })

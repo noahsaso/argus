@@ -21,6 +21,8 @@ import { Block, NestedMap, RequireAtLeastOne } from './misc'
 export type KeyInput = string | number | Uint8Array
 export type KeyInputType = 'string' | 'number' | 'bytes'
 
+export type FormulaBlockGetter = (height: number) => Promise<Block | undefined>
+
 export type FormulaGetter = <T = any>(
   contractAddress: string,
   ...keys: KeyInput[]
@@ -276,15 +278,21 @@ export type FormulaProposalVoteCountGetter = (
   proposalId: string
 ) => Promise<number>
 
-export type FormulaExtractionGetter = (
+export type FormulaExtractionGetter = <T = any>(
   address: string,
   name: string
-) => Promise<Extraction | undefined>
+) => Promise<Extraction<T> | undefined>
 
 export type FormulaExtractionMapGetter = <V = any>(
   contractAddress: string,
   namePrefix: string
 ) => Promise<Record<string, V> | undefined>
+
+export type FormulaDateFirstExtractedGetter = (
+  contractAddress: string,
+  name: string,
+  where?: WhereOptions
+) => Promise<Date | undefined>
 
 export type FormulaQuerier = (
   query: string,
@@ -304,6 +312,7 @@ export type Env<Args extends Record<string, string> = {}> = {
    */
   args: Partial<Args>
 
+  getBlock: FormulaBlockGetter
   get: FormulaGetter
   getMap: FormulaMapGetter
   getDateKeyModified: FormulaDateGetter
@@ -332,6 +341,7 @@ export type Env<Args extends Record<string, string> = {}> = {
   getCommunityPoolBalances: FormulaCommunityPoolBalancesGetter
   getExtraction: FormulaExtractionGetter
   getExtractionMap: FormulaExtractionMapGetter
+  getDateFirstExtracted: FormulaDateFirstExtractedGetter
   getFeegrantAllowance: FormulaFeegrantAllowanceGetter
   getFeegrantAllowances: FormulaFeegrantAllowancesGetter
   hasFeegrantAllowance: FormulaFeegrantHasAllowanceGetter

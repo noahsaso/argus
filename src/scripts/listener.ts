@@ -1,5 +1,5 @@
-import { decodeRawProtobufMsg } from '@dao-dao/types'
 import { Tx } from '@dao-dao/types/protobuf/codegen/cosmos/tx/v1beta1/tx'
+import { decodeRawProtobufMsg } from '@dao-dao/types/protobuf/utils'
 import * as Sentry from '@sentry/node'
 import { Command } from 'commander'
 import Koa from 'koa'
@@ -7,11 +7,11 @@ import { Sequelize } from 'sequelize'
 
 import { ConfigManager, testRedisConnection } from '@/config'
 import { Block, State, loadDb } from '@/db'
-import { makeExtractors } from '@/listener'
+import { getExtractors } from '@/listener'
 import { ExtractQueue } from '@/queues/queues'
 import { setupMeilisearch } from '@/search'
 import { BlockIterator, WasmCodeService } from '@/services'
-import { DbType } from '@/types'
+import { DbType, ExtractableTxInput, ExtractorEnv } from '@/types'
 import { AutoCosmWasmClient } from '@/utils'
 
 declare global {
@@ -97,15 +97,6 @@ const main = async () => {
   const autoCosmWasmClient = new AutoCosmWasmClient(config.remoteRpc)
   await autoCosmWasmClient.update()
 
-  console.log(`[${new Date().toISOString()}] Setting up extractors...`)
-
-  // Set up extractors.
-  const extractors = await makeExtractors({
-    config,
-    autoCosmWasmClient,
-    sendWebhooks: false,
-  })
-
   console.log(`[${new Date().toISOString()}] Starting listener...`)
 
   const blockIterator = new BlockIterator({
@@ -119,14 +110,14 @@ const main = async () => {
     console.log(`\n[${new Date().toISOString()}] Shutting down...`)
 
     // Stop services.
-    WasmCodeService.getInstance().stopUpdater()
+    WasmCodeService.instance.stopUpdater()
     blockIterator.stopIterating()
   })
   process.on('SIGTERM', async () => {
     console.log(`\n[${new Date().toISOString()}] Shutting down...`)
 
     // Stop services.
-    WasmCodeService.getInstance().stopUpdater()
+    WasmCodeService.instance.stopUpdater()
     blockIterator.stopIterating()
   })
 
@@ -203,32 +194,47 @@ const main = async () => {
         }
       })
 
-      // Match messages with extractors and add to queue.
-      for (const { name, extractor } of extractors) {
-        const data = extractor.match({
-          hash,
-          tx,
-          messages,
-          events,
-        })
+      // Create input for extractors.
+      const input: ExtractableTxInput = {
+        hash,
+        tx,
+        messages,
+        events,
+      }
 
-        if (data) {
-          const timeUnixMs = Date.parse(time)
-          await ExtractQueue.add(`${hash}-${name}`, {
-            extractor: name,
-            data: {
-              txHash: hash,
-              block: {
-                height: BigInt(height).toString(),
-                timeUnixMs: BigInt(timeUnixMs).toString(),
-                timestamp: new Date(timeUnixMs).toISOString(),
+      // Create extractor environment for queue.
+      const env: Pick<ExtractorEnv, 'txHash' | 'block'> = {
+        txHash: hash,
+        block: {
+          height: BigInt(height).toString(),
+          timeUnixMs: BigInt(Date.parse(time)).toString(),
+          timestamp: new Date(time).toISOString(),
+        },
+      }
+
+      // Set up extractors with environment.
+      const extractors = getExtractors()
+
+      // Match messages with extractors and add to queue.
+      for (const Extractor of extractors) {
+        const data = Extractor.match(input)
+
+        if (data.length > 0) {
+          await ExtractQueue.addBulk(
+            data.map((data) => ({
+              name: `${Extractor.type} (${data.source})`,
+              data: {
+                extractor: Extractor.type,
+                data,
+                env,
               },
-              data,
-            },
-          })
+            }))
+          )
 
           console.log(
-            `[${new Date().toISOString()}] TX ${hash} at block ${height} sent to "${name}" extractor.`
+            `[${new Date().toISOString()}] TX ${hash} at block ${height} sent to "${
+              Extractor.type
+            }" extractor.`
           )
         }
       }

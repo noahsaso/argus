@@ -19,8 +19,20 @@ export const config = makeSimpleContractFormula<Config>({
   docs: {
     description: 'retrieves the configuration of the proposal module',
   },
-  transformation: 'config',
-  fallbackKeys: ['config'],
+  sources: [
+    {
+      type: 'extraction',
+      name: 'config',
+    },
+    {
+      type: 'transformation',
+      name: 'config',
+    },
+    {
+      type: 'event',
+      key: 'config',
+    },
+  ],
 })
 
 export const dao: ContractFormula<string> = {
@@ -51,16 +63,11 @@ export const proposal: ContractFormula<
   // This formula depends on the block height/time to check expiration.
   dynamic: true,
   compute: async (env) => {
-    const {
-      contractAddress,
-      getTransformationMatch,
-      get,
-      args: { id },
-    } = env
-
-    if (!id || isNaN(Number(id)) || Number(id) < 0) {
+    if (!env.args.id || isNaN(Number(env.args.id)) || Number(env.args.id) < 0) {
       throw new Error('missing `id`')
     }
+
+    const id = Number(env.args.id)
 
     const daoAddress = await dao.compute(env)
     const [hideFromSearch, daoProposalModules] = daoAddress
@@ -79,27 +86,16 @@ export const proposal: ContractFormula<
         ])
       : [undefined, undefined]
     const proposalModule = daoProposalModules?.find(
-      (m) => m.address === contractAddress
+      (m) => m.address === env.contractAddress
     )
 
-    const idNum = Number(id)
-    const proposal =
-      (
-        await getTransformationMatch<MultipleChoiceProposal>(
-          contractAddress,
-          `proposal:${id}`
-        )
-      )?.value ??
-      // Fallback to events.
-      (await get<MultipleChoiceProposal>(contractAddress, 'proposals', idNum))
-        ?.valueJson
-
+    const proposal = await getProposal(env, id)
     if (!proposal) {
       return null
     }
 
     return {
-      ...(await intoResponse(env, proposal, idNum)),
+      ...(await intoResponse(env, proposal, id)),
       ...(proposalModule && {
         proposalModule,
         daoProposalId: `${proposalModule.prefix}${id}`,
@@ -319,6 +315,7 @@ export const vote: ContractFormula<
     getTransformationMatch,
     get,
     getDateKeyModified,
+    getExtraction,
     args: { proposalId, voter },
   }) => {
     if (!proposalId) {
@@ -328,12 +325,20 @@ export const vote: ContractFormula<
       throw new Error('missing `voter`')
     }
 
-    let voteCast = (
-      await getTransformationMatch<VoteCast<Ballot>>(
-        contractAddress,
-        `voteCast:${voter}:${proposalId}`
-      )
-    )?.value
+    let voteCast =
+      (
+        await getTransformationMatch<VoteCast<Ballot>>(
+          contractAddress,
+          `voteCast:${voter}:${proposalId}`
+        )
+      )?.value ??
+      // Fallback to extraction.
+      (
+        await getExtraction<VoteCast<Ballot>>(
+          contractAddress,
+          `voteCast:${voter}:${proposalId}`
+        )
+      )?.data
 
     // Falback to events.
     if (!voteCast) {
@@ -494,18 +499,34 @@ export const proposalCreatedAt: ContractFormula<string, { id: string }> = {
       },
     ],
   },
-  compute: async ({
-    contractAddress,
-    getDateFirstTransformed,
-    getDateKeyFirstSet,
-    args: { id },
-  }) => {
+  compute: async (env) => {
+    const {
+      contractAddress,
+      getDateFirstTransformed,
+      getDateKeyFirstSet,
+      getDateFirstExtracted,
+      getBlock,
+      args: { id },
+    } = env
+
     if (!id || isNaN(Number(id)) || Number(id) < 0) {
       throw new Error('missing `id`')
     }
 
+    const proposal = await getProposal(env, Number(id))
+    if (!proposal) {
+      throw new Error('proposal not found')
+    }
+
+    // Use proposal start block if available.
     const date = (
+      (await getBlock(proposal.start_height).then(
+        (b) => b && new Date(Number(b.timeUnixMs))
+      )) ??
+      // Fallback to transformation.
       (await getDateFirstTransformed(contractAddress, `proposal:${id}`)) ??
+      // Fallback to extraction.
+      (await getDateFirstExtracted(contractAddress, `proposal:${id}`)) ??
       // Fallback to events.
       (await getDateKeyFirstSet(contractAddress, 'proposals', Number(id)))
     )?.toISOString()
@@ -578,6 +599,28 @@ export const openProposals: ContractFormula<
 
 // Helpers
 
+const getProposal = async (
+  env: ContractEnv,
+  id: number
+): Promise<MultipleChoiceProposal | null> =>
+  (
+    await env.getTransformationMatch<MultipleChoiceProposal>(
+      env.contractAddress,
+      `proposal:${id}`
+    )
+  )?.value ??
+  // Fallback to extraction.
+  (
+    await env.getExtraction<MultipleChoiceProposal>(
+      env.contractAddress,
+      `proposal:${id}`
+    )
+  )?.data ??
+  // Fallback to events.
+  (await env.get<MultipleChoiceProposal>(env.contractAddress, 'proposals', id))
+    ?.valueJson ??
+  null
+
 // https://github.com/DA0-DA0/dao-contracts/blob/fa567797e2f42e70296a2d6f889f341ff80f0695/contracts/proposal/dao-proposal-single/src/proposal.rs#L50
 const intoResponse = async (
   env: ContractEnv,
@@ -620,12 +663,16 @@ const intoResponse = async (
     }
   }
 
-  const createdAt = await proposalCreatedAt.compute({
-    ...env,
-    args: {
-      id: id.toString(),
-    },
-  })
+  const createdAt =
+    (await env
+      .getBlock(proposal.start_height)
+      .then((b) => b && new Date(Number(b.timeUnixMs)).toISOString())) ??
+    (await proposalCreatedAt.compute({
+      ...env,
+      args: {
+        id: id.toString(),
+      },
+    }))
 
   let executedAt: string | undefined
   if (
@@ -642,6 +689,12 @@ const intoResponse = async (
           },
         }
       )) ??
+      // Fallback to extraction.
+      (await env.getDateFirstExtracted(env.contractAddress, `proposal:${id}`, {
+        status: {
+          [Op.in]: ['executed', 'execution_failed'],
+        },
+      })) ??
       // Fallback to events.
       (await env.getDateKeyFirstSetWithValueMatch(
         env.contractAddress,
@@ -665,6 +718,10 @@ const intoResponse = async (
           status: 'closed',
         }
       )) ??
+      // Fallback to extraction.
+      (await env.getDateFirstExtracted(env.contractAddress, `proposal:${id}`, {
+        status: 'closed',
+      })) ??
       // Fallback to events.
       (await env.getDateKeyFirstSetWithValueMatch(
         env.contractAddress,
@@ -684,6 +741,16 @@ const intoResponse = async (
       // If not yet executed nor closed, completed when it was passed/rejected.
       (
         (await env.getDateFirstTransformed(
+          env.contractAddress,
+          `proposal:${id}`,
+          {
+            status: {
+              [Op.in]: ['passed', 'rejected'],
+            },
+          }
+        )) ??
+        // Fallback to extraction.
+        (await env.getDateFirstExtracted(
           env.contractAddress,
           `proposal:${id}`,
           {

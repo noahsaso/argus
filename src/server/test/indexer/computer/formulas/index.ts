@@ -25,7 +25,7 @@ export const loadFormulasTests = (options: ComputerTestOptions) => {
     loadWasmTests(options)
 
     it('filters contract by code IDs specified in formula', async () => {
-      WasmCodeService.getInstance().addDefaultWasmCodes(
+      WasmCodeService.instance.addDefaultWasmCodes(
         new WasmCode('dao-dao-core', [1, 2])
       )
 

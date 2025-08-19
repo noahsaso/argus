@@ -168,8 +168,8 @@ export class AccountWebhookEvent extends Model {
       'X-Webhook-Signature': signature,
     }
 
-    let responseBody = null
-    let responseHeaders = null
+    let responseBody: any = null
+    let responseHeaders: any = null
     let statusCode: number
     try {
       const response = await axios(this.url, {
