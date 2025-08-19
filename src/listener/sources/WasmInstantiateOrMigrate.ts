@@ -1,5 +1,6 @@
 import { WasmCodeService } from '@/services'
 import {
+  DataSourceData,
   ExtractableTxInput,
   ExtractorDataSource,
   ExtractorHandleableData,
@@ -68,8 +69,17 @@ export class WasmInstantiateOrMigrateDataSource extends DataSource<
     }
   }
 
+  static data(
+    data: WasmInstantiateOrMigrateData
+  ): DataSourceData<WasmInstantiateOrMigrateData> {
+    return {
+      source: this.type,
+      data,
+    }
+  }
+
   /**
-   * The code IDs to match.
+   * The code IDs to match. Undefined if not required.
    */
   private codeIds?: number[]
 
@@ -115,5 +125,16 @@ export class WasmInstantiateOrMigrateDataSource extends DataSource<
           codeIdsKeys: WasmCodeService.instance.findWasmCodeKeysById(codeId),
         }
       })
+  }
+
+  isOurData(data: WasmInstantiateOrMigrateData): boolean {
+    return (
+      (((this.config.type === 'both' || this.config.type === 'instantiate') &&
+        data.type === 'instantiate') ||
+        ((this.config.type === 'both' || this.config.type === 'migrate') &&
+          data.type === 'migrate')) &&
+      // Code IDs match.
+      (!this.codeIds || this.codeIds.includes(data.codeId))
+    )
   }
 }

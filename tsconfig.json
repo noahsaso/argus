@@ -10,7 +10,8 @@
     "module": "commonjs",
     "outDir": "dist",
     "rootDir": "src",
-    "target": "es2020",
+    "target": "esnext",
+    "lib": ["esnext", "dom"],
     "strict": true,
     "baseUrl": "src",
     "paths": {

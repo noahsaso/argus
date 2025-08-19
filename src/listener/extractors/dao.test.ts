@@ -457,14 +457,16 @@ describe('DAO Extractor', () => {
         }
       )
 
-      const result = await DaoExtractor.sync!({
-        config: extractor.env.config,
-        autoCosmWasmClient: extractor.env.autoCosmWasmClient,
-      })
+      const result = await Array.fromAsync(
+        DaoExtractor.sync!({
+          config: extractor.env.config,
+          autoCosmWasmClient: extractor.env.autoCosmWasmClient,
+        })
+      )
+
       expect(result).toEqual([
         {
           source: WasmInstantiateOrMigrateDataSource.type,
-          handler: 'instantiate',
           data: {
             type: 'instantiate',
             address: 'juno1dao123contract456',
@@ -474,7 +476,6 @@ describe('DAO Extractor', () => {
         },
         {
           source: WasmInstantiateOrMigrateDataSource.type,
-          handler: 'instantiate',
           data: {
             type: 'instantiate',
             address: 'juno1dao789contract012',

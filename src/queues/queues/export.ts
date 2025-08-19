@@ -85,11 +85,19 @@ export class ExportQueue extends BaseQueue<ExportQueuePayload> {
 
             const models = await retry(3, () => handler.process!(events), 100)
 
-            if (models && Array.isArray(models) && models.length) {
+            if (models.length > 0) {
               // Queue Meilisearch index updates.
               const queued = (
                 await Promise.all(
-                  models.map((event) => queueMeilisearchIndexUpdates(event))
+                  models.map((event) =>
+                    queueMeilisearchIndexUpdates(event).catch((err) => {
+                      console.error(
+                        `[${new Date().toISOString()}] Error queuing search index updates:`,
+                        err
+                      )
+                      return 0
+                    })
+                  )
                 )
               ).reduce((acc, q) => acc + q, 0)
 
@@ -103,7 +111,8 @@ export class ExportQueue extends BaseQueue<ExportQueuePayload> {
               if (this.options.sendWebhooks) {
                 const queued = await queueWebhooks(models).catch((err) => {
                   console.error(
-                    `[${new Date().toISOString()}] Error queuing webhooks: ${err}`
+                    `[${new Date().toISOString()}] Error queuing webhooks:`,
+                    err
                   )
                   return 0
                 })

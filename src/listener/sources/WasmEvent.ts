@@ -1,4 +1,5 @@
 import {
+  DataSourceData,
   ExtractableTxInput,
   ExtractorDataSource,
   ExtractorHandleableData,
@@ -84,6 +85,24 @@ export class WasmEventDataSource extends DataSource<
     }
   }
 
+  static data(
+    data: Omit<WasmEventData, 'attributes'>
+  ): DataSourceData<WasmEventData> {
+    return {
+      source: this.type,
+      data: {
+        ...data,
+        attributes: data._attributes.reduce(
+          (acc, { key, value }) => ({
+            ...acc,
+            [key]: [...(acc[key] || []), value],
+          }),
+          {} as Record<string, string[]>
+        ),
+      },
+    }
+  }
+
   private _equalsOrContains(a: string | string[], b: string): boolean {
     return Array.isArray(a) ? a.includes(b) : a === b
   }
@@ -119,6 +138,22 @@ export class WasmEventDataSource extends DataSource<
               : []
           )
         : []
+    )
+  }
+
+  isOurData(data: WasmEventData): boolean {
+    return (
+      this._equalsOrContains(this.config.key, data.key) &&
+      this._equalsOrContains(this.config.value, data.value) &&
+      // Other attributes.
+      (!this.config.otherAttributes ||
+        this.config.otherAttributes.every(
+          (otherKey) =>
+            otherKey in data.attributes &&
+            Array.isArray(data.attributes[otherKey]) &&
+            data.attributes[otherKey]!.length > 0 &&
+            data._attributes.some(({ key }) => key === otherKey)
+        ))
     )
   }
 }

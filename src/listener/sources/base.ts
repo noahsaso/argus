@@ -30,4 +30,10 @@ export abstract class DataSource<
    * The function called with each TX to match and extract relevant data.
    */
   abstract match(input: ExtractableTxInput): Data[]
+
+  /**
+   * A function that checks if the data source can handle the data produced by
+   * the match function.
+   */
+  abstract isOurData(data: Data): boolean
 }

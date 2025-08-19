@@ -39,8 +39,6 @@ export class SyncExtractorsQueue extends BaseQueue<SyncExtractorsQueuePayload> {
   }
 
   async process(job: Job<SyncExtractorsQueuePayload>): Promise<void> {
-    const now = Date.now()
-
     const extractors = getExtractors()
     const toSync =
       job.data.extractors === 'ALL'
@@ -71,27 +69,39 @@ export class SyncExtractorsQueue extends BaseQueue<SyncExtractorsQueuePayload> {
     }
 
     for (const Extractor of toSync) {
-      job.log(`syncing ${Extractor.type}...`)
-      const syncData = await Extractor.sync?.(env)
-      if (syncData) {
-        await ExtractQueue.addBulk(
-          syncData.map((data) => ({
-            name: `sync_${Extractor.type}_${now}`,
-            data: {
-              extractor: Extractor.type,
-              data,
-              env: {
-                txHash: '',
-                block: {
-                  height: BigInt(block.header.height).toString(),
-                  timeUnixMs: BigInt(Date.parse(block.header.time)).toString(),
-                  timestamp: new Date(block.header.time).toISOString(),
-                },
-              },
-            },
-          }))
-        )
-        count += syncData.length
+      if (Extractor.sync) {
+        job.log(`syncing ${Extractor.type}...`)
+        for await (const data of Extractor.sync(env)) {
+          // Match synced data with any extractor that can handle it.
+          for (const Extractor of extractors) {
+            const handleableData = Extractor.sourceMatch(data)
+            if (handleableData.length > 0) {
+              await ExtractQueue.addBulk(
+                handleableData.map((data) => ({
+                  name: `${Extractor.type} (${data.source}) [sync]`,
+                  data: {
+                    extractor: Extractor.type,
+                    data,
+                    env: {
+                      txHash: '',
+                      block: {
+                        height: BigInt(block.header.height).toString(),
+                        timeUnixMs: BigInt(
+                          Date.parse(block.header.time)
+                        ).toString(),
+                        timestamp: new Date(block.header.time).toISOString(),
+                      },
+                    },
+                  },
+                }))
+              )
+            }
+          }
+
+          count++
+        }
+      } else {
+        job.log(`${Extractor.type} does not support sync`)
       }
     }
 

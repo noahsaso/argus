@@ -627,10 +627,12 @@ describe('Proposal Extractor', () => {
         return {}
       })
 
-      const result = await ProposalExtractor.sync!({
-        config: extractor.env.config,
-        autoCosmWasmClient: extractor.env.autoCosmWasmClient,
-      })
+      const result = await Array.fromAsync(
+        ProposalExtractor.sync!({
+          config: extractor.env.config,
+          autoCosmWasmClient: extractor.env.autoCosmWasmClient,
+        })
+      )
 
       // Should return handleable data for:
       // - 1 instantiate from first contract
@@ -641,28 +643,28 @@ describe('Proposal Extractor', () => {
       expect(result).toHaveLength(11)
 
       // Check structure of returned data
-      const instantiateHandleables = result.filter((r) => {
+      const instantiateSync = result.filter((r) => {
         return r.source === WasmInstantiateOrMigrateDataSource.type
       })
-      const proposalHandleables = result.filter((r) => {
+      const proposalSync = result.filter((r) => {
         return (
           r.source === WasmEventDataSource.type &&
           (r.data as WasmEventData).attributes.action?.[0] === 'propose'
         )
       })
-      const voteHandleables = result.filter((r) => {
+      const voteSync = result.filter((r) => {
         return (
           r.source === WasmEventDataSource.type &&
           (r.data as WasmEventData).attributes.action?.[0] === 'vote'
         )
       })
 
-      expect(instantiateHandleables).toHaveLength(2) // 2 instantiates total
-      expect(proposalHandleables).toHaveLength(3) // 3 proposals total
-      expect(voteHandleables).toHaveLength(6) // 6 votes total
+      expect(instantiateSync).toHaveLength(2) // 2 instantiates total
+      expect(proposalSync).toHaveLength(3) // 3 proposals total
+      expect(voteSync).toHaveLength(6) // 6 votes total
 
       // Check specific instantiate handleable
-      const firstInstantiate = instantiateHandleables.find((r) => {
+      const firstInstantiate = instantiateSync.find((r) => {
         const data = r.data as WasmInstantiateOrMigrateData
         return data.address === 'juno1proposal123contract456'
       })
@@ -677,7 +679,7 @@ describe('Proposal Extractor', () => {
       expect(firstInstantiateData.codeIdsKeys).toEqual(['dao-proposal-single'])
 
       // Check specific proposal handleable
-      const firstProposal = proposalHandleables.find((r) => {
+      const firstProposal = proposalSync.find((r) => {
         const data = r.data as WasmEventData
         return (
           data.address === 'juno1proposal123contract456' &&
@@ -689,7 +691,7 @@ describe('Proposal Extractor', () => {
       expect(firstProposalData.attributes.action).toEqual(['propose'])
 
       // Check specific vote handleable
-      const firstVote = voteHandleables.find((r) => {
+      const firstVote = voteSync.find((r) => {
         const data = r.data as WasmEventData
         return (
           data.address === 'juno1proposal123contract456' &&

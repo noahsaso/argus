@@ -394,14 +394,16 @@ describe('Contracts Extractor', () => {
         }
       )
 
-      const result = await ContractExtractor.sync!({
-        config: extractor.env.config,
-        autoCosmWasmClient: extractor.env.autoCosmWasmClient,
-      })
+      const result = await Array.fromAsync(
+        ContractExtractor.sync!({
+          config: extractor.env.config,
+          autoCosmWasmClient: extractor.env.autoCosmWasmClient,
+        })
+      )
+
       expect(result).toEqual([
         {
           source: WasmInstantiateOrMigrateDataSource.type,
-          handler: 'instantiate',
           data: {
             type: 'instantiate',
             address: 'juno1contract100',
@@ -411,7 +413,6 @@ describe('Contracts Extractor', () => {
         },
         {
           source: WasmInstantiateOrMigrateDataSource.type,
-          handler: 'instantiate',
           data: {
             type: 'instantiate',
             address: 'juno1contract200',

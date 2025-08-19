@@ -36,15 +36,15 @@ export class Contract extends Model {
 
   @AllowNull
   @Column(DataType.BIGINT)
-  declare instantiatedAtBlockHeight: string
+  declare instantiatedAtBlockHeight: string | null
 
   @AllowNull
   @Column(DataType.BIGINT)
-  declare instantiatedAtBlockTimeUnixMs: string
+  declare instantiatedAtBlockTimeUnixMs: string | null
 
   @AllowNull
   @Column(DataType.DATE)
-  declare instantiatedAtBlockTimestamp: Date
+  declare instantiatedAtBlockTimestamp: Date | null
 
   @AllowNull
   @Column(DataType.TEXT)
@@ -57,11 +57,16 @@ export class Contract extends Model {
       admin: this.admin,
       creator: this.creator,
       label: this.label,
-      instantiatedAt: {
-        height: this.instantiatedAtBlockHeight,
-        timeUnixMs: this.instantiatedAtBlockTimeUnixMs,
-        timestamp: this.instantiatedAtBlockTimestamp.toISOString(),
-      },
+      instantiatedAt:
+        this.instantiatedAtBlockHeight &&
+        this.instantiatedAtBlockTimeUnixMs &&
+        this.instantiatedAtBlockTimestamp
+          ? {
+              height: this.instantiatedAtBlockHeight,
+              timeUnixMs: this.instantiatedAtBlockTimeUnixMs,
+              timestamp: this.instantiatedAtBlockTimestamp.toISOString(),
+            }
+          : null,
       txHash: this.txHash,
     }
   }

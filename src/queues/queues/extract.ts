@@ -111,7 +111,8 @@ export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
               models.map((event) =>
                 queueMeilisearchIndexUpdates(event).catch((err) => {
                   console.error(
-                    `[${new Date().toISOString()}] Error queuing search index update: ${err}`
+                    `[${new Date().toISOString()}] Error queuing search index updates:`,
+                    err
                   )
                   return 0
                 })
@@ -129,7 +130,8 @@ export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
           if (this.options.sendWebhooks) {
             const queued = await queueWebhooks(models).catch((err) => {
               console.error(
-                `[${new Date().toISOString()}] Error queuing webhooks: ${err}`
+                `[${new Date().toISOString()}] Error queuing webhooks:`,
+                err
               )
               return 0
             })

@@ -1,5 +1,6 @@
 import { Extraction } from '@/db'
 import {
+  DataSourceData,
   DependableEventModel,
   ExtractableTxInput,
   ExtractorDataSource,
@@ -25,7 +26,9 @@ export abstract class Extractor {
   /**
    * An optional function to sync extractions in order to backfill data.
    */
-  static sync?(env: ExtractorSyncEnv): Promise<ExtractorHandleableData[]>
+  static sync?(
+    env: ExtractorSyncEnv
+  ): AsyncGenerator<DataSourceData, void, undefined>
 
   /**
    * The environment for the extractor.
@@ -68,6 +71,33 @@ export abstract class Extractor {
         handler,
         data,
       }))
+    })
+  }
+
+  /**
+   * A function that checks if data source data can be handled by this extractor
+   * and returns data that's ready to be passed to a handler.
+   */
+  static sourceMatch(data: DataSourceData): ExtractorHandleableData[] {
+    const availableDataSources = getDataSources()
+    return this.sources.flatMap(({ type, handler, config }) => {
+      if (type !== data.source) {
+        return []
+      }
+
+      const Source = availableDataSources[type]
+      if (!Source) {
+        throw new Error(`Source ${type} not found.`)
+      }
+
+      const source = new Source(config as any)
+      return source.isOurData(data.data as any)
+        ? {
+            source: type,
+            handler,
+            data: data.data,
+          }
+        : []
     })
   }
 

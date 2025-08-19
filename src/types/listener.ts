@@ -68,24 +68,24 @@ export type ExtractorHandlerOutput = Pick<
 /**
  * The handler function for an extractor.
  */
-export type ExtractorHandler<Data extends unknown = unknown> = (
+export type ExtractorHandler<Data extends unknown = any> = (
   data: Data
 ) => Promise<ExtractorHandlerOutput[]>
-
-/**
- * The data filtered by a data source to be passed to
- */
-export type ExtractorData<Data extends unknown = unknown> = {
-  type: string
-  data: Data
-}
 
 /**
  * The data that has been matched by a data source and is ready to be passed to
  * an extractor handler.
  */
-export type ExtractorHandleableData<Data extends unknown = unknown> = {
+export type ExtractorHandleableData<Data extends unknown = any> = {
   source: string
   handler: string
+  data: Data
+}
+
+/**
+ * The data that has been filtered by a data source.
+ */
+export type DataSourceData<Data extends unknown = any> = {
+  source: string
   data: Data
 }

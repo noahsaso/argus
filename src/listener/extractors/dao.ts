@@ -1,8 +1,8 @@
 import { Contract } from '@/db'
 import { WasmCodeService } from '@/services'
 import {
+  DataSourceData,
   ExtractorDataSource,
-  ExtractorHandleableData,
   ExtractorHandler,
   ExtractorHandlerOutput,
   ExtractorSyncEnv,
@@ -45,11 +45,14 @@ export class DaoExtractor extends Extractor {
   // Handlers.
   protected instantiate: ExtractorHandler<WasmInstantiateOrMigrateData> = ({
     address,
-  }) => this.save(address)
-  protected execute: ExtractorHandler<WasmEventData> = ({ address }) =>
-    this.save(address)
+  }) => this.save(address, true)
+  protected execute: ExtractorHandler<WasmEventData> = ({ address, value }) =>
+    this.save(address, value === 'execute_update_proposal_modules')
 
-  private async save(address: string): Promise<ExtractorHandlerOutput[]> {
+  private async save(
+    address: string,
+    saveProposalModules: boolean
+  ): Promise<ExtractorHandlerOutput[]> {
     const client = this.env.autoCosmWasmClient.client
     if (!client) {
       throw new Error('CosmWasm client not connected')
@@ -76,6 +79,8 @@ export class DaoExtractor extends Extractor {
       }),
     ])
 
+    const isV1 = info.version === '0.1.0'
+
     // Ensure contract exists in the DB.
     await Contract.upsert(
       {
@@ -84,9 +89,6 @@ export class DaoExtractor extends Extractor {
         admin: contract.admin,
         creator: contract.creator,
         label: contract.label,
-        instantiatedAtBlockHeight: this.env.block.height,
-        instantiatedAtBlockTimeUnixMs: this.env.block.timeUnixMs,
-        instantiatedAtBlockTimestamp: this.env.block.timestamp,
         txHash: this.env.txHash,
       },
       {
@@ -108,12 +110,29 @@ export class DaoExtractor extends Extractor {
         name: 'dao-dao-core/dump_state',
         data: dumpState,
       },
+      ...(saveProposalModules
+        ? dumpState.proposal_modules.map((proposalModule: any) => ({
+            address: contract.address,
+            name: `proposalModule:${
+              isV1 ? proposalModule : proposalModule.address
+            }`,
+            data: isV1
+              ? {
+                  address: proposalModule,
+                  // V1 modules don't have a prefix.
+                  prefix: '',
+                  // V1 modules are always enabled.
+                  status: 'Enabled' as const,
+                }
+              : proposalModule,
+          }))
+        : []),
     ]
   }
 
-  static async sync({
+  static async *sync({
     autoCosmWasmClient,
-  }: ExtractorSyncEnv): Promise<ExtractorHandleableData[]> {
+  }: ExtractorSyncEnv): AsyncGenerator<DataSourceData, void, undefined> {
     const client = autoCosmWasmClient.client
     if (!client) {
       throw new Error('CosmWasm client not connected')
@@ -123,23 +142,82 @@ export class DaoExtractor extends Extractor {
       WasmCodeService.instance.findWasmCodeIdsByKeys('dao-dao-core')
 
     // Find all DAO contracts on the chain.
-    const contracts: { codeId: number; address: string }[] = []
     for (const codeId of daoDaoCoreCodeIds) {
-      contracts.push(
-        ...(await client.getContracts(codeId)).map((address) => ({
+      const contracts = await client.getContracts(codeId)
+
+      yield* contracts.map((address) =>
+        WasmInstantiateOrMigrateDataSource.data({
+          type: 'instantiate',
           address,
           codeId,
-        }))
+          codeIdsKeys: ['dao-dao-core'],
+        })
       )
-    }
 
-    return contracts.map(({ address, codeId }) =>
-      WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
-        type: 'instantiate',
-        address,
-        codeId,
-        codeIdsKeys: ['dao-dao-core'],
-      })
-    )
+      // Get the voting module and proposal modules for each DAO in batches of
+      // 10.
+      for (let i = 0; i < contracts.length; i += 10) {
+        const batchContracts = contracts.slice(i, i + 10)
+
+        const data = (
+          await Promise.all(
+            batchContracts.map(
+              async (
+                address
+              ): Promise<DataSourceData<WasmInstantiateOrMigrateData>[]> => {
+                const [{ info }, { voting_module, proposal_modules }] =
+                  await Promise.all([
+                    client.queryContractSmart(address, {
+                      info: {},
+                    }),
+                    client.queryContractSmart(address, {
+                      dump_state: {},
+                    }),
+                  ])
+
+                const { codeId: votingModuleCodeId } = await client.getContract(
+                  voting_module
+                )
+
+                return [
+                  // Voting module.
+                  WasmInstantiateOrMigrateDataSource.data({
+                    type: 'instantiate',
+                    address: voting_module,
+                    codeId: votingModuleCodeId,
+                    codeIdsKeys:
+                      WasmCodeService.instance.findWasmCodeKeysById(
+                        votingModuleCodeId
+                      ),
+                  }),
+                  // Proposal modules.
+                  ...(await Promise.all(
+                    proposal_modules.map(async (proposalModule: any) => {
+                      // V1 modules are just an address.
+                      const address =
+                        info.version === '0.1.0'
+                          ? proposalModule
+                          : proposalModule.address
+
+                      const { codeId } = await client.getContract(address)
+
+                      return WasmInstantiateOrMigrateDataSource.data({
+                        type: 'instantiate',
+                        address,
+                        codeId,
+                        codeIdsKeys:
+                          WasmCodeService.instance.findWasmCodeKeysById(codeId),
+                      })
+                    })
+                  )),
+                ]
+              }
+            )
+          )
+        ).flat()
+
+        yield* data
+      }
+    }
   }
 }

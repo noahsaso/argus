@@ -86,16 +86,23 @@ export const proposalModules: ContractFormula<ProposalModuleWithInfo[]> = {
     description: 'retrieves all proposal modules for the DAO',
   },
   compute: async (env) => {
-    const { contractAddress, getTransformationMap, getMap } = env
+    const { contractAddress, getTransformationMap, getMap, getExtractionMap } =
+      env
 
     const proposalModules: ProposalModule[] = []
 
-    const transformedMap = await getTransformationMap<ProposalModule>(
-      contractAddress,
-      'proposalModule'
-    )
+    const transformedMap =
+      (await getTransformationMap<ProposalModule>(
+        contractAddress,
+        'proposalModule'
+      )) ||
+      // Fallback to extractions.
+      (await getExtractionMap<ProposalModule>(
+        contractAddress,
+        'proposalModule'
+      ))
 
-    // Transformed.
+    // Transformed / extracted.
     if (transformedMap) {
       proposalModules.push(...Object.values(transformedMap))
     } else {

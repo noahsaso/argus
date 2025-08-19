@@ -63,7 +63,7 @@ import { Contract } from './Contract'
     },
   ],
 })
-export class Extraction extends DependableEventModel {
+export class Extraction<T = any> extends DependableEventModel {
   @PrimaryKey
   @AutoIncrement
   @Column(DataType.BIGINT)
@@ -122,7 +122,7 @@ export class Extraction extends DependableEventModel {
    */
   @AllowNull(false)
   @Column(DataType.JSONB)
-  declare data: unknown
+  declare data: T
 
   get block(): Block {
     return {
