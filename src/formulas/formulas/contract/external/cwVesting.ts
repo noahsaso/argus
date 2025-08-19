@@ -1,4 +1,4 @@
-import { Uint128 } from '@dao-dao/types'
+import { Uint128 } from '@dao-dao/types/contracts/common'
 
 import { ContractFormula } from '@/types'
 import { dbKeyToKeys } from '@/utils'

@@ -86,7 +86,7 @@ export class NftStakeUpdateExtractor extends Extractor {
       .then(({ power }) => power as string)
 
     // Get all staked NFTs.
-    const stakedTokenIds = []
+    const stakedTokenIds: string[] = []
     const limit = 30
     while (true) {
       const tokenIds = await client.queryContractSmart(contractAddress, {

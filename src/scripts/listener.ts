@@ -1,5 +1,5 @@
-import { decodeRawProtobufMsg } from '@dao-dao/types'
 import { Tx } from '@dao-dao/types/protobuf/codegen/cosmos/tx/v1beta1/tx'
+import { decodeRawProtobufMsg } from '@dao-dao/types/protobuf/utils'
 import * as Sentry from '@sentry/node'
 import { Command } from 'commander'
 import Koa from 'koa'

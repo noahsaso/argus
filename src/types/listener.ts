@@ -1,5 +1,5 @@
 import { Event } from '@cosmjs/stargate'
-import { DecodedStargateMsg } from '@dao-dao/types'
+import { DecodedStargateMsg } from '@dao-dao/types/chain'
 import { Tx } from '@dao-dao/types/protobuf/codegen/cosmos/tx/v1beta1/tx'
 
 import { AutoCosmWasmClient } from '@/utils'
