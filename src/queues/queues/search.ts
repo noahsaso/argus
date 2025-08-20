@@ -10,6 +10,7 @@ import { closeBullQueue, getBullQueue, getBullQueueEvents } from '../connection'
 
 export class SearchQueue extends BaseQueue<PendingMeilisearchIndexUpdate> {
   static queueName = 'search'
+  static concurrency = 10
 
   static getQueue = () =>
     getBullQueue<PendingMeilisearchIndexUpdate>(this.queueName)
