@@ -283,112 +283,116 @@ export class ProposalExtractor extends Extractor {
             continue
           }
 
-          // Paginate all proposals for this contract.
-          const limit = 30
-          let startAfter: number | undefined
-          while (true) {
-            const { proposals: proposalsPage } =
-              await client.queryContractSmart(proposalModuleAddress, {
-                list_proposals: {
-                  start_after: startAfter,
-                  limit,
-                },
-              })
+          try {
+            // Paginate all proposals for this contract.
+            const limit = 20
+            let startAfter: number | undefined
+            while (true) {
+              const { proposals: proposalsPage } =
+                await client.queryContractSmart(proposalModuleAddress, {
+                  list_proposals: {
+                    start_after: startAfter,
+                    limit,
+                  },
+                })
 
-            // Yield all proposals.
-            yield* proposalsPage.map(({ id }: { id: number }) =>
-              WasmEventDataSource.data({
-                address: proposalModuleAddress,
-                key: 'action',
-                value: 'propose',
-                _attributes: [
-                  {
-                    key: 'action',
-                    value: 'propose',
-                  },
-                  {
-                    key: 'proposal_id',
-                    value: id.toString(),
-                  },
-                  {
-                    key: 'sender',
-                    value: 'placeholder',
-                  },
-                  {
-                    key: 'sender',
-                    // Only the presence of this key is needed for filtering.
-                    value: 'placeholder',
-                  },
-                ],
-              })
-            )
-
-            // Fetch voters for each proposal.
-            for (const { id } of proposalsPage) {
-              let startAfter: string | undefined
-              while (true) {
-                const { votes: votesPage } = await client.queryContractSmart(
-                  proposalModuleAddress,
-                  {
-                    list_votes: {
-                      proposal_id: id,
-                      start_after: startAfter,
-                      limit: 30,
+              // Yield all proposals.
+              yield* proposalsPage.map(({ id }: { id: number }) =>
+                WasmEventDataSource.data({
+                  address: proposalModuleAddress,
+                  key: 'action',
+                  value: 'propose',
+                  _attributes: [
+                    {
+                      key: 'action',
+                      value: 'propose',
                     },
+                    {
+                      key: 'proposal_id',
+                      value: id.toString(),
+                    },
+                    {
+                      key: 'sender',
+                      value: 'placeholder',
+                    },
+                    {
+                      key: 'sender',
+                      // Only the presence of this key is needed for filtering.
+                      value: 'placeholder',
+                    },
+                  ],
+                })
+              )
+
+              // Fetch voters for each proposal.
+              for (const { id } of proposalsPage) {
+                let startAfter: string | undefined
+                while (true) {
+                  const { votes: votesPage } = await client.queryContractSmart(
+                    proposalModuleAddress,
+                    {
+                      list_votes: {
+                        proposal_id: id,
+                        start_after: startAfter,
+                        limit,
+                      },
+                    }
+                  )
+
+                  // Yield all votes.
+                  yield* votesPage.map(({ voter }: { voter: string }) =>
+                    WasmEventDataSource.data({
+                      address: proposalModuleAddress,
+                      key: 'action',
+                      value: 'vote',
+                      _attributes: [
+                        {
+                          key: 'action',
+                          value: 'vote',
+                        },
+                        {
+                          key: 'proposal_id',
+                          value: id.toString(),
+                        },
+                        {
+                          key: 'sender',
+                          value: voter,
+                        },
+                        {
+                          key: 'position',
+                          // Only the presence of this key is needed for
+                          // filtering. The actual vote will be queried from the
+                          // contract.
+                          value: 'placeholder',
+                        },
+                      ],
+                    })
+                  )
+
+                  // Stop if there are no more votes.
+                  if (votesPage.length < limit) {
+                    break
                   }
-                )
 
-                // Yield all votes.
-                yield* votesPage.map(({ voter }: { voter: string }) =>
-                  WasmEventDataSource.data({
-                    address: proposalModuleAddress,
-                    key: 'action',
-                    value: 'vote',
-                    _attributes: [
-                      {
-                        key: 'action',
-                        value: 'vote',
-                      },
-                      {
-                        key: 'proposal_id',
-                        value: id.toString(),
-                      },
-                      {
-                        key: 'sender',
-                        value: voter,
-                      },
-                      {
-                        key: 'position',
-                        // Only the presence of this key is needed for
-                        // filtering. The actual vote will be queried from the
-                        // contract.
-                        value: 'placeholder',
-                      },
-                    ],
-                  })
-                )
-
-                // Stop if there are no more votes.
-                if (votesPage.length < limit) {
-                  break
+                  startAfter =
+                    votesPage.length > 0
+                      ? votesPage[votesPage.length - 1].voter
+                      : undefined
                 }
-
-                startAfter =
-                  votesPage.length > 0
-                    ? votesPage[votesPage.length - 1].voter
-                    : undefined
               }
-            }
 
-            // Stop if there are no more proposals.
-            if (proposalsPage.length < limit) {
-              break
-            }
+              // Stop if there are no more proposals.
+              if (proposalsPage.length < limit) {
+                break
+              }
 
-            startAfter =
-              proposalsPage.length > 0
-                ? proposalsPage[proposalsPage.length - 1].id
-                : undefined
+              startAfter =
+                proposalsPage.length > 0
+                  ? proposalsPage[proposalsPage.length - 1].id
+                  : undefined
+            }
+          } catch {
+            // Ignore.
           }
         }
       }
