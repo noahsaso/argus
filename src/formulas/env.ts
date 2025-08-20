@@ -1891,6 +1891,21 @@ export const getEnv = ({
       cachedEvent !== undefined
         ? cachedEvent?.[0]
         : await FeegrantAllowance.findOne({
+            attributes: [
+              'id',
+              'granter',
+              'grantee',
+              'blockHeight',
+              'blockTimeUnixMs',
+              'blockTimestamp',
+              'allowanceData',
+              'allowanceType',
+              'active',
+              'parsedAmount',
+              'parsedDenom',
+              'parsedAllowanceType',
+              'parsedExpirationUnixMs',
+            ],
             where: {
               granter,
               grantee,
@@ -1962,6 +1977,10 @@ export const getEnv = ({
               'allowanceData',
               'allowanceType',
               'active',
+              'parsedAmount',
+              'parsedDenom',
+              'parsedAllowanceType',
+              'parsedExpirationUnixMs',
             ],
             where: {
               ...(type === 'granted'

@@ -269,4 +269,13 @@ export class WasmCodeService implements WasmCodeAdapter {
       this.refreshInterval = undefined
     }
   }
+
+  /**
+   * Reset all wasm codes to empty state.
+   * Used primarily in tests for isolation between test cases.
+   */
+  reset(): void {
+    this.defaultWasmCodes = []
+    this._wasmCodes = []
+  }
 }

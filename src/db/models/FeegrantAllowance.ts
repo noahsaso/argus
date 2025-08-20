@@ -151,6 +151,10 @@ export class FeegrantAllowance extends DependableEventModel {
       allowanceType: this.allowanceType,
       active: this.active,
       block: serializeBlock(this.block),
+      parsedAmount: this.parsedAmount,
+      parsedDenom: this.parsedDenom,
+      parsedAllowanceType: this.parsedAllowanceType,
+      parsedExpirationUnixMs: this.parsedExpirationUnixMs,
     }
   }
 
