@@ -674,8 +674,8 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
       describe('enhanced generic formulas', () => {
         beforeEach(async () => {
           // Reset and register treasury code ID for testing
-          WasmCodeService.getInstance().reset()
-          WasmCodeService.getInstance().addDefaultWasmCodes(
+          WasmCodeService.instance.reset()
+          WasmCodeService.instance.addDefaultWasmCodes(
             new WasmCode('xion', [100, 101]),
             new WasmCode('treasury', [100, 101])
           )
@@ -960,8 +960,8 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
     describe('treasury contract formulas', () => {
       beforeEach(async () => {
         // Reset and register treasury code ID for testing
-        WasmCodeService.getInstance().reset()
-        WasmCodeService.getInstance().addDefaultWasmCodes(
+        WasmCodeService.instance.reset()
+        WasmCodeService.instance.addDefaultWasmCodes(
           new WasmCode('xion', [200, 201]),
           new WasmCode('treasury', [200, 201])
         )
@@ -1520,8 +1520,8 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
     describe('feegrant aggregators', () => {
       beforeEach(async () => {
         // Reset and register treasury code ID for aggregator testing
-        WasmCodeService.getInstance().reset()
-        WasmCodeService.getInstance().addDefaultWasmCodes(
+        WasmCodeService.instance.reset()
+        WasmCodeService.instance.addDefaultWasmCodes(
           new WasmCode('xion', [300, 301]),
           new WasmCode('treasury', [300, 301])
         )

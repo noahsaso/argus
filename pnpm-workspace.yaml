@@ -1,0 +1,12 @@
+onlyBuiltDependencies:
+  - '@cosmology/protobufjs'
+  - '@infisical/cli'
+  - '@swc/core'
+  - bufferutil
+  - core-js
+  - es5-ext
+  - esbuild
+  - msgpackr-extract
+  - protobufjs
+  - tiny-secp256k1
+  - utf-8-validate
