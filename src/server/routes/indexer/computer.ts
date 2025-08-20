@@ -398,7 +398,7 @@ export const loadComputer = async () => {
           if (typedFormula.formula.filter.codeIdsKeys?.length) {
             const codeIdKeys = typedFormula.formula.filter.codeIdsKeys
 
-            allowed &&= WasmCodeService.getInstance()
+            allowed &&= WasmCodeService.instance
               .findWasmCodeIdsByKeys(...codeIdKeys)
               .includes(contract.codeId)
           }

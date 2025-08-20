@@ -106,14 +106,16 @@ export const instantiatedAt: ContractFormula<string> = {
     description: 'retrieves the contract instantiation timestamp',
   },
   compute: async ({ contractAddress, getContract }) => {
-    const timestamp = (await getContract(contractAddress))?.instantiatedAt
-      .timestamp
-
-    if (!timestamp) {
+    const contract = await getContract(contractAddress)
+    if (!contract) {
       throw new Error('contract not yet indexed')
     }
 
-    return timestamp
+    if (!contract.instantiatedAt) {
+      throw new Error('contract instantiation unknown')
+    }
+
+    return contract.instantiatedAt.timestamp
   },
 }
 

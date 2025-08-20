@@ -99,7 +99,7 @@ const main = async () => {
       // Exit once all workers close.
       Promise.all(workers.map((worker) => worker.close())).then(async () => {
         // Stop services.
-        WasmCodeService.getInstance().stopUpdater()
+        WasmCodeService.instance.stopUpdater()
 
         // Close DB connections.
         await dataSequelize.close()

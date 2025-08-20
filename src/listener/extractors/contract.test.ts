@@ -1,18 +1,17 @@
 import { toUtf8 } from '@cosmjs/encoding'
-import { Event } from '@cosmjs/stargate'
-import { DecodedStargateMsg } from '@dao-dao/types'
-import { Tx } from '@dao-dao/types/protobuf/codegen/cosmos/tx/v1beta1/tx'
 import { MockInstance, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ConfigManager } from '@/config'
 import { Contract, Extraction } from '@/db'
+import { ExtractorEnv, ExtractorHandleableData } from '@/types'
 import { AutoCosmWasmClient } from '@/utils'
 
-import { ContractsExtractorData, contract } from './contract'
+import { WasmInstantiateOrMigrateDataSource } from '../sources'
+import { ContractExtractor } from './contract'
 
 describe('Contracts Extractor', () => {
   let mockAutoCosmWasmClient: AutoCosmWasmClient
-  let extractor: Awaited<ReturnType<typeof contract>>
+  let extractor: ContractExtractor
   let queryContractRawMock: MockInstance
 
   beforeEach(async () => {
@@ -25,6 +24,8 @@ describe('Contracts Extractor', () => {
         getContract: vi.fn(),
         getBlock: vi.fn(),
         getHeight: vi.fn(),
+        getCodes: vi.fn(),
+        getContracts: vi.fn(),
         forceGetQueryClient: vi.fn().mockReturnValue({
           wasm: {
             queryContractRaw: queryContractRawMock,
@@ -33,109 +34,35 @@ describe('Contracts Extractor', () => {
       },
     } as any
 
-    // Set up the extractor
-    extractor = await contract({
+    // Set up the extractor environment
+    const env: ExtractorEnv = {
       config: ConfigManager.load(),
       sendWebhooks: false,
       autoCosmWasmClient: mockAutoCosmWasmClient,
-    })
+      txHash: 'test-hash',
+      block: {
+        height: '1000',
+        timeUnixMs: '1640995200000',
+        timestamp: '2022-01-01T01:00:00Z',
+      },
+    }
+
+    extractor = new ContractExtractor(env)
   })
 
-  describe('match function', () => {
-    const createMockTx = (): Tx => ({
-      body: {
-        messages: [],
-        memo: '',
-        timeoutHeight: 0n,
-        extensionOptions: [],
-        nonCriticalExtensionOptions: [],
-      },
-      authInfo: {
-        signerInfos: [],
-        fee: {
-          amount: [],
-          gasLimit: 0n,
-          payer: '',
-          granter: '',
-        },
-      },
-      signatures: [],
+  describe('data sources configuration', () => {
+    it('should have correct data sources configured', () => {
+      expect(extractor.sources).toHaveLength(1)
+
+      const instantiateSource = extractor.sources.find(
+        (s) => s.type === WasmInstantiateOrMigrateDataSource.type
+      )
+      expect(instantiateSource).toBeDefined()
+      expect(instantiateSource!.handler).toBe('instantiate')
     })
 
-    const createMockMessages = (): DecodedStargateMsg['stargate'][] => []
-
-    it('should match instantiation events', () => {
-      const events: Event[] = [
-        {
-          type: 'instantiate',
-          attributes: [
-            { key: 'code_id', value: '1234' },
-            { key: '_contract_address', value: 'juno123contract456' },
-          ],
-        },
-      ]
-
-      const result = extractor.match({
-        hash: 'test-hash',
-        tx: createMockTx(),
-        messages: createMockMessages(),
-        events,
-      })
-
-      expect(result).toEqual({
-        addresses: ['juno123contract456'],
-      })
-    })
-
-    it('should match multiple instantiations', () => {
-      const events: Event[] = [
-        {
-          type: 'instantiate',
-          attributes: [
-            { key: 'code_id', value: '1234' },
-            { key: '_contract_address', value: 'juno123contract456' },
-          ],
-        },
-        {
-          type: 'instantiate',
-          attributes: [
-            { key: 'code_id', value: '567' },
-            { key: '_contract_address', value: 'juno789contract012' },
-          ],
-        },
-      ]
-
-      const result = extractor.match({
-        hash: 'test-hash',
-        tx: createMockTx(),
-        messages: createMockMessages(),
-        events,
-      })
-
-      expect(result).toEqual({
-        addresses: ['juno123contract456', 'juno789contract012'],
-      })
-    })
-
-    it('should return undefined when no matching events', () => {
-      const events: Event[] = [
-        {
-          type: 'other',
-          attributes: [
-            { key: 'action', value: 'some_other_action' },
-            { key: '_contract_address', value: 'juno1other123contract456' },
-          ],
-        },
-      ]
-
-      const result = extractor.match({
-        hash: 'test-hash',
-        tx: createMockTx(),
-        messages: createMockMessages(),
-        events,
-      })
-
-      expect(result).toBeUndefined()
+    it('should have correct static type', () => {
+      expect(ContractExtractor.type).toBe('contract')
     })
   })
 
@@ -145,10 +72,15 @@ describe('Contracts Extractor', () => {
       version: '2.3.4',
     }
 
-    it('should extract contract information successfully', async () => {
-      const data: ContractsExtractorData = {
-        addresses: ['juno123contract456'],
-      }
+    it('should extract contract information from instantiate data successfully', async () => {
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
+          type: 'instantiate',
+          address: 'juno123contract456',
+          codeId: 4862,
+          codeIdsKeys: [],
+        }),
+      ]
 
       // Mock the client methods
       vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockResolvedValue({
@@ -164,17 +96,8 @@ describe('Contracts Extractor', () => {
         data: toUtf8(JSON.stringify(mockContractInfo)),
       })
 
-      const result = (await extractor.extract({
-        txHash: 'test-hash-123',
-        block: {
-          height: '1000',
-          timeUnixMs: '1640995200000',
-          timestamp: '2022-01-01T01:00:00Z',
-        },
-        data,
-      })) as Extraction[]
+      const result = (await extractor.extract(data)) as Extraction[]
 
-      expect(mockAutoCosmWasmClient.update).toHaveBeenCalled()
       expect(mockAutoCosmWasmClient.client!.getContract).toHaveBeenCalledWith(
         'juno123contract456'
       )
@@ -190,14 +113,70 @@ describe('Contracts Extractor', () => {
       expect(infoExtraction).toBeDefined()
       expect(infoExtraction!.address).toBe('juno123contract456')
       expect(infoExtraction!.blockHeight).toBe('1000')
-      expect(infoExtraction!.txHash).toBe('test-hash-123')
+      expect(infoExtraction!.txHash).toBe('test-hash')
+      expect(infoExtraction!.data).toEqual(mockContractInfo)
+    })
+
+    it('should extract contract information from migrate data successfully', async () => {
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
+          type: 'migrate',
+          address: 'juno123contract456',
+          codeId: 4862,
+          codeIdsKeys: [],
+        }),
+      ]
+
+      // Mock the client methods
+      vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockResolvedValue({
+        address: 'juno123contract456',
+        codeId: 4862,
+        admin: 'juno1admin123',
+        creator: 'juno1creator123',
+        label: 'Test Contract',
+        ibcPortId: 'juno1ibc123',
+      })
+
+      queryContractRawMock.mockResolvedValueOnce({
+        data: toUtf8(JSON.stringify(mockContractInfo)),
+      })
+
+      const result = (await extractor.extract(data)) as Extraction[]
+
+      expect(mockAutoCosmWasmClient.client!.getContract).toHaveBeenCalledWith(
+        'juno123contract456'
+      )
+      expect(queryContractRawMock).toHaveBeenCalledWith(
+        'juno123contract456',
+        toUtf8('contract_info')
+      )
+
+      expect(result).toHaveLength(1)
+
+      // Check info extraction
+      const infoExtraction = result.find((e) => e.name === 'info')
+      expect(infoExtraction).toBeDefined()
+      expect(infoExtraction!.address).toBe('juno123contract456')
+      expect(infoExtraction!.blockHeight).toBe('1000')
+      expect(infoExtraction!.txHash).toBe('test-hash')
       expect(infoExtraction!.data).toEqual(mockContractInfo)
     })
 
     it('should handle multiple addresses', async () => {
-      const data: ContractsExtractorData = {
-        addresses: ['juno123contract456', 'juno789contract012'],
-      }
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
+          type: 'instantiate',
+          address: 'juno123contract456',
+          codeId: 4862,
+          codeIdsKeys: [],
+        }),
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
+          type: 'instantiate',
+          address: 'juno789contract012',
+          codeId: 4862,
+          codeIdsKeys: [],
+        }),
+      ]
 
       // Mock additional contract calls
       vi.mocked(mockAutoCosmWasmClient.client!.getContract)
@@ -227,15 +206,7 @@ describe('Contracts Extractor', () => {
           data: toUtf8(JSON.stringify(mockContractInfo)),
         })
 
-      const result = (await extractor.extract({
-        txHash: 'test-hash-456',
-        block: {
-          height: '1000',
-          timeUnixMs: '1640995200000',
-          timestamp: '2022-01-01T01:00:00Z',
-        },
-        data,
-      })) as Extraction[]
+      const result = (await extractor.extract(data)) as Extraction[]
 
       expect(result).toHaveLength(2) // 1 extraction per contract
 
@@ -244,10 +215,21 @@ describe('Contracts Extractor', () => {
       expect(addresses).toContain('juno789contract012')
     })
 
-    it('should handle contract query failures gracefully', async () => {
-      const data: ContractsExtractorData = {
-        addresses: ['juno123contract456', 'juno789contract012'],
-      }
+    it('should throw error on contract query failure', async () => {
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
+          type: 'instantiate',
+          address: 'juno123contract456',
+          codeId: 4862,
+          codeIdsKeys: [],
+        }),
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
+          type: 'instantiate',
+          address: 'juno789contract012',
+          codeId: 4862,
+          codeIdsKeys: [],
+        }),
+      ]
 
       // Mock one successful and one failing contract
       vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockImplementation(
@@ -287,36 +269,18 @@ describe('Contracts Extractor', () => {
         throw new Error('Query failed')
       })
 
-      const result = (await extractor.extract({
-        txHash: 'test-hash-789',
-        block: {
-          height: '1000',
-          timeUnixMs: '1640995200000',
-          timestamp: '2022-01-01T01:00:00Z',
-        },
-        data,
-      })) as Extraction[]
-
-      // Should only have extractions for the successful contract
-      expect(result.map((r) => r.toJSON())).toEqual([
-        {
-          id: '1',
-          address: 'juno123contract456',
-          name: 'info',
-          blockHeight: '1000',
-          blockTimeUnixMs: '1640995200000',
-          txHash: 'test-hash-789',
-          data: mockContractInfo,
-          createdAt: expect.any(Date),
-          updatedAt: expect.any(Date),
-        },
-      ])
+      await expect(extractor.extract(data)).rejects.toThrow('Query failed')
     })
 
     it('should create contracts in database with correct information', async () => {
-      const data: ContractsExtractorData = {
-        addresses: ['juno123contract456'],
-      }
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
+          type: 'instantiate',
+          address: 'juno123contract456',
+          codeId: 4862,
+          codeIdsKeys: [],
+        }),
+      ]
 
       // Mock the client methods
       vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockResolvedValue({
@@ -332,15 +296,7 @@ describe('Contracts Extractor', () => {
         data: toUtf8(JSON.stringify(mockContractInfo)),
       })
 
-      await extractor.extract({
-        txHash: 'test-hash-contract',
-        block: {
-          height: '1000',
-          timeUnixMs: '1640995200000',
-          timestamp: '2022-01-01T01:00:00Z',
-        },
-        data,
-      })
+      await extractor.extract(data)
 
       // Check that contract was created in database
       const contract = await Contract.findByPk('juno123contract456')
@@ -353,6 +309,36 @@ describe('Contracts Extractor', () => {
       expect(contract!.instantiatedAtBlockTimeUnixMs).toBe('1640995200000')
     })
 
+    it('should not extract when contract info query returns empty data', async () => {
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
+          type: 'instantiate',
+          address: 'juno123contract456',
+          codeId: 4862,
+          codeIdsKeys: [],
+        }),
+      ]
+
+      // Mock the client methods
+      vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockResolvedValue({
+        address: 'juno123contract456',
+        codeId: 4862,
+        admin: 'juno1admin123',
+        creator: 'juno1creator123',
+        label: 'Test Contract',
+        ibcPortId: 'juno1ibc123',
+      })
+
+      // Mock empty response
+      queryContractRawMock.mockResolvedValueOnce({
+        data: new Uint8Array(0),
+      })
+
+      const result = (await extractor.extract(data)) as Extraction[]
+
+      expect(result).toHaveLength(0)
+    })
+
     it('should throw error when client is not connected', async () => {
       // Mock client as undefined
       const brokenAutoClient = {
@@ -360,27 +346,81 @@ describe('Contracts Extractor', () => {
         client: undefined,
       }
 
-      const brokenExtractor = await contract({
+      const brokenEnv: ExtractorEnv = {
         config: ConfigManager.load(),
         sendWebhooks: false,
         autoCosmWasmClient: brokenAutoClient as any,
-      })
-
-      const data: ContractsExtractorData = {
-        addresses: ['juno123contract456'],
+        txHash: 'test-hash-error',
+        block: {
+          height: '1000',
+          timeUnixMs: '1640995200000',
+          timestamp: '2022-01-01T01:00:00Z',
+        },
       }
 
-      await expect(
-        brokenExtractor.extract({
-          txHash: 'test-hash-error',
-          block: {
-            height: '1000',
-            timeUnixMs: '1640995200000',
-            timestamp: '2022-01-01T01:00:00Z',
-          },
-          data,
+      const brokenExtractor = new ContractExtractor(brokenEnv)
+
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
+          type: 'instantiate',
+          address: 'juno123contract456',
+          codeId: 4862,
+          codeIdsKeys: [],
+        }),
+      ]
+
+      await expect(brokenExtractor.extract(data)).rejects.toThrow(
+        'CosmWasm client not connected'
+      )
+    })
+  })
+
+  describe('sync function', () => {
+    it('should sync contract addresses', async () => {
+      vi.mocked(mockAutoCosmWasmClient.client!.getCodes).mockResolvedValue([
+        { id: 100, creator: 'juno1creator1', checksum: 'checksum1' },
+        { id: 200, creator: 'juno1creator2', checksum: 'checksum2' },
+      ])
+
+      vi.mocked(mockAutoCosmWasmClient.client!.getContracts).mockImplementation(
+        async (codeId: number) => {
+          if (codeId === 100) {
+            return ['juno1contract100']
+          } else if (codeId === 200) {
+            return ['juno1contract200']
+          } else {
+            return []
+          }
+        }
+      )
+
+      const result = await Array.fromAsync(
+        ContractExtractor.sync!({
+          config: extractor.env.config,
+          autoCosmWasmClient: extractor.env.autoCosmWasmClient,
         })
-      ).rejects.toThrow('CosmWasm client not connected')
+      )
+
+      expect(result).toEqual([
+        {
+          source: WasmInstantiateOrMigrateDataSource.type,
+          data: {
+            type: 'instantiate',
+            address: 'juno1contract100',
+            codeId: 100,
+            codeIdsKeys: [],
+          },
+        },
+        {
+          source: WasmInstantiateOrMigrateDataSource.type,
+          data: {
+            type: 'instantiate',
+            address: 'juno1contract200',
+            codeId: 200,
+            codeIdsKeys: [],
+          },
+        },
+      ])
     })
   })
 })

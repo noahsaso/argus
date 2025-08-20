@@ -3,6 +3,7 @@ import { Op, QueryTypes, Sequelize } from 'sequelize'
 import {
   BankBalance,
   BankStateEvent,
+  Block,
   Contract,
   DistributionCommunityPoolStateEvent,
   Extraction,
@@ -17,39 +18,41 @@ import {
 } from '@/db'
 import { WasmCodeService } from '@/services/wasm-codes'
 import { BANK_HISTORY_CODE_IDS_KEYS } from '@/tracer/handlers/bank'
-import {
-  type Cache,
-  DbType,
-  type Env,
-  type EnvOptions,
-  type FormulaBalanceGetter,
-  type FormulaBalancesGetter,
-  type FormulaCodeIdKeyForContractGetter,
-  type FormulaCommunityPoolBalancesGetter,
-  type FormulaContractGetter,
-  type FormulaContractMatchesCodeIdKeysGetter,
-  type FormulaDateGetter,
-  type FormulaDateWithValueMatchGetter,
-  type FormulaExtractionGetter,
-  type FormulaGetter,
-  type FormulaMapGetter,
-  type FormulaPrefetch,
-  type FormulaPrefetchTransformations,
-  type FormulaProposalCountGetter,
-  type FormulaProposalGetter,
-  type FormulaProposalObject,
-  type FormulaProposalVoteCountGetter,
-  type FormulaProposalVoteGetter,
-  type FormulaProposalVoteObject,
-  type FormulaProposalVotesGetter,
-  type FormulaProposalsGetter,
-  type FormulaQuerier,
-  type FormulaSlashEventsGetter,
-  type FormulaTransformationDateGetter,
-  type FormulaTransformationMapGetter,
-  type FormulaTransformationMatchGetter,
-  type FormulaTransformationMatchesGetter,
-  type FormulaTxEventsGetter,
+import { DbType } from '@/types'
+import type {
+  Cache,
+  Env,
+  EnvOptions,
+  FormulaBalanceGetter,
+  FormulaBalancesGetter,
+  FormulaBlockGetter,
+  FormulaCodeIdKeyForContractGetter,
+  FormulaCommunityPoolBalancesGetter,
+  FormulaContractGetter,
+  FormulaContractMatchesCodeIdKeysGetter,
+  FormulaDateFirstExtractedGetter,
+  FormulaDateGetter,
+  FormulaDateWithValueMatchGetter,
+  FormulaExtractionGetter,
+  FormulaGetter,
+  FormulaMapGetter,
+  FormulaPrefetch,
+  FormulaPrefetchTransformations,
+  FormulaProposalCountGetter,
+  FormulaProposalGetter,
+  FormulaProposalObject,
+  FormulaProposalVoteCountGetter,
+  FormulaProposalVoteGetter,
+  FormulaProposalVoteObject,
+  FormulaProposalVotesGetter,
+  FormulaProposalsGetter,
+  FormulaQuerier,
+  FormulaSlashEventsGetter,
+  FormulaTransformationDateGetter,
+  FormulaTransformationMapGetter,
+  FormulaTransformationMatchGetter,
+  FormulaTransformationMatchesGetter,
+  FormulaTxEventsGetter,
 } from '@/types'
 import { dbKeyForKeys, dbKeyToKeys, getDependentKey } from '@/utils'
 
@@ -73,6 +76,9 @@ export const getEnv = ({
   const blockHeightFilter = {
     [Op.lte]: block.height,
   }
+
+  const getBlock: FormulaBlockGetter = async (height) =>
+    (await Block.getForHeight(height))?.block
 
   const get: FormulaGetter = async (contractAddress, ...keys) => {
     const key = dbKeyForKeys(...keys)
@@ -932,7 +938,7 @@ export const getEnv = ({
   }
 
   const getCodeIdsForKeys = (...keys: string[]): number[] =>
-    WasmCodeService.getInstance().findWasmCodeIdsByKeys(...keys)
+    WasmCodeService.instance.findWasmCodeIdsByKeys(...keys)
 
   const contractMatchesCodeIdKeys: FormulaContractMatchesCodeIdKeysGetter =
     async (contractAddress, ...keys) =>
@@ -948,7 +954,7 @@ export const getEnv = ({
       return
     }
 
-    return WasmCodeService.getInstance().findWasmCodeKeysById(codeId)[0]
+    return WasmCodeService.instance.findWasmCodeKeysById(codeId)[0]
   }
 
   const getSlashEvents: FormulaSlashEventsGetter = async (
@@ -1787,7 +1793,7 @@ export const getEnv = ({
     // Call hook.
     await onFetch?.([extraction])
 
-    return extraction.toJSON()
+    return extraction
   }
 
   const getExtractionMap: FormulaTransformationMapGetter = async (
@@ -1870,6 +1876,51 @@ export const getEnv = ({
     }
 
     return map
+  }
+
+  // Gets the date of the first extraction for the given name.
+  const getDateFirstExtracted: FormulaDateFirstExtractedGetter = async (
+    address,
+    name,
+    where
+  ) => {
+    const dependentKey = getDependentKey(
+      Extraction.dependentKeyNamespace,
+      address,
+      name
+    )
+    dependentKeys?.push({
+      key: dependentKey,
+      prefix: false,
+    })
+
+    // The cache consists of the most recent extractions for each name, but this
+    // fetches the first extraction, so we can't use the cache.
+
+    // Get first extraction for this name.
+    const extraction = await Extraction.findOne({
+      where: {
+        address,
+        name,
+        blockHeight: blockHeightFilter,
+        ...(where && {
+          data: where,
+        }),
+      },
+      order: [['blockHeight', 'ASC']],
+    })
+
+    if (!extraction) {
+      return undefined
+    }
+
+    // Call hook.
+    await onFetch?.([extraction])
+
+    // Convert block time to date.
+    const date = new Date(0)
+    date.setUTCSeconds(Number(extraction.blockTimeUnixMs) / 1e3)
+    return date
   }
 
   const getFeegrantAllowance = async (granter: string, grantee: string) => {
@@ -2042,6 +2093,7 @@ export const getEnv = ({
     date: useBlockDate ? new Date(Number(block.timeUnixMs)) : new Date(),
     args,
 
+    getBlock,
     get,
     getMap,
     getDateKeyModified,
@@ -2077,6 +2129,7 @@ export const getEnv = ({
 
     getExtraction,
     getExtractionMap,
+    getDateFirstExtracted,
 
     getFeegrantAllowance,
     getFeegrantAllowances,

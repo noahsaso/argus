@@ -1,12 +1,11 @@
 import { fromBase64, fromUtf8, toBech32 } from '@cosmjs/encoding'
 import { Coin } from '@dao-dao/types/protobuf/codegen/cosmos/base/v1beta1/coin'
-import retry from 'async-await-retry'
 import { Sequelize } from 'sequelize'
 
 import { BankBalance, BankStateEvent, Block, Contract, State } from '@/db'
 import { WasmCodeService } from '@/services'
 import { Handler, HandlerMaker, ParsedBankStateEvent } from '@/types'
-import { batch } from '@/utils'
+import { batch, retry } from '@/utils'
 
 const STORE_NAME = 'bank'
 // Keep all bank balance history for contracts matching these code IDs keys.
@@ -143,7 +142,7 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
 
       // Find contracts for all addresses matching code IDs so we know which
       // addresses to save history for.
-      const codeIds = WasmCodeService.getInstance().findWasmCodeIdsByKeys(
+      const codeIds = WasmCodeService.instance.findWasmCodeIdsByKeys(
         ...BANK_HISTORY_CODE_IDS_KEYS
       )
       const addressesToKeepHistoryFor = codeIds.length
@@ -176,12 +175,7 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
       return bankStateEvents
     }
 
-    // Retry 3 times with exponential backoff starting at 100ms delay.
-    const exportedEvents = await retry(exportEvents, [], {
-      retriesMax: 3,
-      exponential: true,
-      interval: 100,
-    })
+    const exportedEvents = await retry(3, exportEvents, 100)
 
     // Store last block height exported, and update latest block height/time if
     // the last export is newer. Don't use exportedEvents because it may include
@@ -303,14 +297,7 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
         return bankBalances
       }
 
-      // Retry 3 times with exponential backoff starting at 100ms delay.
-      const exportedEvents = await retry(exportEvents, [], {
-        retriesMax: 3,
-        exponential: true,
-        interval: 100,
-      })
-
-      return exportedEvents
+      return await retry(3, exportEvents, 100)
     }
 
   return {

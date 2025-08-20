@@ -1,4 +1,3 @@
-import retry from 'async-await-retry'
 import { Job, Queue } from 'bullmq'
 
 import { ConfigManager } from '@/config'
@@ -6,7 +5,7 @@ import { State } from '@/db'
 import { queueMeilisearchIndexUpdates } from '@/search'
 import { makeHandlers } from '@/tracer'
 import { NamedHandler } from '@/types'
-import { AutoCosmWasmClient } from '@/utils'
+import { AutoCosmWasmClient, retry } from '@/utils'
 import { queueWebhooks } from '@/webhooks'
 
 import { BaseQueue } from '../base'
@@ -58,7 +57,7 @@ export class ExportQueue extends BaseQueue<ExportQueuePayload> {
     this.handlers = handlers
   }
 
-  process({ data, log }: Job<ExportQueuePayload>): Promise<void> {
+  process(job: Job<ExportQueuePayload>): Promise<void> {
     return new Promise<void>(async (resolve, reject) => {
       // Time out if takes more than 30 seconds.
       let timeout: NodeJS.Timeout | null = setTimeout(() => {
@@ -68,7 +67,7 @@ export class ExportQueue extends BaseQueue<ExportQueuePayload> {
 
       try {
         // Group data by handler.
-        const groupedData = data.reduce(
+        const groupedData = job.data.reduce(
           (acc, { handler, data }) => ({
             ...acc,
             [handler]: (acc[handler] || []).concat(data),
@@ -76,63 +75,64 @@ export class ExportQueue extends BaseQueue<ExportQueuePayload> {
           {} as Record<string, any[]>
         )
 
-        // Process data.
-        for (const { name, handler } of this.handlers) {
-          const events = groupedData[name]
-          if (!events?.length || !handler.process) {
-            continue
-          }
-
-          // Retry 3 times with exponential backoff starting at 100ms delay.
-          const models = await retry(handler.process, [events], {
-            retriesMax: 3,
-            exponential: true,
-            interval: 100,
-          })
-
-          if (models && Array.isArray(models) && models.length) {
-            // Queue Meilisearch index updates.
-            const queued = (
-              await Promise.all(
-                models.map((event) => queueMeilisearchIndexUpdates(event))
-              )
-            ).reduce((acc, q) => acc + q, 0)
-
-            if (queued > 0) {
-              console.log(
-                `[${new Date().toISOString()}] Queued ${queued.toLocaleString()} search index update(s).`
-              )
+        // Process handlers in parallel.
+        await Promise.all(
+          this.handlers.map(async ({ name, handler }) => {
+            const events = groupedData[name]
+            if (!events?.length || !handler.process) {
+              return
             }
 
-            // Queue webhooks.
-            if (this.options.sendWebhooks) {
-              const queued = await queueWebhooks(models).catch((err) => {
-                console.error(
-                  `[${new Date().toISOString()}] Error queuing webhooks: ${err}`
+            const models = await retry(3, () => handler.process!(events), 100)
+
+            if (models.length > 0) {
+              // Queue Meilisearch index updates.
+              const queued = (
+                await Promise.all(
+                  models.map((event) =>
+                    queueMeilisearchIndexUpdates(event).catch((err) => {
+                      console.error(
+                        `[${new Date().toISOString()}] Error queuing search index updates:`,
+                        err
+                      )
+                      return 0
+                    })
+                  )
                 )
-                return 0
-              })
+              ).reduce((acc, q) => acc + q, 0)
 
               if (queued > 0) {
                 console.log(
-                  `[${new Date().toISOString()}] Queued ${queued.toLocaleString()} webhook(s).`
+                  `[${new Date().toISOString()}] Queued ${queued.toLocaleString()} search index update(s).`
                 )
               }
-            }
-          }
 
-          // If timed out, stop.
-          if (timeout === null) {
-            break
-          }
-        }
+              // Queue webhooks.
+              if (this.options.sendWebhooks) {
+                const queued = await queueWebhooks(models).catch((err) => {
+                  console.error(
+                    `[${new Date().toISOString()}] Error queuing webhooks:`,
+                    err
+                  )
+                  return 0
+                })
+
+                if (queued > 0) {
+                  console.log(
+                    `[${new Date().toISOString()}] Queued ${queued.toLocaleString()} webhook(s).`
+                  )
+                }
+              }
+            }
+          })
+        )
 
         if (timeout !== null) {
           resolve()
         }
       } catch (err) {
         if (timeout !== null) {
-          log(
+          job.log(
             `${err instanceof Error ? err.name : 'Error'}: ${
               err instanceof Error ? err.message : err
             } ${

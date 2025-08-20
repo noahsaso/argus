@@ -4,13 +4,13 @@ import { State } from '@/db'
 import { compute, getTypedFormula } from '@/formulas'
 import { getMeilisearchIndexName, loadMeilisearch } from '@/search'
 import { PendingMeilisearchIndexUpdate } from '@/types'
-import { serializeBlock } from '@/utils'
 
 import { BaseQueue } from '../base'
 import { closeBullQueue, getBullQueue, getBullQueueEvents } from '../connection'
 
 export class SearchQueue extends BaseQueue<PendingMeilisearchIndexUpdate> {
   static queueName = 'search'
+  static concurrency = 10
 
   static getQueue = () =>
     getBullQueue<PendingMeilisearchIndexUpdate>(this.queueName)
@@ -54,7 +54,10 @@ export class SearchQueue extends BaseQueue<PendingMeilisearchIndexUpdate> {
     await index.addDocuments([
       {
         id,
-        block: block && serializeBlock(block),
+        block: block && {
+          height: Number(block.height),
+          timeUnixMs: Number(block.timeUnixMs),
+        },
         value,
       },
     ])

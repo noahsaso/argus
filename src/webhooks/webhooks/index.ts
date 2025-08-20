@@ -48,10 +48,9 @@ export const getProcessedWebhooks = async (
 
           // Filters specific to WasmStateEvent types.
           if (event instanceof WasmStateEvent) {
-            const allCodeIds =
-              WasmCodeService.getInstance().findWasmCodeIdsByKeys(
-                ...(filter.codeIdsKeys ?? [])
-              )
+            const allCodeIds = WasmCodeService.instance.findWasmCodeIdsByKeys(
+              ...(filter.codeIdsKeys ?? [])
+            )
 
             if (
               allCodeIds?.length &&

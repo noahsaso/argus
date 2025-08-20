@@ -4,7 +4,8 @@ WORKDIR /app
 
 # Copy package.json and package-lock.json first for better layer caching
 COPY package*.json ./
-RUN npm ci
+COPY patches ./
+RUN npm install
 
 # Copy the rest of the application
 COPY . .

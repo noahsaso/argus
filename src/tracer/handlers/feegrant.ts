@@ -1,10 +1,9 @@
 import { fromBase64, toBech32 } from '@cosmjs/encoding'
-import retry from 'async-await-retry'
 import { Sequelize } from 'sequelize'
 
 import { Block, FeegrantAllowance, State } from '@/db'
 import { Handler, HandlerMaker, ParsedFeegrantStateEvent } from '@/types'
-import { parseAllowanceData } from '@/utils'
+import { parseAllowanceData, retry } from '@/utils'
 
 const STORE_NAME = 'feegrant'
 
@@ -129,12 +128,7 @@ export const feegrant: HandlerMaker<ParsedFeegrantStateEvent> = async ({
       })
     }
 
-    // Retry with exponential backoff
-    const exportedEvents = await retry(exportEvents, [], {
-      retriesMax: 3,
-      exponential: true,
-      interval: 100,
-    })
+    const exportedEvents = await retry(3, exportEvents, 100)
 
     // Update state tracking
     const lastEvent = events.sort(

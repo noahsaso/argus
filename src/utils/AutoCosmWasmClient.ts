@@ -1,4 +1,7 @@
-import { CosmWasmClient } from '@cosmjs/cosmwasm-stargate'
+import { Contract, CosmWasmClient } from '@cosmjs/cosmwasm-stargate'
+import { QueryClient, createProtobufRpcClient } from '@cosmjs/stargate'
+import { QueryContractInfoRequest } from 'cosmjs-types/cosmwasm/wasm/v1/query'
+import { ContractInfo } from 'cosmjs-types/cosmwasm/wasm/v1/types'
 
 import { retry } from './misc'
 
@@ -77,7 +80,63 @@ export class AutoCosmWasmClient {
   }
 
   get client(): CosmWasmClient | undefined {
-    return this._cosmWasmClient
+    return (
+      this._cosmWasmClient &&
+      new Proxy(this._cosmWasmClient, {
+        get(target, prop) {
+          let value = Reflect.get(target, prop, target)
+
+          // Make sure to call functions with original target since query client
+          // has private fields it needs to access.
+          if (typeof value === 'function') {
+            value = value.bind(target)
+
+            // Pass a function to track the dependency to `fetchQuery`, which is
+            // patched to call if it exists.
+            if (prop === 'getContract') {
+              return async (address: string): Promise<Contract> => {
+                try {
+                  return await value(address)
+                } catch (err) {
+                  // If contractInfo incomplete error (Terra Classic), fallback
+                  // to direct ContractInfo decoding.
+                  if (
+                    err instanceof Error &&
+                    err.message === 'contractInfo incomplete'
+                  ) {
+                    const cometClient = target['forceGetCometClient']()
+                    const rpc = createProtobufRpcClient(
+                      new QueryClient(cometClient)
+                    )
+                    const response = ContractInfo.decode(
+                      await rpc.request(
+                        'cosmwasm.wasm.v1.Query',
+                        'ContractInfo',
+                        QueryContractInfoRequest.encode({
+                          address,
+                        }).finish()
+                      )
+                    )
+                    return {
+                      address,
+                      codeId: Number(response.codeId),
+                      creator: response.creator,
+                      admin: response.admin || undefined,
+                      label: response.label,
+                      ibcPortId: response.ibcPortId || undefined,
+                    }
+                  } else {
+                    throw err
+                  }
+                }
+              }
+            }
+          }
+
+          return value
+        },
+      })
+    )
   }
 
   get chainId(): string | undefined {

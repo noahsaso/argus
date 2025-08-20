@@ -62,7 +62,7 @@ export type ContractJson = {
   admin?: string | null
   creator?: string | null
   label?: string | null
-  instantiatedAt: SerializedBlock
+  instantiatedAt?: SerializedBlock | null
   txHash?: string | null
 }
 

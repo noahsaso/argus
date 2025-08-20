@@ -1,9 +1,9 @@
 import { fromBase64, toBech32 } from '@cosmjs/encoding'
-import retry from 'async-await-retry'
 import { Sequelize } from 'sequelize'
 
 import { Block, GovProposal, GovProposalVote, State } from '@/db'
 import { Handler, HandlerMaker, ParsedGovStateEvent } from '@/types'
+import { retry } from '@/utils'
 
 const STORE_NAME = 'gov'
 
@@ -152,12 +152,7 @@ export const gov: HandlerMaker<ParsedGovStateEvent> = async ({
       ).flat()
     }
 
-    // Retry 3 times with exponential backoff starting at 100ms delay.
-    const exportedEvents = (await retry(exportEvents, [], {
-      retriesMax: 3,
-      exponential: true,
-      interval: 100,
-    })) as (GovProposal | GovProposalVote)[]
+    const exportedEvents = await retry(3, exportEvents, 100)
 
     // Store last block height exported, and update latest block
     // height/time if the last export is newer.

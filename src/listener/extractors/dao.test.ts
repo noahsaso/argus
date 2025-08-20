@@ -1,29 +1,55 @@
-import { Event } from '@cosmjs/stargate'
-import { DecodedStargateMsg } from '@dao-dao/types'
-import { Tx } from '@dao-dao/types/protobuf/codegen/cosmos/tx/v1beta1/tx'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ConfigManager } from '@/config'
 import { Contract, Extraction } from '@/db'
-import { WasmCodeService } from '@/services'
+import { WasmCode, WasmCodeService } from '@/services'
+import { ExtractorEnv, ExtractorHandleableData } from '@/types'
 import { AutoCosmWasmClient } from '@/utils'
 
-import { DaoExtractorData, dao } from './dao'
+import {
+  WasmEventDataSource,
+  WasmInstantiateOrMigrateDataSource,
+} from '../sources'
+import { DaoExtractor } from './dao'
 
 describe('DAO Extractor', () => {
   let mockAutoCosmWasmClient: AutoCosmWasmClient
-  let extractor: Awaited<ReturnType<typeof dao>>
+  let extractor: DaoExtractor
+
+  const mockContractInfo = {
+    info: {
+      contract: 'crates.io:dao-dao-core',
+      version: '2.4.0',
+    },
+  }
+
+  const mockDumpState = {
+    admin: 'juno1admin123',
+    config: {
+      name: 'Test DAO',
+      description: 'A test DAO for testing',
+    },
+    version: { version: '2.4.0' },
+    proposal_modules: [
+      {
+        address: 'juno1proposal123',
+        prefix: 'A',
+        status: 'Enabled',
+      },
+      {
+        address: 'juno1proposal456',
+        prefix: 'B',
+        status: 'Enabled',
+      },
+    ],
+    voting_module: 'juno1voting123',
+  }
 
   beforeAll(async () => {
     const instance = await WasmCodeService.setUpInstance()
-    vi.spyOn(instance, 'findWasmCodeIdsByKeys').mockImplementation(
-      (key: string) => {
-        if (key === 'dao-dao-core') {
-          return [4862, 163] // Mock code IDs for dao-dao-core
-        }
-        return []
-      }
-    )
+    instance.addDefaultWasmCodes(new WasmCode('dao-dao-core', [1, 2]))
+    instance.addDefaultWasmCodes(new WasmCode('dao-voting', [3]))
+    instance.addDefaultWasmCodes(new WasmCode('dao-proposal', [4]))
   })
 
   beforeEach(async () => {
@@ -32,314 +58,71 @@ describe('DAO Extractor', () => {
       update: vi.fn(),
       client: {
         getContract: vi.fn(),
+        getContracts: vi.fn(),
         queryContractSmart: vi.fn(),
         getBlock: vi.fn(),
         getHeight: vi.fn(),
       },
     } as any
 
-    // Set up the extractor
-    extractor = await dao({
+    // Set up the extractor environment
+    const env: ExtractorEnv = {
       config: ConfigManager.load(),
       sendWebhooks: false,
       autoCosmWasmClient: mockAutoCosmWasmClient,
-    })
+      txHash: 'test-hash',
+      block: {
+        height: '1000',
+        timeUnixMs: '1640995200000',
+        timestamp: '2022-01-01T01:00:00Z',
+      },
+    }
+
+    extractor = new DaoExtractor(env)
   })
 
-  describe('match function', () => {
-    const createMockTx = (): Tx => ({
-      body: {
-        messages: [],
-        memo: '',
-        timeoutHeight: 0n,
-        extensionOptions: [],
-        nonCriticalExtensionOptions: [],
-      },
-      authInfo: {
-        signerInfos: [],
-        fee: {
-          amount: [],
-          gasLimit: 0n,
-          payer: '',
-          granter: '',
-        },
-      },
-      signatures: [],
+  describe('data sources configuration', () => {
+    it('should have correct data sources configured', () => {
+      expect(extractor.sources).toHaveLength(4)
+
+      const instantiateSource = extractor.sources.find(
+        (s) => s.type === WasmInstantiateOrMigrateDataSource.type
+      )
+      expect(instantiateSource).toBeDefined()
+      expect(instantiateSource!.handler).toBe('instantiate')
+      expect(instantiateSource!.config).toEqual({
+        codeIdsKeys: ['dao-dao-core'],
+      })
+
+      const executeSourceConfigs = extractor.sources.filter(
+        (s) => s.type === WasmEventDataSource.type
+      )
+      expect(executeSourceConfigs).toHaveLength(3)
+      expect(executeSourceConfigs.every((s) => s.handler === 'execute')).toBe(
+        true
+      )
     })
 
-    const createMockMessages = (): DecodedStargateMsg['stargate'][] => []
-
-    it('should match DAO instantiation events', () => {
-      const events: Event[] = [
-        {
-          type: 'instantiate',
-          attributes: [
-            { key: 'code_id', value: '4862' },
-            { key: '_contract_address', value: 'juno1dao123contract456' },
-          ],
-        },
-      ]
-
-      const result = extractor.match({
-        hash: 'test-hash',
-        tx: createMockTx(),
-        messages: createMockMessages(),
-        events,
-      })
-
-      expect(result).toEqual({
-        addresses: ['juno1dao123contract456'],
-      })
-    })
-
-    it('should match multiple DAO instantiations', () => {
-      const events: Event[] = [
-        {
-          type: 'instantiate',
-          attributes: [
-            { key: 'code_id', value: '4862' },
-            { key: '_contract_address', value: 'juno1dao123contract456' },
-          ],
-        },
-        {
-          type: 'instantiate',
-          attributes: [
-            { key: 'code_id', value: '163' },
-            { key: '_contract_address', value: 'juno1dao789contract012' },
-          ],
-        },
-      ]
-
-      const result = extractor.match({
-        hash: 'test-hash',
-        tx: createMockTx(),
-        messages: createMockMessages(),
-        events,
-      })
-
-      expect(result).toEqual({
-        addresses: ['juno1dao123contract456', 'juno1dao789contract012'],
-      })
-    })
-
-    it('should not match non-DAO code IDs', () => {
-      const events: Event[] = [
-        {
-          type: 'instantiate',
-          attributes: [
-            { key: 'code_id', value: '999' }, // Not a DAO code ID
-            { key: '_contract_address', value: 'juno1other123contract456' },
-          ],
-        },
-      ]
-
-      const result = extractor.match({
-        hash: 'test-hash',
-        tx: createMockTx(),
-        messages: createMockMessages(),
-        events,
-      })
-
-      expect(result).toBeUndefined()
-    })
-
-    it('should match DAO config update execution', () => {
-      const events: Event[] = [
-        {
-          type: 'wasm',
-          attributes: [
-            { key: 'action', value: 'execute_update_config' },
-            { key: 'name', value: 'Updated DAO Name' },
-            { key: 'description', value: 'Updated description' },
-            { key: 'image_url', value: 'https://example.com/image.png' },
-            { key: '_contract_address', value: 'juno1dao123contract456' },
-          ],
-        },
-      ]
-
-      const result = extractor.match({
-        hash: 'test-hash',
-        tx: createMockTx(),
-        messages: createMockMessages(),
-        events,
-      })
-
-      expect(result).toEqual({
-        addresses: ['juno1dao123contract456'],
-      })
-    })
-
-    it('should match admin nomination acceptance', () => {
-      const events: Event[] = [
-        {
-          type: 'wasm',
-          attributes: [
-            { key: 'action', value: 'execute_accept_admin_nomination' },
-            { key: 'new_admin', value: 'juno1newadmin123' },
-            { key: '_contract_address', value: 'juno1dao123contract456' },
-          ],
-        },
-      ]
-
-      const result = extractor.match({
-        hash: 'test-hash',
-        tx: createMockTx(),
-        messages: createMockMessages(),
-        events,
-      })
-
-      expect(result).toEqual({
-        addresses: ['juno1dao123contract456'],
-      })
-    })
-
-    it('should match proposal hook execution', () => {
-      const events: Event[] = [
-        {
-          type: 'wasm',
-          attributes: [
-            { key: 'action', value: 'execute_proposal_hook' },
-            { key: '_contract_address', value: 'juno1dao123contract456' },
-          ],
-        },
-      ]
-
-      const result = extractor.match({
-        hash: 'test-hash',
-        tx: createMockTx(),
-        messages: createMockMessages(),
-        events,
-      })
-
-      expect(result).toEqual({
-        addresses: ['juno1dao123contract456'],
-      })
-    })
-
-    it('should not match config update without required attributes', () => {
-      const events: Event[] = [
-        {
-          type: 'wasm',
-          attributes: [
-            { key: 'action', value: 'execute_update_config' },
-            // Missing name, description, or image_url
-            { key: '_contract_address', value: 'juno1dao123contract456' },
-          ],
-        },
-      ]
-
-      const result = extractor.match({
-        hash: 'test-hash',
-        tx: createMockTx(),
-        messages: createMockMessages(),
-        events,
-      })
-
-      expect(result).toBeUndefined()
-    })
-
-    it('should not match admin nomination without new_admin', () => {
-      const events: Event[] = [
-        {
-          type: 'wasm',
-          attributes: [
-            { key: 'action', value: 'execute_accept_admin_nomination' },
-            // Missing new_admin attribute
-            { key: '_contract_address', value: 'juno1dao123contract456' },
-          ],
-        },
-      ]
-
-      const result = extractor.match({
-        hash: 'test-hash',
-        tx: createMockTx(),
-        messages: createMockMessages(),
-        events,
-      })
-
-      expect(result).toBeUndefined()
-    })
-
-    it('should combine instantiation and execution addresses', () => {
-      const events: Event[] = [
-        {
-          type: 'instantiate',
-          attributes: [
-            { key: 'code_id', value: '4862' },
-            { key: '_contract_address', value: 'juno1dao123contract456' },
-          ],
-        },
-        {
-          type: 'wasm',
-          attributes: [
-            { key: 'action', value: 'execute_proposal_hook' },
-            { key: '_contract_address', value: 'juno1dao789contract012' },
-          ],
-        },
-      ]
-
-      const result = extractor.match({
-        hash: 'test-hash',
-        tx: createMockTx(),
-        messages: createMockMessages(),
-        events,
-      })
-
-      expect(result).toEqual({
-        addresses: ['juno1dao123contract456', 'juno1dao789contract012'],
-      })
-    })
-
-    it('should return undefined when no matching events', () => {
-      const events: Event[] = [
-        {
-          type: 'other',
-          attributes: [
-            { key: 'action', value: 'some_other_action' },
-            { key: '_contract_address', value: 'juno1other123contract456' },
-          ],
-        },
-      ]
-
-      const result = extractor.match({
-        hash: 'test-hash',
-        tx: createMockTx(),
-        messages: createMockMessages(),
-        events,
-      })
-
-      expect(result).toBeUndefined()
+    it('should have correct static type', () => {
+      expect(DaoExtractor.type).toBe('dao')
     })
   })
 
   describe('extract function', () => {
-    const mockContractInfo = {
-      info: {
-        contract: 'crates.io:dao-dao-core',
-        version: '2.4.0',
-      },
-    }
-
-    const mockDumpState = {
-      admin: 'juno1admin123',
-      config: {
-        name: 'Test DAO',
-        description: 'A test DAO for testing',
-      },
-      version: { version: '2.4.0' },
-      proposal_modules: [],
-      voting_module: 'juno1voting123',
-    }
-
-    it('should extract DAO information successfully', async () => {
-      const data: DaoExtractorData = {
-        addresses: ['juno1dao123contract456'],
-      }
+    it('should extract DAO information successfully from instantiate data', async () => {
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
+          type: 'instantiate',
+          address: 'juno1dao123contract456',
+          codeId: 1,
+          codeIdsKeys: ['dao-dao-core'],
+        }),
+      ]
 
       // Mock the client methods
       vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockResolvedValue({
         address: 'juno1dao123contract456',
-        codeId: 4862,
+        codeId: 1,
         admin: 'juno1admin123',
         creator: 'juno1creator123',
         label: 'Test DAO',
@@ -350,17 +133,103 @@ describe('DAO Extractor', () => {
         .mockResolvedValueOnce(mockContractInfo) // First call for info
         .mockResolvedValueOnce(mockDumpState) // Second call for dump_state
 
-      const result = (await extractor.extract({
-        txHash: 'test-hash-123',
-        block: {
-          height: '1000',
-          timeUnixMs: '1640995200000',
-          timestamp: '2022-01-01T01:00:00Z',
-        },
-        data,
-      })) as Extraction[]
+      const result = (await extractor.extract(data)) as Extraction[]
 
-      expect(mockAutoCosmWasmClient.update).toHaveBeenCalled()
+      expect(mockAutoCosmWasmClient.client!.getContract).toHaveBeenCalledWith(
+        'juno1dao123contract456'
+      )
+      expect(
+        mockAutoCosmWasmClient.client!.queryContractSmart
+      ).toHaveBeenCalledTimes(2)
+      expect(
+        mockAutoCosmWasmClient.client!.queryContractSmart
+      ).toHaveBeenCalledWith('juno1dao123contract456', { info: {} })
+      expect(
+        mockAutoCosmWasmClient.client!.queryContractSmart
+      ).toHaveBeenCalledWith('juno1dao123contract456', { dump_state: {} })
+
+      expect(result).toHaveLength(4) // 1 info, 1 dump_state, 2 proposal modules
+
+      // Check info extraction
+      const infoExtraction = result.find((e) => e.name === 'info')
+      expect(infoExtraction).toBeDefined()
+      expect(infoExtraction!.address).toBe('juno1dao123contract456')
+      expect(infoExtraction!.blockHeight).toBe('1000')
+      expect(infoExtraction!.txHash).toBe('test-hash')
+      expect(infoExtraction!.data).toEqual(mockContractInfo.info)
+
+      // Check dump_state extraction
+      const dumpStateExtraction = result.find(
+        (e) => e.name === 'dao-dao-core/dump_state'
+      )
+      expect(dumpStateExtraction).toBeDefined()
+      expect(dumpStateExtraction!.address).toBe('juno1dao123contract456')
+      expect(dumpStateExtraction!.blockHeight).toBe('1000')
+      expect(dumpStateExtraction!.txHash).toBe('test-hash')
+      expect(dumpStateExtraction!.data).toEqual(mockDumpState)
+
+      // Check proposal modules extraction
+      const proposalModulesExtraction = result.filter((e) =>
+        e.name.startsWith('proposalModule:')
+      )
+      expect(proposalModulesExtraction).toHaveLength(2)
+      expect(proposalModulesExtraction[0].name).toBe(
+        'proposalModule:juno1proposal123'
+      )
+      expect(proposalModulesExtraction[0].data).toEqual({
+        address: 'juno1proposal123',
+        prefix: 'A',
+        status: 'Enabled',
+      })
+      expect(proposalModulesExtraction[1].name).toBe(
+        'proposalModule:juno1proposal456'
+      )
+      expect(proposalModulesExtraction[1].data).toEqual({
+        address: 'juno1proposal456',
+        prefix: 'B',
+        status: 'Enabled',
+      })
+    })
+
+    it('should extract DAO information successfully from execute data', async () => {
+      const data: ExtractorHandleableData[] = [
+        WasmEventDataSource.handleable('execute', {
+          address: 'juno1dao123contract456',
+          key: 'action',
+          value: 'execute_update_config',
+          attributes: {
+            _contract_address: ['juno1dao123contract456'],
+            action: ['execute_update_config'],
+            name: ['Test DAO'],
+            description: ['A test DAO for testing'],
+            image_url: ['https://moonphase.wtf/image.svg'],
+          },
+          _attributes: [
+            { key: '_contract_address', value: 'juno1dao123contract456' },
+            { key: 'action', value: 'execute_update_config' },
+            { key: 'name', value: 'Test DAO' },
+            { key: 'description', value: 'A test DAO for testing' },
+            { key: 'image_url', value: 'https://moonphase.wtf/image.svg' },
+          ],
+        }),
+      ]
+
+      // Mock the client methods
+      vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockResolvedValue({
+        address: 'juno1dao123contract456',
+        codeId: 1,
+        admin: 'juno1admin123',
+        creator: 'juno1creator123',
+        label: 'Test DAO',
+        ibcPortId: 'juno1ibc123',
+      })
+
+      vi.mocked(mockAutoCosmWasmClient.client!.queryContractSmart)
+        .mockResolvedValueOnce(mockContractInfo) // First call for info
+        .mockResolvedValueOnce(mockDumpState) // Second call for dump_state
+
+      const result = (await extractor.extract(data)) as Extraction[]
+
       expect(mockAutoCosmWasmClient.client!.getContract).toHaveBeenCalledWith(
         'juno1dao123contract456'
       )
@@ -377,12 +246,12 @@ describe('DAO Extractor', () => {
       expect(result).toHaveLength(2)
 
       // Check info extraction
-      const infoExtraction = result.find((e) => e.name === 'dao-dao-core/info')
+      const infoExtraction = result.find((e) => e.name === 'info')
       expect(infoExtraction).toBeDefined()
       expect(infoExtraction!.address).toBe('juno1dao123contract456')
       expect(infoExtraction!.blockHeight).toBe('1000')
-      expect(infoExtraction!.txHash).toBe('test-hash-123')
-      expect(infoExtraction!.data).toEqual(mockContractInfo)
+      expect(infoExtraction!.txHash).toBe('test-hash')
+      expect(infoExtraction!.data).toEqual(mockContractInfo.info)
 
       // Check dump_state extraction
       const dumpStateExtraction = result.find(
@@ -391,20 +260,31 @@ describe('DAO Extractor', () => {
       expect(dumpStateExtraction).toBeDefined()
       expect(dumpStateExtraction!.address).toBe('juno1dao123contract456')
       expect(dumpStateExtraction!.blockHeight).toBe('1000')
-      expect(dumpStateExtraction!.txHash).toBe('test-hash-123')
+      expect(dumpStateExtraction!.txHash).toBe('test-hash')
       expect(dumpStateExtraction!.data).toEqual(mockDumpState)
     })
 
     it('should handle multiple DAO addresses', async () => {
-      const data: DaoExtractorData = {
-        addresses: ['juno1dao123contract456', 'juno1dao789contract012'],
-      }
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
+          type: 'instantiate',
+          address: 'juno1dao123contract456',
+          codeId: 1,
+          codeIdsKeys: ['dao-dao-core'],
+        }),
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
+          type: 'instantiate',
+          address: 'juno1dao789contract012',
+          codeId: 1,
+          codeIdsKeys: ['dao-dao-core'],
+        }),
+      ]
 
       // Mock additional contract calls
       vi.mocked(mockAutoCosmWasmClient.client!.getContract)
         .mockResolvedValueOnce({
           address: 'juno1dao123contract456',
-          codeId: 4862,
+          codeId: 1,
           admin: 'juno1admin123',
           creator: 'juno1creator123',
           label: 'Test DAO 1',
@@ -412,7 +292,7 @@ describe('DAO Extractor', () => {
         })
         .mockResolvedValueOnce({
           address: 'juno1dao789contract012',
-          codeId: 4862,
+          codeId: 1,
           admin: 'juno1admin456',
           creator: 'juno1creator456',
           label: 'Test DAO 2',
@@ -426,85 +306,81 @@ describe('DAO Extractor', () => {
         .mockResolvedValueOnce(mockContractInfo) // info for second contract
         .mockResolvedValueOnce(mockDumpState) // dump_state for second contract
 
-      const result = (await extractor.extract({
-        txHash: 'test-hash-456',
-        block: {
-          height: '1000',
-          timeUnixMs: '1640995200000',
-          timestamp: '2022-01-01T01:00:00Z',
-        },
-        data,
-      })) as Extraction[]
+      const result = (await extractor.extract(data)) as Extraction[]
 
-      expect(result).toHaveLength(4) // 2 extractions per contract
+      expect(result).toHaveLength(8) // 4 extractions per contract
 
       const addresses = result.map((r) => r.address)
       expect(addresses).toContain('juno1dao123contract456')
       expect(addresses).toContain('juno1dao789contract012')
     })
 
-    it('should handle contract query failures gracefully', async () => {
-      const data: DaoExtractorData = {
-        addresses: ['juno1dao123contract456', 'juno1dao789contract012'],
-      }
-
-      // Mock one successful and one failing contract
-      vi.mocked(mockAutoCosmWasmClient.client!.getContract)
-        .mockResolvedValueOnce({
+    it('should not extract if contract is not a dao-dao-core contract', async () => {
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
+          type: 'instantiate',
           address: 'juno1dao123contract456',
-          codeId: 4862,
-          admin: 'juno1admin123',
-          creator: 'juno1creator123',
-          label: 'Test DAO 1',
-          ibcPortId: undefined,
-        })
-        .mockResolvedValueOnce({
+          codeId: 1,
+          codeIdsKeys: ['dao-dao-core'],
+        }),
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
+          type: 'instantiate',
           address: 'juno1dao789contract012',
-          codeId: 4862,
-          admin: 'juno1admin456',
-          creator: 'juno1creator456',
-          label: 'Test DAO 2',
-          ibcPortId: undefined,
-        })
+          codeId: 9999,
+          codeIdsKeys: [],
+        }),
+      ]
 
-      // Mock successful queries for first contract, failed for second
-      vi.mocked(
-        mockAutoCosmWasmClient.client!.queryContractSmart
-      ).mockImplementation(async (address: string, queryMsg: any) => {
-        // First contract
-        if (address === 'juno1dao123contract456') {
-          if (queryMsg.info) {
-            return mockContractInfo
-          } else if (queryMsg.dump_state) {
-            return mockDumpState
+      // Mock one correct code ID and one incorrect code ID
+      vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockImplementation(
+        async (address: string) => {
+          if (address === 'juno1dao123contract456') {
+            return {
+              address: 'juno1dao123contract456',
+              codeId: 1,
+              admin: 'juno1admin123',
+              creator: 'juno1creator123',
+              label: 'Test DAO',
+              ibcPortId: 'juno1ibc123',
+            }
           } else {
-            throw new Error('Unknown query')
+            return {
+              address: 'juno1dao789contract012',
+              codeId: 9999,
+              admin: 'juno1admin123',
+              creator: 'juno1creator123',
+              label: 'Test DAO',
+              ibcPortId: 'juno1ibc123',
+            }
           }
         }
-        // Second contract
-        throw new Error('Query failed')
+      )
+
+      // Mock successful queries for first contract only
+      vi.mocked(
+        mockAutoCosmWasmClient.client!.queryContractSmart
+      ).mockImplementation(async (_, queryMsg: any) => {
+        if (queryMsg.info) {
+          return mockContractInfo
+        } else if (queryMsg.dump_state) {
+          return mockDumpState
+        } else {
+          throw new Error('Unknown query')
+        }
       })
 
-      const result = (await extractor.extract({
-        txHash: 'test-hash-789',
-        block: {
-          height: '1000',
-          timeUnixMs: '1640995200000',
-          timestamp: '2022-01-01T01:00:00Z',
-        },
-        data,
-      })) as Extraction[]
+      const result = (await extractor.extract(data)) as Extraction[]
 
-      // Should only have extractions for the successful contract
+      // Should only have extractions for the dao-dao-core contract
       expect(result.map((r) => r.toJSON())).toEqual([
         {
           id: '1',
           address: 'juno1dao123contract456',
-          name: 'dao-dao-core/info',
+          name: 'info',
           blockHeight: '1000',
           blockTimeUnixMs: '1640995200000',
-          txHash: 'test-hash-789',
-          data: mockContractInfo,
+          txHash: 'test-hash',
+          data: mockContractInfo.info,
           createdAt: expect.any(Date),
           updatedAt: expect.any(Date),
         },
@@ -514,8 +390,30 @@ describe('DAO Extractor', () => {
           name: 'dao-dao-core/dump_state',
           blockHeight: '1000',
           blockTimeUnixMs: '1640995200000',
-          txHash: 'test-hash-789',
+          txHash: 'test-hash',
           data: mockDumpState,
+          createdAt: expect.any(Date),
+          updatedAt: expect.any(Date),
+        },
+        {
+          id: '3',
+          address: 'juno1dao123contract456',
+          name: 'proposalModule:juno1proposal123',
+          blockHeight: '1000',
+          blockTimeUnixMs: '1640995200000',
+          txHash: 'test-hash',
+          data: mockDumpState.proposal_modules[0],
+          createdAt: expect.any(Date),
+          updatedAt: expect.any(Date),
+        },
+        {
+          id: '4',
+          address: 'juno1dao123contract456',
+          name: 'proposalModule:juno1proposal456',
+          blockHeight: '1000',
+          blockTimeUnixMs: '1640995200000',
+          txHash: 'test-hash',
+          data: mockDumpState.proposal_modules[1],
           createdAt: expect.any(Date),
           updatedAt: expect.any(Date),
         },
@@ -523,14 +421,19 @@ describe('DAO Extractor', () => {
     })
 
     it('should create contracts in database with correct information', async () => {
-      const data: DaoExtractorData = {
-        addresses: ['juno1dao123contract456'],
-      }
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
+          type: 'instantiate',
+          address: 'juno1dao123contract456',
+          codeId: 1,
+          codeIdsKeys: ['dao-dao-core'],
+        }),
+      ]
 
       // Mock the client methods
       vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockResolvedValue({
         address: 'juno1dao123contract456',
-        codeId: 4862,
+        codeId: 1,
         admin: 'juno1admin123',
         creator: 'juno1creator123',
         label: 'Test DAO',
@@ -541,25 +444,15 @@ describe('DAO Extractor', () => {
         .mockResolvedValueOnce(mockContractInfo) // First call for info
         .mockResolvedValueOnce(mockDumpState) // Second call for dump_state
 
-      await extractor.extract({
-        txHash: 'test-hash-contract',
-        block: {
-          height: '1000',
-          timeUnixMs: '1640995200000',
-          timestamp: '2022-01-01T01:00:00Z',
-        },
-        data,
-      })
+      await extractor.extract(data)
 
       // Check that contract was created in database
       const contract = await Contract.findByPk('juno1dao123contract456')
       expect(contract).toBeDefined()
-      expect(contract!.codeId).toBe(4862)
+      expect(contract!.codeId).toBe(1)
       expect(contract!.admin).toBe('juno1admin123')
       expect(contract!.creator).toBe('juno1creator123')
       expect(contract!.label).toBe('Test DAO')
-      expect(contract!.instantiatedAtBlockHeight).toBe('1000')
-      expect(contract!.instantiatedAtBlockTimeUnixMs).toBe('1640995200000')
     })
 
     it('should throw error when client is not connected', async () => {
@@ -569,27 +462,163 @@ describe('DAO Extractor', () => {
         client: undefined,
       }
 
-      const brokenExtractor = await dao({
+      const brokenEnv: ExtractorEnv = {
         config: ConfigManager.load(),
         sendWebhooks: false,
         autoCosmWasmClient: brokenAutoClient as any,
-      })
-
-      const data: DaoExtractorData = {
-        addresses: ['juno1dao123contract456'],
+        txHash: 'test-hash-error',
+        block: {
+          height: '1000',
+          timeUnixMs: '1640995200000',
+          timestamp: '2022-01-01T01:00:00Z',
+        },
       }
 
-      await expect(
-        brokenExtractor.extract({
-          txHash: 'test-hash-error',
-          block: {
-            height: '1000',
-            timeUnixMs: '1640995200000',
-            timestamp: '2022-01-01T01:00:00Z',
-          },
-          data,
+      const brokenExtractor = new DaoExtractor(brokenEnv)
+
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
+          type: 'instantiate',
+          address: 'juno1dao123contract456',
+          codeId: 1,
+          codeIdsKeys: ['dao-dao-core'],
+        }),
+      ]
+
+      await expect(brokenExtractor.extract(data)).rejects.toThrow(
+        'CosmWasm client not connected'
+      )
+    })
+  })
+
+  describe('sync function', () => {
+    it('should sync DAO addresses', async () => {
+      vi.mocked(
+        mockAutoCosmWasmClient.client!.queryContractSmart
+      ).mockImplementation(async (_, queryMsg: any) => {
+        if (queryMsg.info) {
+          return mockContractInfo
+        } else if (queryMsg.dump_state) {
+          return mockDumpState
+        } else {
+          throw new Error('Unknown query')
+        }
+      })
+
+      vi.mocked(mockAutoCosmWasmClient.client!.getContracts).mockImplementation(
+        async (codeId: number) => {
+          if (codeId === 1) {
+            return ['juno1dao123contract456']
+          } else if (codeId === 2) {
+            return ['juno1dao789contract012']
+          } else {
+            return []
+          }
+        }
+      )
+
+      vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockImplementation(
+        async (address: string) => {
+          if (address === 'juno1voting123') {
+            return {
+              codeId: 3,
+            } as any
+          } else if (
+            address === 'juno1proposal123' ||
+            address === 'juno1proposal456'
+          ) {
+            return {
+              codeId: 4,
+            } as any
+          } else {
+            return {
+              codeId: 5,
+            } as any
+          }
+        }
+      )
+
+      const result = await Array.fromAsync(
+        DaoExtractor.sync!({
+          config: extractor.env.config,
+          autoCosmWasmClient: extractor.env.autoCosmWasmClient,
         })
-      ).rejects.toThrow('CosmWasm client not connected')
+      )
+
+      expect(result).toEqual([
+        {
+          source: WasmInstantiateOrMigrateDataSource.type,
+          data: {
+            type: 'instantiate',
+            address: 'juno1dao123contract456',
+            codeId: 1,
+            codeIdsKeys: ['dao-dao-core'],
+          },
+        },
+        {
+          source: WasmInstantiateOrMigrateDataSource.type,
+          data: {
+            type: 'instantiate',
+            address: 'juno1voting123',
+            codeId: 3,
+            codeIdsKeys: ['dao-voting'],
+          },
+        },
+        {
+          source: WasmInstantiateOrMigrateDataSource.type,
+          data: {
+            type: 'instantiate',
+            address: 'juno1proposal123',
+            codeId: 4,
+            codeIdsKeys: ['dao-proposal'],
+          },
+        },
+        {
+          source: WasmInstantiateOrMigrateDataSource.type,
+          data: {
+            type: 'instantiate',
+            address: 'juno1proposal456',
+            codeId: 4,
+            codeIdsKeys: ['dao-proposal'],
+          },
+        },
+        {
+          source: WasmInstantiateOrMigrateDataSource.type,
+          data: {
+            type: 'instantiate',
+            address: 'juno1dao789contract012',
+            codeId: 2,
+            codeIdsKeys: ['dao-dao-core'],
+          },
+        },
+        {
+          source: WasmInstantiateOrMigrateDataSource.type,
+          data: {
+            type: 'instantiate',
+            address: 'juno1voting123',
+            codeId: 3,
+            codeIdsKeys: ['dao-voting'],
+          },
+        },
+        {
+          source: WasmInstantiateOrMigrateDataSource.type,
+          data: {
+            type: 'instantiate',
+            address: 'juno1proposal123',
+            codeId: 4,
+            codeIdsKeys: ['dao-proposal'],
+          },
+        },
+        {
+          source: WasmInstantiateOrMigrateDataSource.type,
+          data: {
+            type: 'instantiate',
+            address: 'juno1proposal456',
+            codeId: 4,
+            codeIdsKeys: ['dao-proposal'],
+          },
+        },
+      ])
     })
   })
 })

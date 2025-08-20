@@ -64,7 +64,7 @@ const main = async () => {
   const formulasReplaced = new Set<string>()
 
   const extractedCodeIdsKeys = WasmCodeService.extractWasmCodeKeys(codeIdsKeys)
-  const codeIds = WasmCodeService.getInstance().findWasmCodeIdsByKeys(
+  const codeIds = WasmCodeService.instance.findWasmCodeIdsByKeys(
     ...extractedCodeIdsKeys
   )
 

@@ -232,7 +232,7 @@ export class WasmCodeTrackerManager {
     // Update service if any code keys were updated and the service is
     // initialized.
     if (WasmCodeService.isInitialized && updatedCodeKey) {
-      await WasmCodeService.getInstance().reloadWasmCodeIdsFromDB()
+      await WasmCodeService.instance.reloadWasmCodeIdsFromDB()
     }
   }
 }
