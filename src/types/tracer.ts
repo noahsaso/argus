@@ -3,7 +3,9 @@ import { AutoCosmWasmClient } from '@/utils'
 import { Config } from './config'
 import { DependableEventModel } from './db'
 
-export type Handler<Data extends unknown = unknown> = {
+export type Handler<
+  Data extends Record<string, unknown> = Record<string, unknown>
+> = {
   /**
    * What store name to filter by for events to handle.
    */
@@ -41,9 +43,9 @@ export type HandlerMakerOptions = {
   autoCosmWasmClient: AutoCosmWasmClient
 }
 
-export type HandlerMaker<Data extends unknown = unknown> = (
-  options: HandlerMakerOptions
-) => Promise<Handler<Data>>
+export type HandlerMaker<
+  Data extends Record<string, unknown> = Record<string, unknown>
+> = (options: HandlerMakerOptions) => Promise<Handler<Data>>
 
 export type NamedHandler = {
   name: string
