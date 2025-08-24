@@ -2,6 +2,7 @@ import { Op, QueryTypes, Sequelize } from 'sequelize'
 
 import {
   BankBalance,
+  BankDenomBalance,
   BankStateEvent,
   Block,
   Contract,
@@ -1037,25 +1038,56 @@ export const getEnv = ({
   }
 
   const getBalance: FormulaBalanceGetter = async (address, denom) => {
+    // Get BankBalanceDenom if exists.
+    const bankDenomBalanceDependentKey = getDependentKey(
+      BankDenomBalance.dependentKeyNamespace,
+      address,
+      denom
+    )
+
+    const cachedBalanceDenom = cache.events[bankDenomBalanceDependentKey]
+    // Only one bank balance denom exists, since it represents the latest. Apply
+    // the block height filter to ensure we don't access future balances if
+    // we're querying a past block height.
+    const bankDenomBalance =
+      // If undefined, we haven't tried to fetch it yet. If not undefined,
+      // either it exists or it doesn't (null).
+      cachedBalanceDenom !== undefined
+        ? cachedBalanceDenom?.[0]
+        : await BankDenomBalance.findOne({
+            where: {
+              address,
+              denom,
+              blockHeight: blockHeightFilter,
+            },
+          })
+
+    if (bankDenomBalance && !(bankDenomBalance instanceof BankDenomBalance)) {
+      throw new Error('Incorrect event type.')
+    }
+
+    // Call hook.
+    if (bankDenomBalance) {
+      await onFetch?.([bankDenomBalance])
+    }
+
+    // Cache bank balance denom, null if nonexistent.
+    if (cachedBalanceDenom === undefined) {
+      cache.events[bankDenomBalanceDependentKey] = bankDenomBalance
+        ? [bankDenomBalance]
+        : null
+    }
+
     // Use BankBalance if exists.
     const bankBalanceDependentKey = getDependentKey(
       BankBalance.dependentKeyNamespace,
       address
     )
+
     const cachedBalance = cache.events[bankBalanceDependentKey]
-    if (
-      cachedBalance?.length === 1 &&
-      cachedBalance[0] instanceof BankBalance
-    ) {
-      // Call hook.
-      await onFetch?.(cachedBalance)
-
-      return cachedBalance[0].balances[denom]
-    }
-
     // Only one bank balance exists per address, since it represents the latest
-    // set of all balances. Apply the block height filter to ensure we don't
-    // access future balances if we're querying a past block height.
+    // set of all balances. Apply the block height filter to the denom to ensure
+    // we don't access future balances if we're querying a past block height.
     const bankBalance =
       // If undefined, we haven't tried to fetch it yet. If not undefined,
       // either it exists or it doesn't (null).
@@ -1064,26 +1096,50 @@ export const getEnv = ({
         : await BankBalance.findOne({
             where: {
               address,
-              blockHeight: blockHeightFilter,
+              balances: {
+                [denom]: {
+                  [Op.not]: null,
+                },
+              },
+              denomUpdateBlockHeights: {
+                [denom + '::bigint']: blockHeightFilter,
+              },
             },
           })
+
+    if (bankBalance && !(bankBalance instanceof BankBalance)) {
+      throw new Error('Incorrect event type.')
+    }
 
     // Cache bank balance, null if nonexistent.
     if (cachedBalance === undefined) {
       cache.events[bankBalanceDependentKey] = bankBalance ? [bankBalance] : null
     }
 
-    // If bank balance found, return balance. Otherwise fall back to
-    // BankStateEvent.
-    if (bankBalance && bankBalance instanceof BankBalance) {
+    if (bankBalance) {
       // Call hook.
       await onFetch?.([bankBalance])
-
-      return bankBalance.balances[denom]
     }
 
-    // Use BankStateEvent if no BankBalance and this address is a contract that
-    // we keep history for.
+    // Choose the latest balance.
+    if (bankDenomBalance || bankBalance) {
+      const balance =
+        bankDenomBalance &&
+        bankBalance?.balances?.[denom] &&
+        bankBalance.denomUpdateBlockHeights?.[denom]
+          ? BigInt(bankDenomBalance.blockHeight) >
+            BigInt(bankBalance.denomUpdateBlockHeights[denom])
+            ? bankDenomBalance.balance
+            : bankBalance.balances[denom]
+          : bankDenomBalance?.balance || bankBalance?.balances[denom]
+
+      if (balance) {
+        return balance
+      }
+    }
+
+    // Use BankStateEvent if no BankBalance/BankDenomBalance and this address is
+    // a contract that we keep history for.
     const historyExists = await contractMatchesCodeIdKeys(
       address,
       ...BANK_HISTORY_CODE_IDS_KEYS
@@ -1141,36 +1197,29 @@ export const getEnv = ({
   }
 
   const getBalances: FormulaBalancesGetter = async (address) => {
-    // Use BankBalance if exists.
+    // Use BankBalance and BankDenomBalance if exists.
     const bankBalanceDependentKey = getDependentKey(
       BankBalance.dependentKeyNamespace,
       address
     )
     const cachedBalance = cache.events[bankBalanceDependentKey]
-    if (
-      cachedBalance?.length === 1 &&
-      cachedBalance[0] instanceof BankBalance
-    ) {
-      // Call hook.
-      await onFetch?.(cachedBalance)
-
-      return cachedBalance[0].balances
-    }
 
     // Only one bank balance exists per address, since it represents the latest
-    // set of all balances. Apply the block height filter to ensure we don't
-    // access future balances if we're querying a past block height.
-    const bankBalance =
+    // set of all balances.
+    const bankBalance: BankBalance | undefined | null =
       // If undefined, we haven't tried to fetch it yet. If not undefined,
       // either it exists or it doesn't (null).
       cachedBalance !== undefined
-        ? cachedBalance?.[0]
+        ? (cachedBalance?.[0] as BankBalance | null | undefined)
         : await BankBalance.findOne({
             where: {
               address,
-              blockHeight: blockHeightFilter,
             },
           })
+
+    if (bankBalance && !(bankBalance instanceof BankBalance)) {
+      throw new Error('Incorrect event type.')
+    }
 
     // Cache bank balance, null if nonexistent.
     if (cachedBalance === undefined) {
@@ -1182,8 +1231,110 @@ export const getEnv = ({
     if (bankBalance && bankBalance instanceof BankBalance) {
       // Call hook.
       await onFetch?.([bankBalance])
+    }
 
-      return bankBalance.balances
+    // Use BankDenomBalance if exists.
+    const bankDenomBalanceDependentKey = getDependentKey(
+      BankDenomBalance.dependentKeyNamespace,
+      address
+    )
+    const cachedDenomBalances = cache.events[bankDenomBalanceDependentKey]
+
+    // Apply the block height filter to ensure we don't access future balances
+    // if we're querying a past block height.
+    const bankDenomBalances =
+      // If undefined, we haven't tried to fetch them yet. If not undefined,
+      // either they exist or they don't (null).
+      cachedDenomBalances !== undefined
+        ? ((cachedDenomBalances ?? []) as BankDenomBalance[])
+        : await BankDenomBalance.findAll({
+            attributes: [
+              Sequelize.literal(
+                'DISTINCT ON("denom") \'\''
+              ) as unknown as string,
+              // Include `id` so that Sequelize doesn't prepend it to the query
+              // before the DISTINCT ON, which must come first.
+              'id',
+              'address',
+              'denom',
+              'blockHeight',
+              'blockTimeUnixMs',
+              'balance',
+            ],
+            where: {
+              address,
+              blockHeight: blockHeightFilter,
+            },
+            order: [
+              // Needs to be first so we can use DISTINCT ON.
+              ['denom', 'ASC'],
+              ['blockHeight', 'DESC'],
+            ],
+          })
+
+    // Type-check. Should never happen assuming dependent key namespaces are
+    // unique across different event types.
+    if (
+      bankDenomBalances.some((event) => !(event instanceof BankDenomBalance))
+    ) {
+      throw new Error('Incorrect event type.')
+    }
+
+    // Cache events, null if nonexistent.
+    if (cachedDenomBalances === undefined) {
+      cache.events[bankDenomBalanceDependentKey] = bankDenomBalances.length
+        ? bankDenomBalances
+        : null
+    }
+
+    // Call hook.
+    if (bankDenomBalances.length) {
+      await onFetch?.(bankDenomBalances)
+    }
+
+    // If bank balance or bank denom balances found, combine and return. If
+    // neither exist, fall back to BankStateEvent if this address is a contract
+    // that we keep history for.
+    if (bankBalance || bankDenomBalances.length) {
+      const uniqueDenoms = Array.from(
+        new Set([
+          ...Object.keys(bankBalance?.balances ?? {}),
+          ...bankDenomBalances.map(({ denom }) => denom),
+        ])
+      )
+
+      // Merge and choose latest balance for each denom.
+      return uniqueDenoms.reduce((acc, denom) => {
+        const balanceFromAll =
+          bankBalance?.balances?.[denom] &&
+          bankBalance.denomUpdateBlockHeights?.[denom] &&
+          // Filter out denoms that are not valid for the current block height.
+          BigInt(bankBalance.denomUpdateBlockHeights[denom]) <= block.height
+            ? {
+                balance: bankBalance.balances[denom],
+                blockHeight: bankBalance.denomUpdateBlockHeights[denom],
+              }
+            : undefined
+
+        const denomBalance = bankDenomBalances.find(
+          ({ denom: d }) => d === denom
+        )
+
+        const balance =
+          balanceFromAll && denomBalance
+            ? BigInt(denomBalance.blockHeight) >
+              BigInt(balanceFromAll.blockHeight)
+              ? denomBalance.balance
+              : balanceFromAll.balance
+            : denomBalance?.balance || balanceFromAll?.balance
+
+        return balance
+          ? {
+              ...acc,
+              [denom]: balance,
+            }
+          : acc
+      }, {} as Record<string, string>)
     }
 
     // Use BankStateEvent if no BankBalance and this address is a contract that

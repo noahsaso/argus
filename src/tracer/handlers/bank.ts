@@ -1,11 +1,11 @@
 import { fromBase64, fromUtf8, toBech32 } from '@cosmjs/encoding'
 import { Coin } from '@dao-dao/types/protobuf/codegen/cosmos/base/v1beta1/coin'
-import { Sequelize } from 'sequelize'
+import { QueryTypes, Sequelize } from 'sequelize'
 
-import { BankBalance, BankStateEvent, Block, Contract, State } from '@/db'
+import { BankDenomBalance, BankStateEvent, Block, Contract, State } from '@/db'
 import { WasmCodeService } from '@/services'
 import { Handler, HandlerMaker, ParsedBankStateEvent } from '@/types'
-import { batch, retry } from '@/utils'
+import { retry } from '@/utils'
 
 const STORE_NAME = 'bank'
 // Keep all bank balance history for contracts matching these code IDs keys.
@@ -165,14 +165,79 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
         addressesToKeepHistoryFor.includes(event.address)
       )
 
-      const bankStateEvents = keepHistoryEvents.length
-        ? await BankStateEvent.bulkCreate(keepHistoryEvents, {
-            updateOnDuplicate: ['balance'],
-            conflictAttributes: ['address', 'denom', 'blockHeight'],
-          })
-        : []
+      const [bankStateEvents, bankDenomBalances] = await Promise.all([
+        keepHistoryEvents.length
+          ? BankStateEvent.bulkCreate(keepHistoryEvents, {
+              updateOnDuplicate: ['balance'],
+              conflictAttributes: ['address', 'denom', 'blockHeight'],
+            })
+          : [],
+        // Custom upsert logic to only update when blockHeight is newer
+        (async () => {
+          // Build values for bulk insert with timestamps
+          const valueStrings = events
+            .map(
+              (_, index) =>
+                `($${index * 6 + 1}, $${index * 6 + 2}, $${index * 6 + 3}, $${
+                  index * 6 + 4
+                }, $${index * 6 + 5}, $${index * 6 + 6}, NOW(), NOW())`
+            )
+            .join(', ')
 
-      return bankStateEvents
+          // Flatten all event values for parameterized query
+          const values = events.flatMap((event) => [
+            event.address,
+            event.denom,
+            event.balance,
+            event.blockHeight,
+            event.blockTimeUnixMs,
+            event.blockTimestamp,
+          ])
+
+          // Use INSERT ... ON CONFLICT with conditional update based on
+          // blockHeight comparison.
+          const query = `
+            INSERT INTO "${BankDenomBalance.tableName}" (
+              "address", "denom", "balance", "blockHeight",
+              "blockTimeUnixMs", "blockTimestamp", "createdAt", "updatedAt"
+            )
+            VALUES ${valueStrings}
+            ON CONFLICT ("address", "denom")
+            DO UPDATE SET
+              "balance" = CASE
+                WHEN EXCLUDED."blockHeight"::bigint > "BankDenomBalances"."blockHeight"::bigint 
+                THEN EXCLUDED."balance"
+                ELSE "BankDenomBalances"."balance"
+              END,
+              "blockHeight" = CASE
+                WHEN EXCLUDED."blockHeight"::bigint > "BankDenomBalances"."blockHeight"::bigint 
+                THEN EXCLUDED."blockHeight"
+                ELSE "BankDenomBalances"."blockHeight"
+              END,
+              "blockTimeUnixMs" = CASE
+                WHEN EXCLUDED."blockHeight"::bigint > "BankDenomBalances"."blockHeight"::bigint 
+                THEN EXCLUDED."blockTimeUnixMs"
+                ELSE "BankDenomBalances"."blockTimeUnixMs"
+              END,
+              "blockTimestamp" = CASE
+                WHEN EXCLUDED."blockHeight"::bigint > "BankDenomBalances"."blockHeight"::bigint 
+                THEN EXCLUDED."blockTimestamp"
+                ELSE "BankDenomBalances"."blockTimestamp"
+              END,
+              "updatedAt" = NOW()
+            RETURNING *;
+          `
+
+          const results = await BankDenomBalance.sequelize!.query(query, {
+            bind: values,
+            type: QueryTypes.SELECT,
+          })
+
+          return results.map((result) => BankDenomBalance.build(result as any))
+        })(),
+      ])
+
+      return [...bankStateEvents, ...bankDenomBalances]
     }
 
     const exportedEvents = await retry(3, exportEvents, 100)
@@ -208,102 +273,9 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
     return exportedEvents
   }
 
-  // Update bank balances in background. This can be slow if certain addresses
-  // have lots of tokens.
-  const processBackground: Handler<ParsedBankStateEvent>['processBackground'] =
-    async (events) => {
-      const exportEvents = async () => {
-        // Get unique addresses with balance updates.
-        const uniqueAddresses = [
-          ...new Set(events.map((event) => event.address)),
-        ]
-
-        // Find existing BankBalance records for all addresses and update by
-        // adding the denoms.
-        const existingBalances = await BankBalance.findAll({
-          where: {
-            address: uniqueAddresses,
-          },
-        })
-        // Map address to existing BankBalance record.
-        const addressToExistingBalance = Object.fromEntries(
-          existingBalances.map((balance) => [balance.address, balance])
-        )
-
-        // Update or build BankBalance records for each event.
-        for (const {
-          address,
-          denom,
-          balance,
-          blockHeight,
-          blockTimeUnixMs,
-          blockTimestamp,
-        } of events) {
-          const existingBalance = addressToExistingBalance[address]
-          if (existingBalance) {
-            // Only update if the current block height is greater than or equal
-            // to the last block height at which the denom's balance was
-            // updated.
-            if (
-              BigInt(blockHeight) >=
-              BigInt(existingBalance.denomUpdateBlockHeights[denom] || 0)
-            ) {
-              existingBalance.balances[denom] = balance
-              existingBalance.denomUpdateBlockHeights[denom] = blockHeight
-              // Explicitly mark the nested JSONB fields as changed.
-              existingBalance.changed('balances', true)
-              existingBalance.changed('denomUpdateBlockHeights', true)
-              existingBalance.blockHeight = BigInt(
-                Math.max(
-                  Number(existingBalance.blockHeight),
-                  Number(blockHeight)
-                )
-              ).toString()
-              existingBalance.blockTimeUnixMs = BigInt(
-                Math.max(
-                  Number(existingBalance.blockTimeUnixMs),
-                  Number(blockTimeUnixMs)
-                )
-              ).toString()
-              existingBalance.blockTimestamp =
-                blockTimestamp > existingBalance.blockTimestamp
-                  ? blockTimestamp
-                  : existingBalance.blockTimestamp
-            }
-          } else {
-            addressToExistingBalance[address] = BankBalance.build({
-              address,
-              balances: {
-                [denom]: balance,
-              },
-              denomUpdateBlockHeights: {
-                [denom]: blockHeight,
-              },
-              blockHeight,
-              blockTimeUnixMs,
-              blockTimestamp,
-            })
-          }
-        }
-
-        // Save bank balances in batches of 100.
-        const bankBalances = Object.values(addressToExistingBalance)
-        await batch({
-          list: bankBalances,
-          batchSize: 100,
-          task: async (balance) => balance.save(),
-        })
-
-        return bankBalances
-      }
-
-      return await retry(3, exportEvents, 100)
-    }
-
   return {
     storeName: STORE_NAME,
     match,
     process,
-    processBackground,
   }
 }

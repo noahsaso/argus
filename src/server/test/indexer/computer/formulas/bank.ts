@@ -1,7 +1,14 @@
 import request from 'supertest'
 import { beforeEach, describe, it } from 'vitest'
 
-import { BankBalance, BankStateEvent, Block, Contract, State } from '@/db'
+import {
+  BankBalance,
+  BankDenomBalance,
+  BankStateEvent,
+  Block,
+  Contract,
+  State,
+} from '@/db'
 import { WasmCodeService } from '@/services'
 import { BANK_HISTORY_CODE_IDS_KEYS } from '@/tracer/handlers/bank'
 
@@ -326,6 +333,142 @@ export const loadBankTests = (options: ComputerTestOptions) => {
             },
           ])
       })
+
+      it('merges BankDenomBalance and BankBalance', async () => {
+        await BankDenomBalance.bulkCreate([
+          {
+            address: 'wallet',
+            denom: 'uoverride1',
+            balance: '3000',
+            blockHeight: 3,
+            blockTimeUnixMs: 3,
+            blockTimestamp: new Date(),
+          },
+          {
+            address: 'wallet',
+            denom: 'uoverride2',
+            balance: '2000',
+            blockHeight: 2,
+            blockTimeUnixMs: 2,
+            blockTimestamp: new Date(),
+          },
+          {
+            address: 'wallet',
+            denom: 'usafe1',
+            balance: '2000',
+            blockHeight: 2,
+            blockTimeUnixMs: 2,
+            blockTimestamp: new Date(),
+          },
+        ])
+
+        await BankBalance.create({
+          address: 'wallet',
+          balances: {
+            uoverride1: '2000',
+            uoverride2: '3000',
+            usafe2: '3000',
+          },
+          denomUpdateBlockHeights: {
+            uoverride1: '2',
+            uoverride2: '3',
+            usafe2: '3',
+          },
+          blockHeight: 3,
+          blockTimeUnixMs: 3,
+          blockTimestamp: new Date(),
+        })
+
+        await request(app.callback())
+          .get('/account/wallet/bank/balance?denom=uoverride1&block=1:1')
+          .set('x-api-key', options.apiKey)
+          .expect(400)
+          .expect('missing balance')
+        await request(app.callback())
+          .get('/account/wallet/bank/balance?denom=uoverride1&block=2:2')
+          .set('x-api-key', options.apiKey)
+          .expect(200)
+          .expect('"2000"')
+        await request(app.callback())
+          .get('/account/wallet/bank/balance?denom=uoverride1&block=3:3')
+          .set('x-api-key', options.apiKey)
+          .expect(200)
+          .expect('"3000"')
+        await request(app.callback())
+          .get('/account/wallet/bank/balance?denom=uoverride1')
+          .set('x-api-key', options.apiKey)
+          .expect(200)
+          .expect('"3000"')
+
+        await request(app.callback())
+          .get('/account/wallet/bank/balance?denom=uoverride2&block=1:1')
+          .set('x-api-key', options.apiKey)
+          .expect(400)
+          .expect('missing balance')
+        await request(app.callback())
+          .get('/account/wallet/bank/balance?denom=uoverride2&block=2:2')
+          .set('x-api-key', options.apiKey)
+          .expect(200)
+          .expect('"2000"')
+        await request(app.callback())
+          .get('/account/wallet/bank/balance?denom=uoverride2&block=3:3')
+          .set('x-api-key', options.apiKey)
+          .expect(200)
+          .expect('"3000"')
+        await request(app.callback())
+          .get('/account/wallet/bank/balance?denom=uoverride2')
+          .set('x-api-key', options.apiKey)
+          .expect(200)
+          .expect('"3000"')
+
+        await request(app.callback())
+          .get('/account/wallet/bank/balance?denom=usafe1&block=1:1')
+          .set('x-api-key', options.apiKey)
+          .expect(400)
+          .expect('missing balance')
+        await request(app.callback())
+          .get('/account/wallet/bank/balance?denom=usafe1&block=2:2')
+          .set('x-api-key', options.apiKey)
+          .expect(200)
+          .expect('"2000"')
+        await request(app.callback())
+          .get('/account/wallet/bank/balance?denom=usafe1&block=3:3')
+          .set('x-api-key', options.apiKey)
+          .expect(200)
+          .expect('"2000"')
+        await request(app.callback())
+          .get('/account/wallet/bank/balance?denom=usafe1')
+          .set('x-api-key', options.apiKey)
+          .expect(200)
+          .expect('"2000"')
+
+        await request(app.callback())
+          .get('/account/wallet/bank/balance?denom=usafe2&block=2:2')
+          .set('x-api-key', options.apiKey)
+          .expect(400)
+          .expect('missing balance')
+        await request(app.callback())
+          .get('/account/wallet/bank/balance?denom=usafe2&block=3:3')
+          .set('x-api-key', options.apiKey)
+          .expect(200)
+          .expect('"3000"')
+        await request(app.callback())
+          .get('/account/wallet/bank/balance?denom=usafe2')
+          .set('x-api-key', options.apiKey)
+          .expect(200)
+          .expect('"3000"')
+
+        await request(app.callback())
+          .get('/account/wallet/bank/balances')
+          .set('x-api-key', options.apiKey)
+          .expect(200)
+          .expect({
+            uoverride1: '3000',
+            uoverride2: '3000',
+            usafe1: '2000',
+            usafe2: '3000',
+          })
+      })
     })
 
     describe('no history', () => {
@@ -338,9 +481,9 @@ export const loadBankTests = (options: ComputerTestOptions) => {
             uagain: '4000',
           },
           denomUpdateBlockHeights: {
-            utest: 2,
-            uanother: 3,
-            uagain: 4,
+            utest: '2',
+            uanother: '3',
+            uagain: '4',
           },
           blockHeight: 4,
           blockTimeUnixMs: 4,
