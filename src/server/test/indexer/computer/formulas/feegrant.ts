@@ -857,103 +857,105 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
           })
         })
 
-      describe('tokenMovement', () => {
-        it('returns comprehensive token movement analytics', async () => {
-          const response = await request(app.callback())
-            .get('/a/feegrant/tokenMovement')
-            .set('x-api-key', options.apiKey)
-            .expect(200)
+        describe('tokenMovement', () => {
+          it('returns comprehensive token movement analytics', async () => {
+            const response = await request(app.callback())
+              .get('/a/feegrant/tokenMovement')
+              .set('x-api-key', options.apiKey)
+              .expect(200)
 
-          const data = response.body
-          expect(data.chainWideMovement).toBeDefined()
-          expect(data.treasuryMovement).toBeDefined()
-          expect(Array.isArray(data.dailyTrends)).toBe(true)
-          expect(typeof data.chainWideMovement.totalFeegrantVolume).toBe(
-            'string'
-          )
-          expect(typeof data.treasuryMovement.totalTreasuryVolume).toBe(
-            'string'
-          )
+            const data = response.body
+            expect(data.chainWideMovement).toBeDefined()
+            expect(data.treasuryMovement).toBeDefined()
+            expect(Array.isArray(data.dailyTrends)).toBe(true)
+            expect(typeof data.chainWideMovement.totalFeegrantVolume).toBe(
+              'string'
+            )
+            expect(typeof data.treasuryMovement.totalTreasuryVolume).toBe(
+              'string'
+            )
+          })
+
+          it('handles custom time window', async () => {
+            const timeWindow = 7 * 24 * 60 * 60 * 1000 // 7 days
+            await request(app.callback())
+              .get(`/a/feegrant/tokenMovement?timeWindow=${timeWindow}`)
+              .set('x-api-key', options.apiKey)
+              .expect(200)
+              .then((response) => {
+                const data = response.body
+                expect(data.chainWideMovement).toBeDefined()
+                expect(data.treasuryMovement).toBeDefined()
+              })
+          })
         })
 
-        it('handles custom time window', async () => {
-          const timeWindow = 7 * 24 * 60 * 60 * 1000 // 7 days
-          await request(app.callback())
-            .get(`/a/feegrant/tokenMovement?timeWindow=${timeWindow}`)
-            .set('x-api-key', options.apiKey)
-            .expect(200)
-            .then((response) => {
-              const data = response.body
-              expect(data.chainWideMovement).toBeDefined()
-              expect(data.treasuryMovement).toBeDefined()
-            })
-        })
-      })
+        describe('feegrantAllowancesSummary', () => {
+          it('returns comprehensive feegrant summary with addresses', async () => {
+            const response = await request(app.callback())
+              .get('/generic/_/feegrant/feegrantAllowancesSummary')
+              .set('x-api-key', options.apiKey)
+              .expect(200)
 
-      describe('feegrantAllowancesSummary', () => {
-        it('returns comprehensive feegrant summary with addresses', async () => {
-          const response = await request(app.callback())
-            .get('/generic/_/feegrant/feegrantAllowancesSummary')
-            .set('x-api-key', options.apiKey)
-            .expect(200)
+            const data = response.body
+            expect(typeof data.totalActiveGrants).toBe('number')
+            expect(typeof data.totalActiveGrantees).toBe('number')
+            expect(typeof data.totalActiveGranters).toBe('number')
+            expect(Array.isArray(data.granterAddresses)).toBe(true)
+            expect(Array.isArray(data.granteeAddresses)).toBe(true)
+            expect(data.totalActiveGrants).toBeGreaterThan(0)
+          })
 
-          const data = response.body
-          expect(typeof data.totalActiveGrants).toBe('number')
-          expect(typeof data.totalActiveGrantees).toBe('number')
-          expect(typeof data.totalActiveGranters).toBe('number')
-          expect(Array.isArray(data.granterAddresses)).toBe(true)
-          expect(Array.isArray(data.granteeAddresses)).toBe(true)
-          expect(data.totalActiveGrants).toBeGreaterThan(0)
-        })
+          it('handles empty database gracefully', async () => {
+            await FeegrantAllowance.destroy({ where: {} })
 
-        it('handles empty database gracefully', async () => {
-          await FeegrantAllowance.destroy({ where: {} })
-
-          await request(app.callback())
-            .get('/generic/_/feegrant/feegrantAllowancesSummary')
-            .set('x-api-key', options.apiKey)
-            .expect(200)
-            .then((response) => {
-              const data = response.body
-              expect(data.totalActiveGrants).toBe(0)
-              expect(data.granterAddresses).toEqual([])
-              expect(data.granteeAddresses).toEqual([])
-            })
-        })
-      })
-
-      describe('treasuryContractList', () => {
-        it('returns treasury addresses with performance metrics', async () => {
-          const response = await request(app.callback())
-            .get('/generic/_/feegrant/treasuryContractList')
-            .set('x-api-key', options.apiKey)
-            .expect(200)
-
-          const data = response.body
-          expect(Array.isArray(data.treasuryAddresses)).toBe(true)
-          expect(typeof data.treasuryCount).toBe('number')
-          expect(typeof data.lastUpdated).toBe('string')
-          expect(data.performanceMetrics).toBeDefined()
-          expect(typeof data.performanceMetrics.candidatesAnalyzed).toBe('number')
-          expect(data.performanceMetrics.processingOptimized).toBe(true)
+            await request(app.callback())
+              .get('/generic/_/feegrant/feegrantAllowancesSummary')
+              .set('x-api-key', options.apiKey)
+              .expect(200)
+              .then((response) => {
+                const data = response.body
+                expect(data.totalActiveGrants).toBe(0)
+                expect(data.granterAddresses).toEqual([])
+                expect(data.granteeAddresses).toEqual([])
+              })
+          })
         })
 
-        it('handles no treasury contracts', async () => {
-          // Remove all allowances to have no treasury candidates
-          await FeegrantAllowance.destroy({ where: {} })
+        describe('treasuryContractList', () => {
+          it('returns treasury addresses with performance metrics', async () => {
+            const response = await request(app.callback())
+              .get('/generic/_/feegrant/treasuryContractList')
+              .set('x-api-key', options.apiKey)
+              .expect(200)
 
-          await request(app.callback())
-            .get('/generic/_/feegrant/treasuryContractList')
-            .set('x-api-key', options.apiKey)
-            .expect(200)
-            .then((response) => {
-              const data = response.body
-              expect(data.treasuryAddresses).toEqual([])
-              expect(data.treasuryCount).toBe(0)
-              expect(data.performanceMetrics.candidatesAnalyzed).toBe(0)
-            })
+            const data = response.body
+            expect(Array.isArray(data.treasuryAddresses)).toBe(true)
+            expect(typeof data.treasuryCount).toBe('number')
+            expect(typeof data.lastUpdated).toBe('string')
+            expect(data.performanceMetrics).toBeDefined()
+            expect(typeof data.performanceMetrics.candidatesAnalyzed).toBe(
+              'number'
+            )
+            expect(data.performanceMetrics.processingOptimized).toBe(true)
+          })
+
+          it('handles no treasury contracts', async () => {
+            // Remove all allowances to have no treasury candidates
+            await FeegrantAllowance.destroy({ where: {} })
+
+            await request(app.callback())
+              .get('/generic/_/feegrant/treasuryContractList')
+              .set('x-api-key', options.apiKey)
+              .expect(200)
+              .then((response) => {
+                const data = response.body
+                expect(data.treasuryAddresses).toEqual([])
+                expect(data.treasuryCount).toBe(0)
+                expect(data.performanceMetrics.candidatesAnalyzed).toBe(0)
+              })
+          })
         })
-      })
       })
     })
 
@@ -1306,7 +1308,9 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
 
         it('returns empty object for contract with no balances', async () => {
           // Remove balance data
-          await BankStateEvent.destroy({ where: { address: 'xion1treasurytest' } })
+          await BankStateEvent.destroy({
+            where: { address: 'xion1treasurytest' },
+          })
 
           await request(app.callback())
             .get('/contract/xion1treasurytest/xion/treasury/balances')
@@ -1339,7 +1343,9 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
         })
 
         it('handles empty balance history gracefully', async () => {
-          await BankStateEvent.destroy({ where: { address: 'xion1treasurytest' } })
+          await BankStateEvent.destroy({
+            where: { address: 'xion1treasurytest' },
+          })
 
           await request(app.callback())
             .get('/contract/xion1treasurytest/xion/treasury/balanceHistory')
@@ -1375,29 +1381,39 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
         it('validates timeWindow parameter bounds in activeGrantees', async () => {
           // Test minimum boundary - actual default is used when invalid value provided
           await request(app.callback())
-            .get('/contract/xion1treasurytest/xion/treasury/activeGrantees?timeWindow=1')
+            .get(
+              '/contract/xion1treasurytest/xion/treasury/activeGrantees?timeWindow=1'
+            )
             .set('x-api-key', options.apiKey)
             .expect(200)
             .then((response) => {
               const data = response.body
-              expect(data.performanceMetrics.timeWindowDays).toBeGreaterThanOrEqual(7) // Should be clamped to minimum or default
+              expect(
+                data.performanceMetrics.timeWindowDays
+              ).toBeGreaterThanOrEqual(7) // Should be clamped to minimum or default
             })
 
           // Test maximum boundary
           await request(app.callback())
-            .get('/contract/xion1treasurytest/xion/treasury/activeGrantees?timeWindow=999')
+            .get(
+              '/contract/xion1treasurytest/xion/treasury/activeGrantees?timeWindow=999'
+            )
             .set('x-api-key', options.apiKey)
             .expect(200)
             .then((response) => {
               const data = response.body
-              expect(data.performanceMetrics.timeWindowDays).toBeLessThanOrEqual(90) // Should be clamped to maximum
+              expect(
+                data.performanceMetrics.timeWindowDays
+              ).toBeLessThanOrEqual(90) // Should be clamped to maximum
             })
         })
 
         it('validates granularity parameter in onboardingMetrics', async () => {
           // Valid granularity
           await request(app.callback())
-            .get('/contract/xion1treasurytest/xion/treasury/onboardingMetrics?granularity=weekly')
+            .get(
+              '/contract/xion1treasurytest/xion/treasury/onboardingMetrics?granularity=weekly'
+            )
             .set('x-api-key', options.apiKey)
             .expect(200)
             .then((response) => {
@@ -1407,7 +1423,9 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
 
           // Invalid granularity should default to 'daily'
           await request(app.callback())
-            .get('/contract/xion1treasurytest/xion/treasury/onboardingMetrics?granularity=invalid')
+            .get(
+              '/contract/xion1treasurytest/xion/treasury/onboardingMetrics?granularity=invalid'
+            )
             .set('x-api-key', options.apiKey)
             .expect(200)
             .then((response) => {
@@ -1418,26 +1436,38 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
 
         it('validates multiple parameters in treasuryHealth', async () => {
           await request(app.callback())
-            .get('/contract/xion1treasurytest/xion/treasury/treasuryHealth?activityWindow=1&burnRateWindow=1')
+            .get(
+              '/contract/xion1treasurytest/xion/treasury/treasuryHealth?activityWindow=1&burnRateWindow=1'
+            )
             .set('x-api-key', options.apiKey)
             .expect(200)
             .then((response) => {
               const data = response.body
-              expect(data.performanceMetrics.activityWindowDays).toBeGreaterThanOrEqual(3) // Should be clamped to minimum or default
-              expect(data.performanceMetrics.burnRateWindowDays).toBeGreaterThanOrEqual(7) // Should be clamped to minimum or default
+              expect(
+                data.performanceMetrics.activityWindowDays
+              ).toBeGreaterThanOrEqual(3) // Should be clamped to minimum or default
+              expect(
+                data.performanceMetrics.burnRateWindowDays
+              ).toBeGreaterThanOrEqual(7) // Should be clamped to minimum or default
             })
         })
 
         it('validates historicalTrends parameters', async () => {
           await request(app.callback())
-            .get('/generic/_/feegrant/historicalTrends?timeWindow=1&granularity=monthly&limit=10')
+            .get(
+              '/generic/_/feegrant/historicalTrends?timeWindow=1&granularity=monthly&limit=10'
+            )
             .set('x-api-key', options.apiKey)
             .expect(200)
             .then((response) => {
               const data = response.body
-              expect(data.performanceMetrics.timeWindowDays).toBeGreaterThanOrEqual(7) // Should be clamped to minimum or default
+              expect(
+                data.performanceMetrics.timeWindowDays
+              ).toBeGreaterThanOrEqual(7) // Should be clamped to minimum or default
               expect(data.performanceMetrics.granularity).toBe('monthly')
-              expect(data.performanceMetrics.dataPointsReturned).toBeLessThanOrEqual(100) // Should be reasonable limit
+              expect(
+                data.performanceMetrics.dataPointsReturned
+              ).toBeLessThanOrEqual(100) // Should be reasonable limit
             })
         })
       })
@@ -1470,7 +1500,9 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
         it('handles invalid parameter types gracefully', async () => {
           // Non-numeric timeWindow should default
           await request(app.callback())
-            .get('/contract/xion1treasurytest/xion/treasury/activeGrantees?timeWindow=invalid')
+            .get(
+              '/contract/xion1treasurytest/xion/treasury/activeGrantees?timeWindow=invalid'
+            )
             .set('x-api-key', options.apiKey)
             .expect(200)
             .then((response) => {
@@ -1486,7 +1518,7 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
             '/contract/xion1treasurytest/xion/treasury/granteeActivity',
             '/contract/xion1treasurytest/xion/treasury/usageMetrics',
             '/contract/xion1treasurytest/xion/treasury/onboardingMetrics',
-            '/contract/xion1treasurytest/xion/treasury/treasuryHealth'
+            '/contract/xion1treasurytest/xion/treasury/treasuryHealth',
           ]
 
           for (const endpoint of endpoints) {

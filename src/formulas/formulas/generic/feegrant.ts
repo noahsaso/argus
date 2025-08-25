@@ -1,4 +1,4 @@
-import { GenericFormula } from '@/types'
+import type { GenericFormula } from '@/types'
 
 export const totals: GenericFormula<{
   totalActiveGrants: number
@@ -11,17 +11,10 @@ export const totals: GenericFormula<{
   totalUnknownAllowances: number
 }> = {
   docs: {
-    description:
-      'Get comprehensive feegrant totals and statistics',
+    description: 'Get comprehensive feegrant totals and statistics',
     args: [],
   },
   compute: async ({ query }) => {
-    // Get all unique granter addresses using framework approach
-    const granterResults = await query(`
-      SELECT DISTINCT granter 
-      FROM "FeegrantAllowances"
-    `)
-
     // Get all latest allowances data in a single optimized query
     const allAllowancesData = await query(`
       SELECT DISTINCT ON (granter, grantee)
@@ -65,7 +58,7 @@ export const totals: GenericFormula<{
       (a: any) => a.parsedAllowanceType === 'AllowedMsgAllowance'
     ).length
     const totalUnknownAllowances = activeAllowances.filter(
-      (a: any) => a.parsedAllowanceType == null
+      (a: any) => a.parsedAllowanceType === null
     ).length
 
     return {
@@ -99,14 +92,6 @@ export const feegrantAllowancesSummary: GenericFormula<{
     args: [],
   },
   compute: async ({ query }) => {
-    // Get all unique granter addresses first
-    const granterResults = await query(`
-      SELECT DISTINCT granter 
-      FROM "FeegrantAllowances"
-    `)
-
-    const granterAddresses = granterResults.map((row: any) => row.granter)
-
     const allAllowances: any[] = []
     const granteeSet = new Set<string>()
     const granterSet = new Set<string>()
@@ -124,7 +109,7 @@ export const feegrantAllowancesSummary: GenericFormula<{
 
     allAllowances.push(...allAllowancesData)
 
-    // Process in memory 
+    // Process in memory
     allAllowancesData.forEach((allowance: any) => {
       if (allowance.active) {
         granteeSet.add(allowance.grantee)
@@ -149,7 +134,7 @@ export const feegrantAllowancesSummary: GenericFormula<{
       (a) => a.parsedAllowanceType === 'AllowedMsgAllowance'
     ).length
     const totalUnknownAllowances = activeAllowances.filter(
-      (a) => a.parsedAllowanceType == null
+      (a) => a.parsedAllowanceType === null
     ).length
 
     return {
@@ -195,7 +180,7 @@ export const treasuryContractList: GenericFormula<{
       // Parallel processing optimization - check all contracts concurrently
       const treasuryValidationPromises = granterResults.map(async (row) => {
         const address = String(row.granter)
-        
+
         try {
           const isTreasury = await contractMatchesCodeIdKeys(
             address,
@@ -211,7 +196,9 @@ export const treasuryContractList: GenericFormula<{
 
       // Wait for all validations to complete in parallel
       const validationResults = await Promise.all(treasuryValidationPromises)
-      const treasuryAddresses = validationResults.filter((address): address is string => address !== null)
+      const treasuryAddresses = validationResults.filter(
+        (address): address is string => address !== null
+      )
 
       return {
         treasuryAddresses,
@@ -253,14 +240,14 @@ export const amounts: GenericFormula<{
     // Query for amounts by token using specialized active+denom index
     const results = await query(`
       WITH latest_allowances AS (
-        SELECT DISTINCT ON (granter, grantee) 
-          "parsedAmount", 
+        SELECT DISTINCT ON (granter, grantee)
+          "parsedAmount",
           "parsedDenom"
-        FROM "FeegrantAllowances" 
+        FROM "FeegrantAllowances"
         WHERE active = true AND "parsedAmount" IS NOT NULL AND "parsedDenom" IS NOT NULL
         ORDER BY granter, grantee, "blockHeight" DESC
       )
-      SELECT 
+      SELECT
         "parsedDenom" as denom,
         SUM("parsedAmount"::bigint) as total,
         COUNT(*) as count
@@ -301,8 +288,7 @@ export const activity: GenericFormula<{
   activityRate: number
 }> = {
   docs: {
-    description:
-      'Get feegrant grantee activity statistics',
+    description: 'Get feegrant grantee activity statistics',
     args: [],
   },
   compute: async ({ query }) => {
@@ -310,8 +296,8 @@ export const activity: GenericFormula<{
 
     // Step 1: Get all active grantees using a single optimized query
     const activeGranteesData = await query(`
-      SELECT DISTINCT ON (granter, grantee) grantee 
-      FROM "FeegrantAllowances" 
+      SELECT DISTINCT ON (granter, grantee) grantee
+      FROM "FeegrantAllowances"
       WHERE active = true
       ORDER BY granter, grantee, "blockHeight" DESC
     `)
@@ -333,7 +319,7 @@ export const activity: GenericFormula<{
     const txActivityData = await query(
       `
       SELECT DISTINCT sender as address
-      FROM "WasmTxEvents" 
+      FROM "WasmTxEvents"
       WHERE "blockTimeUnixMs" >= $recentThreshold
         AND sender = ANY($activeGrantees)
     `,
@@ -346,7 +332,7 @@ export const activity: GenericFormula<{
     // Step 3: Check for recent balance activity (batch query for better performance)
     const balanceActivityData = await query(
       `
-      SELECT DISTINCT address 
+      SELECT DISTINCT address
       FROM "BankStateEvents"
       WHERE "blockTimeUnixMs" >= $recentThreshold
         AND address = ANY($activeGrantees)
@@ -408,22 +394,26 @@ export const treasuryAnalytics: GenericFormula<{
   }>
 }> = {
   docs: {
-    description:
-      'Get comprehensive treasury analytics',
+    description: 'Get comprehensive treasury analytics',
     args: [],
   },
-  compute: async ({ query, contractMatchesCodeIdKeys, getFeegrantAllowances, block }) => {
+  compute: async ({
+    query,
+    contractMatchesCodeIdKeys,
+    getFeegrantAllowances,
+    block,
+  }) => {
     // Step 1: Get potential treasury addresses using optimized approach
     // Use minimum thresholds to filter likely treasury contracts
     const candidatesQuery = await query(
       `
       WITH granter_candidates AS (
-        SELECT 
+        SELECT
           granter,
           COUNT(*) as "totalGrants",
           COUNT(*) FILTER (WHERE active = true) as "activeGrants",
           COUNT(DISTINCT grantee) as "granteeCount",
-          SUM(CASE WHEN active = true AND "parsedAmount" IS NOT NULL 
+          SUM(CASE WHEN active = true AND "parsedAmount" IS NOT NULL
               THEN "parsedAmount"::bigint ELSE 0 END) as "totalAllocated"
         FROM (
           SELECT DISTINCT ON (granter, grantee)
@@ -437,10 +427,10 @@ export const treasuryAnalytics: GenericFormula<{
         ORDER BY COUNT(*) DESC
         LIMIT 30
       )
-      SELECT 
+      SELECT
         granter as address,
         "totalGrants",
-        "activeGrants", 
+        "activeGrants",
         "granteeCount",
         "totalAllocated"
       FROM granter_candidates
@@ -452,26 +442,27 @@ export const treasuryAnalytics: GenericFormula<{
     // Step 2: Check for cached treasury addresses first, then validate in parallel
     const treasuryValidationPromises = candidatesQuery.map(async (row: any) => {
       const address = String(row.address)
-      
+
       try {
         const isTreasury = await contractMatchesCodeIdKeys(
           address,
           'xion',
           'treasury'
         )
-        
+
         if (!isTreasury) {
           return null
         }
 
         // Step 3: Get activity data efficiently for confirmed treasuries
-        const recentThreshold = block.timeUnixMs - BigInt(30 * 24 * 60 * 60 * 1000)
-        
+        const recentThreshold =
+          block.timeUnixMs - BigInt(30 * 24 * 60 * 60 * 1000)
+
         // Use framework function to get grantees
         const allowances = await getFeegrantAllowances(address, 'granted')
         const activeGranteeAddresses = (allowances || [])
-          .filter(a => a.active)
-          .map(a => a.grantee)
+          .filter((a) => a.active)
+          .map((a) => a.grantee)
 
         if (activeGranteeAddresses.length === 0) {
           return {
@@ -516,19 +507,21 @@ export const treasuryAnalytics: GenericFormula<{
 
     // Wait for all treasury validations to complete in parallel
     const validationResults = await Promise.all(treasuryValidationPromises)
-    const treasuryContracts = validationResults.filter((result): result is NonNullable<typeof result> => result !== null)
+    const treasuryContracts = validationResults.filter(
+      (result): result is NonNullable<typeof result> => result !== null
+    )
 
     // Step 4: Get overall statistics efficiently
     const [overallStats] = await query(
       `
       WITH latest_allowances AS (
-        SELECT DISTINCT ON (granter, grantee) 
+        SELECT DISTINCT ON (granter, grantee)
           granter, active
-        FROM "FeegrantAllowances" 
+        FROM "FeegrantAllowances"
         WHERE "blockHeight" <= $blockHeight
         ORDER BY granter, grantee, "blockHeight" DESC
       )
-      SELECT 
+      SELECT
         COUNT(*) as "totalGrants",
         COUNT(*) FILTER (WHERE active = true) as "activeGrants"
       FROM latest_allowances
@@ -566,7 +559,9 @@ export const treasuryAnalytics: GenericFormula<{
         granteeCount: treasury.granteeCount,
         activityRate:
           treasury.granteeCount > 0
-            ? Math.round((treasury.activeGrantees / treasury.granteeCount) * 10000) / 100
+            ? Math.round(
+                (treasury.activeGrantees / treasury.granteeCount) * 10000
+              ) / 100
             : 0,
       }))
 
@@ -609,23 +604,27 @@ export const historicalTrends: GenericFormula<{
   }
 }> = {
   docs: {
-    description: 'Get historical feegrant trends and growth analytics (optimized for performance)',
+    description:
+      'Get historical feegrant trends and growth analytics (optimized for performance)',
     args: [
       {
         name: 'timeWindow',
-        description: 'Time window in days for analysis (default: 90, min: 7, max: 365)',
+        description:
+          'Time window in days for analysis (default: 90, min: 7, max: 365)',
         required: false,
         schema: { type: 'number', minimum: 7, maximum: 365 },
       },
       {
         name: 'granularity',
-        description: 'Data granularity: daily, weekly, monthly (default: daily)',
+        description:
+          'Data granularity: daily, weekly, monthly (default: daily)',
         required: false,
         schema: { type: 'string', enum: ['daily', 'weekly', 'monthly'] },
       },
       {
         name: 'limit',
-        description: 'Maximum data points to return (default: 1000, min: 30, max: 2000)',
+        description:
+          'Maximum data points to return (default: 1000, min: 30, max: 2000)',
         required: false,
         schema: { type: 'number', minimum: 30, maximum: 2000 },
       },
@@ -637,23 +636,39 @@ export const historicalTrends: GenericFormula<{
       const { query, date } = env
 
       // Framework-standard parameter extraction and validation
-      const timeWindow = typeof (env.args as any).timeWindow === 'number' ? (env.args as any).timeWindow : 90
-      const granularity = typeof (env.args as any).granularity === 'string' ? (env.args as any).granularity : 'daily'
-      const limit = typeof (env.args as any).limit === 'number' ? (env.args as any).limit : 1000
+      const timeWindow =
+        typeof (env.args as any).timeWindow === 'number'
+          ? (env.args as any).timeWindow
+          : 90
+      const granularity =
+        typeof (env.args as any).granularity === 'string'
+          ? (env.args as any).granularity
+          : 'daily'
+      const limit =
+        typeof (env.args as any).limit === 'number'
+          ? (env.args as any).limit
+          : 1000
 
       // Parameter validation following framework standards
       const validatedTimeWindow = Math.min(Math.max(timeWindow, 7), 365)
-      const validatedGranularity = ['daily', 'weekly', 'monthly'].includes(granularity) ? granularity : 'daily'
+      const validatedGranularity = ['daily', 'weekly', 'monthly'].includes(
+        granularity
+      )
+        ? granularity
+        : 'daily'
       const validatedLimit = Math.min(Math.max(limit, 30), 2000)
 
       // Smart granularity mapping with optimized intervals
       const granularityConfig = {
         daily: { ms: 24 * 60 * 60 * 1000, format: 'day' },
         weekly: { ms: 7 * 24 * 60 * 60 * 1000, format: 'week' },
-        monthly: { ms: 30 * 24 * 60 * 60 * 1000, format: 'month' }
+        monthly: { ms: 30 * 24 * 60 * 60 * 1000, format: 'month' },
       }
 
-      const config = granularityConfig[validatedGranularity as keyof typeof granularityConfig]
+      const config =
+        granularityConfig[
+          validatedGranularity as keyof typeof granularityConfig
+        ]
       const timeWindowMs = validatedTimeWindow * 24 * 60 * 60 * 1000
       const windowStart = date.getTime() - timeWindowMs
 
@@ -682,7 +697,7 @@ export const historicalTrends: GenericFormula<{
       const timeSeriesData = await query(
         `
         WITH time_buckets AS (
-          SELECT 
+          SELECT
             date_trunc($granularity, to_timestamp("blockTimeUnixMs" / 1000)) as bucket_date,
             COUNT(*) as grants,
             COUNT(DISTINCT grantee) as grantees,
@@ -695,10 +710,10 @@ export const historicalTrends: GenericFormula<{
           ORDER BY bucket_date
           LIMIT $limit
         )
-        SELECT 
+        SELECT
           bucket_date,
           grants as "newGrants",
-          grantees as "newGrantees", 
+          grantees as "newGrantees",
           granters as "newGranters",
           revoked as "revokedGrants",
           net as "netGrants"
@@ -762,9 +777,18 @@ export const historicalTrends: GenericFormula<{
       }
 
       // Calculate growth metrics efficiently in memory
-      const totalNewGrants = formattedData.reduce((sum, d) => sum + d.newGrants, 0)
-      const totalNewGrantees = formattedData.reduce((sum, d) => sum + d.newGrantees, 0)
-      const totalNewGranters = formattedData.reduce((sum, d) => sum + d.newGranters, 0)
+      const totalNewGrants = formattedData.reduce(
+        (sum, d) => sum + d.newGrants,
+        0
+      )
+      const totalNewGrantees = formattedData.reduce(
+        (sum, d) => sum + d.newGrantees,
+        0
+      )
+      const totalNewGranters = formattedData.reduce(
+        (sum, d) => sum + d.newGranters,
+        0
+      )
 
       // Find peak granting day
       const peakDay = formattedData.reduce(
@@ -773,19 +797,19 @@ export const historicalTrends: GenericFormula<{
       )
 
       // Optimized baseline query with time constraints to improve performance
-      const baselineWindowStart = windowStart - (30 * 24 * 60 * 60 * 1000) // 30 days before analysis window
+      const baselineWindowStart = windowStart - 30 * 24 * 60 * 60 * 1000 // 30 days before analysis window
       const [baselineData] = await query(
         `
-        SELECT 
+        SELECT
           COUNT(DISTINCT granter || ':' || grantee) as "baselineGrants",
           COUNT(DISTINCT grantee) as "baselineGrantees",
           COUNT(DISTINCT granter) as "baselineGranters"
         FROM "FeegrantAllowances"
         WHERE "blockTimeUnixMs" >= $baselineStart AND "blockTimeUnixMs" < $windowStart
       `,
-        { 
+        {
           baselineStart: baselineWindowStart.toString(),
-          windowStart: windowStart.toString() 
+          windowStart: windowStart.toString(),
         }
       )
 
@@ -796,21 +820,31 @@ export const historicalTrends: GenericFormula<{
       }
 
       // Calculate growth rates with safe division
-      const grantsGrowthRate = Number(baseline.baselineGrants) > 0
-        ? (totalNewGrants / Number(baseline.baselineGrants)) * 100
-        : totalNewGrants > 0 ? 100 : 0
+      const grantsGrowthRate =
+        Number(baseline.baselineGrants) > 0
+          ? (totalNewGrants / Number(baseline.baselineGrants)) * 100
+          : totalNewGrants > 0
+          ? 100
+          : 0
 
-      const granteesGrowthRate = Number(baseline.baselineGrantees) > 0
-        ? (totalNewGrantees / Number(baseline.baselineGrantees)) * 100
-        : totalNewGrantees > 0 ? 100 : 0
+      const granteesGrowthRate =
+        Number(baseline.baselineGrantees) > 0
+          ? (totalNewGrantees / Number(baseline.baselineGrantees)) * 100
+          : totalNewGrantees > 0
+          ? 100
+          : 0
 
-      const grantersGrowthRate = Number(baseline.baselineGranters) > 0
-        ? (totalNewGranters / Number(baseline.baselineGranters)) * 100
-        : totalNewGranters > 0 ? 100 : 0
+      const grantersGrowthRate =
+        Number(baseline.baselineGranters) > 0
+          ? (totalNewGranters / Number(baseline.baselineGranters)) * 100
+          : totalNewGranters > 0
+          ? 100
+          : 0
 
       // Calculate average daily grants based on actual granularity
       const actualDays = validatedTimeWindow
-      const averageDailyGrants = actualDays > 0 ? totalNewGrants / actualDays : 0
+      const averageDailyGrants =
+        actualDays > 0 ? totalNewGrants / actualDays : 0
 
       return {
         timeSeriesData: formattedData,
@@ -853,7 +887,7 @@ export const historicalTrends: GenericFormula<{
   },
 }
 
-// NOTE: this one alone took significant neurons and money to make it more performant 
+// NOTE: this one alone took significant neurons and money to make it more performant
 export const tokenMovement: GenericFormula<{
   chainWideMovement: {
     totalFeegrantVolume: string
@@ -892,12 +926,12 @@ export const tokenMovement: GenericFormula<{
   }
 }> = {
   docs: {
-    description:
-      'Get comprehensive token movement analytics.',
+    description: 'Get comprehensive token movement analytics.',
     args: [
       {
         name: 'limit',
-        description: 'Maximum number of grantees to analyze (default: 1000, min: 100, max: 5000)',
+        description:
+          'Maximum number of grantees to analyze (default: 1000, min: 100, max: 5000)',
         required: false,
         schema: { type: 'number', minimum: 100, maximum: 5000 },
       },
@@ -912,11 +946,17 @@ export const tokenMovement: GenericFormula<{
   compute: async (env) => {
     try {
       const { query, contractMatchesCodeIdKeys } = env
-      
+
       // Fix parameter extraction - use framework standard args approach
-      const limit = typeof (env.args as any).limit === 'number' ? (env.args as any).limit : 1000
-      const timeWindow = typeof (env.args as any).timeWindow === 'number' ? (env.args as any).timeWindow : 30
-      
+      const limit =
+        typeof (env.args as any).limit === 'number'
+          ? (env.args as any).limit
+          : 1000
+      const timeWindow =
+        typeof (env.args as any).timeWindow === 'number'
+          ? (env.args as any).timeWindow
+          : 30
+
       // Parameter validation following framework standards
       const validatedLimit = Math.min(Math.max(limit, 100), 5000)
       const validatedTimeWindow = Math.min(Math.max(timeWindow, 1), 90)
@@ -944,7 +984,7 @@ export const tokenMovement: GenericFormula<{
         query(
           `
           SELECT DISTINCT grantee
-          FROM "FeegrantAllowances" 
+          FROM "FeegrantAllowances"
           WHERE active = true
           ORDER BY RANDOM()
           LIMIT $limit
@@ -960,11 +1000,11 @@ export const tokenMovement: GenericFormula<{
       ])
       const granteeAddresses = Array.from(allSampledGrantees)
 
-    // Step 2: Simplified chain-wide movement analysis (replace expensive window functions)
-    const chainWideData = await query(
-      `
+      // Step 2: Simplified chain-wide movement analysis (replace expensive window functions)
+      const chainWideData = await query(
+        `
       WITH denom_aggregates AS (
-        SELECT 
+        SELECT
           bse.denom,
           COUNT(*) as "transactionCount",
           -- Simple volume calculation using SUM of absolute balance changes
@@ -974,52 +1014,52 @@ export const tokenMovement: GenericFormula<{
           AND bse."blockTimeUnixMs" >= $windowStart
         GROUP BY bse.denom
       )
-      SELECT 
+      SELECT
         denom,
         "totalVolume",
         "transactionCount",
-        CASE 
-          WHEN "transactionCount" > 0 
+        CASE
+          WHEN "transactionCount" > 0
           THEN "totalVolume" / "transactionCount"
-          ELSE 0 
+          ELSE 0
         END as "averageValue"
       FROM denom_aggregates
       ORDER BY "totalVolume" DESC
     `,
-      {
-        granteeAddresses,
-        windowStart: windowStart.toString(),
-      }
-    )
+        {
+          granteeAddresses,
+          windowStart: windowStart.toString(),
+        }
+      )
 
-    const topTokensByVolume = chainWideData.map((row: any) => ({
-      denom: row.denom,
-      volume: row.totalVolume?.toString() || '0',
-      transactionCount: Number(row.transactionCount),
-      averageValue: Math.floor(Number(row.averageValue || 0)).toString(),
-    }))
+      const topTokensByVolume = chainWideData.map((row: any) => ({
+        denom: row.denom,
+        volume: row.totalVolume?.toString() || '0',
+        transactionCount: Number(row.transactionCount),
+        averageValue: Math.floor(Number(row.averageValue || 0)).toString(),
+      }))
 
-    const totalFeegrantVolume = topTokensByVolume
-      .reduce((sum, token) => sum + BigInt(token.volume), BigInt(0))
-      .toString()
+      const totalFeegrantVolume = topTokensByVolume
+        .reduce((sum, token) => sum + BigInt(token.volume), BigInt(0))
+        .toString()
 
-    const totalFeegrantTransactions = topTokensByVolume.reduce(
-      (sum, token) => sum + token.transactionCount,
-      0
-    )
+      const totalFeegrantTransactions = topTokensByVolume.reduce(
+        (sum, token) => sum + token.transactionCount,
+        0
+      )
 
-    const averageTransactionValue =
-      totalFeegrantTransactions > 0
-        ? (
-            BigInt(totalFeegrantVolume) / BigInt(totalFeegrantTransactions)
-          ).toString()
-        : '0'
+      const averageTransactionValue =
+        totalFeegrantTransactions > 0
+          ? (
+              BigInt(totalFeegrantVolume) / BigInt(totalFeegrantTransactions)
+            ).toString()
+          : '0'
 
-    // Step 3: Simplified treasury analysis with broken down queries
-    // First get treasury candidates using DISTINCT ON pattern
-    const treasuryCandidatesData = await query(
-      `
-      SELECT 
+      // Step 3: Simplified treasury analysis with broken down queries
+      // First get treasury candidates using DISTINCT ON pattern
+      const treasuryCandidatesData = await query(
+        `
+      SELECT
         fa.granter,
         COUNT(DISTINCT fa.grantee) as "granteeCount",
         COUNT(*) as "grantCount"
@@ -1030,116 +1070,126 @@ export const tokenMovement: GenericFormula<{
       ORDER BY COUNT(*) DESC
       LIMIT 10
     `
-    )
+      )
 
-    // Then get treasury movement data separately for better performance
-    const treasuryMovementPromises = treasuryCandidatesData.map(async (candidate: any) => {
-      const granteeResult = await query(
-        `
+      // Then get treasury movement data separately for better performance
+      const treasuryMovementPromises = treasuryCandidatesData.map(
+        async (candidate: any) => {
+          const granteeResult = await query(
+            `
         SELECT DISTINCT grantee
         FROM "FeegrantAllowances"
         WHERE granter = $granter AND active = true
       `,
-        { granter: candidate.granter }
-      )
+            { granter: candidate.granter }
+          )
 
-      const treasuryGranteeAddresses = granteeResult.map((row: any) => row.grantee)
-      
-      if (treasuryGranteeAddresses.length === 0) {
-        return {
-          treasury: candidate.granter,
-          granteeCount: Number(candidate.granteeCount),
-          totalVolume: '0',
-          transactionCount: 0,
-        }
-      }
+          const treasuryGranteeAddresses = granteeResult.map(
+            (row: any) => row.grantee
+          )
 
-      // Simple volume calculation for treasury grantees
-      const [movementResult] = await query(
-        `
-        SELECT 
+          if (treasuryGranteeAddresses.length === 0) {
+            return {
+              treasury: candidate.granter,
+              granteeCount: Number(candidate.granteeCount),
+              totalVolume: '0',
+              transactionCount: 0,
+            }
+          }
+
+          // Simple volume calculation for treasury grantees
+          const [movementResult] = await query(
+            `
+        SELECT
           COUNT(*) as "transactionCount",
           SUM(ABS(balance::bigint)) as "totalVolume"
         FROM "BankStateEvents"
         WHERE address = ANY($granteeAddresses)
           AND "blockTimeUnixMs" >= $windowStart
       `,
-        {
-          granteeAddresses: treasuryGranteeAddresses,
-          windowStart: windowStart.toString(),
+            {
+              granteeAddresses: treasuryGranteeAddresses,
+              windowStart: windowStart.toString(),
+            }
+          )
+
+          return {
+            treasury: candidate.granter,
+            granteeCount: Number(candidate.granteeCount),
+            totalVolume: movementResult?.totalVolume?.toString() || '0',
+            transactionCount: Number(movementResult?.transactionCount || 0),
+          }
         }
       )
 
-      return {
-        treasury: candidate.granter,
-        granteeCount: Number(candidate.granteeCount),
-        totalVolume: movementResult?.totalVolume?.toString() || '0',
-        transactionCount: Number(movementResult?.transactionCount || 0),
-      }
-    })
+      // Wait for all treasury movement calculations in parallel
+      const treasuryCandidatesWithMovement = await Promise.all(
+        treasuryMovementPromises
+      )
 
-    // Wait for all treasury movement calculations in parallel
-    const treasuryCandidatesWithMovement = await Promise.all(treasuryMovementPromises)
+      // Step 4: Parallel treasury validation using Promise.all() for better performance
+      const treasuryValidationPromises = treasuryCandidatesWithMovement.map(
+        async (candidate) => {
+          const address = String(candidate.treasury)
 
-    // Step 4: Parallel treasury validation using Promise.all() for better performance
-    const treasuryValidationPromises = treasuryCandidatesWithMovement.map(async (candidate) => {
-      const address = String(candidate.treasury)
-      
-      try {
-        const isTreasury = await contractMatchesCodeIdKeys(
-          address,
-          'xion',
-          'treasury'
-        )
-        
-        if (!isTreasury) {
-          return null
+          try {
+            const isTreasury = await contractMatchesCodeIdKeys(
+              address,
+              'xion',
+              'treasury'
+            )
+
+            if (!isTreasury) {
+              return null
+            }
+
+            const volume = candidate.totalVolume
+            const transactionCount = candidate.transactionCount
+
+            return {
+              address,
+              volume,
+              transactionCount,
+              averageValue:
+                transactionCount > 0
+                  ? (BigInt(volume) / BigInt(transactionCount)).toString()
+                  : '0',
+              granteeCount: candidate.granteeCount,
+            }
+          } catch (error) {
+            console.warn(`Error validating treasury ${address}:`, error)
+            return null
+          }
         }
+      )
 
-        const volume = candidate.totalVolume
-        const transactionCount = candidate.transactionCount
-        
-        return {
-          address,
-          volume,
-          transactionCount,
-          averageValue:
-            transactionCount > 0
-              ? (BigInt(volume) / BigInt(transactionCount)).toString()
-              : '0',
-          granteeCount: candidate.granteeCount,
-        }
-      } catch (error) {
-        console.warn(`Error validating treasury ${address}:`, error)
-        return null
-      }
-    })
+      // Wait for all treasury validations in parallel
+      const validationResults = await Promise.all(treasuryValidationPromises)
+      const topTreasuriesByVolume = validationResults.filter(
+        (result): result is NonNullable<typeof result> => result !== null
+      )
 
-    // Wait for all treasury validations in parallel
-    const validationResults = await Promise.all(treasuryValidationPromises)
-    const topTreasuriesByVolume = validationResults.filter((result): result is NonNullable<typeof result> => result !== null)
+      const totalTreasuryVolume = topTreasuriesByVolume
+        .reduce((sum, t) => sum + BigInt(t.volume), BigInt(0))
+        .toString()
 
-    const totalTreasuryVolume = topTreasuriesByVolume
-      .reduce((sum, t) => sum + BigInt(t.volume), BigInt(0))
-      .toString()
+      const totalTreasuryTransactions = topTreasuriesByVolume.reduce(
+        (sum, t) => sum + t.transactionCount,
+        0
+      )
 
-    const totalTreasuryTransactions = topTreasuriesByVolume.reduce(
-      (sum, t) => sum + t.transactionCount,
-      0
-    )
+      const treasuryMarketShare =
+        BigInt(totalFeegrantVolume) > 0n
+          ? Number(
+              (BigInt(totalTreasuryVolume) * BigInt(10000)) /
+                BigInt(totalFeegrantVolume)
+            ) / 100
+          : 0
 
-    const treasuryMarketShare =
-      BigInt(totalFeegrantVolume) > 0n
-        ? Number(
-            (BigInt(totalTreasuryVolume) * BigInt(10000)) /
-              BigInt(totalFeegrantVolume)
-          ) / 100
-        : 0
-
-    // Step 5: Simplified daily trends using proven DISTINCT ON patterns
-    const dailyTrends = await query(
-      `
-      SELECT 
+      // Step 5: Simplified daily trends using proven DISTINCT ON patterns
+      const dailyTrends = await query(
+        `
+      SELECT
         date_trunc('day', to_timestamp("blockTimeUnixMs" / 1000))::date as day,
         COUNT(*) as "transactionCount",
         SUM(ABS(balance::bigint)) as "totalVolume"
@@ -1149,19 +1199,19 @@ export const tokenMovement: GenericFormula<{
       GROUP BY date_trunc('day', to_timestamp("blockTimeUnixMs" / 1000))::date
       ORDER BY day
     `,
-      {
-        granteeAddresses,
-        windowStart: windowStart.toString(),
-      }
-    )
+        {
+          granteeAddresses,
+          windowStart: windowStart.toString(),
+        }
+      )
 
-    const formattedDailyTrends = dailyTrends.map((row: any) => ({
-      date: row.day,
-      totalVolume: row.totalVolume?.toString() || '0',
-      transactionCount: Number(row.transactionCount),
-      treasuryVolume: '0', // Simplified for performance
-      treasuryTransactions: 0,
-    }))
+      const formattedDailyTrends = dailyTrends.map((row: any) => ({
+        date: row.day,
+        totalVolume: row.totalVolume?.toString() || '0',
+        transactionCount: Number(row.transactionCount),
+        treasuryVolume: '0', // Simplified for performance
+        treasuryTransactions: 0,
+      }))
 
       return {
         chainWideMovement: {

@@ -227,11 +227,13 @@ export const activeGrantees: ContractFormula<{
     codeIdsKeys: ['xion', 'treasury'],
   },
   docs: {
-    description: 'Get all active grantees for this treasury contract (optimized with configurable parameters)',
+    description:
+      'Get all active grantees for this treasury contract (optimized with configurable parameters)',
     args: [
       {
         name: 'timeWindow',
-        description: 'Time window in days for activity analysis (default: 30, min: 7, max: 90)',
+        description:
+          'Time window in days for activity analysis (default: 30, min: 7, max: 90)',
         required: false,
         schema: { type: 'number', minimum: 7, maximum: 90 },
       },
@@ -245,7 +247,10 @@ export const activeGrantees: ContractFormula<{
       await validateTreasuryContract(env)
 
       // Framework-standard parameter extraction and validation
-      const timeWindow = typeof (env.args as any).timeWindow === 'number' ? (env.args as any).timeWindow : 30
+      const timeWindow =
+        typeof (env.args as any).timeWindow === 'number'
+          ? (env.args as any).timeWindow
+          : 30
       const validatedTimeWindow = Math.min(Math.max(timeWindow, 7), 90)
 
       // Get all active allowances granted by this treasury using framework method
@@ -264,7 +269,8 @@ export const activeGrantees: ContractFormula<{
       }
 
       // Use configurable time window with framework block filtering
-      const timeWindowMs = block.timeUnixMs - BigInt(validatedTimeWindow * 24 * 60 * 60 * 1000)
+      const timeWindowMs =
+        block.timeUnixMs - BigInt(validatedTimeWindow * 24 * 60 * 60 * 1000)
       const granteeAddresses = allowances.map((a) => a.grantee)
 
       // Get recent activity using blockHeight index optimization
@@ -305,7 +311,9 @@ export const activeGrantees: ContractFormula<{
 
       return {
         count: grantees.length,
-        grantees: grantees.sort((a, b) => b.grantedAt.localeCompare(a.grantedAt)),
+        grantees: grantees.sort((a, b) =>
+          b.grantedAt.localeCompare(a.grantedAt)
+        ),
         performanceMetrics: {
           timeWindowDays: validatedTimeWindow,
           processingOptimized: true,
@@ -345,11 +353,13 @@ export const granteeActivity: ContractFormula<{
     codeIdsKeys: ['xion', 'treasury'],
   },
   docs: {
-    description: 'Get grantee activity statistics for this treasury (optimized with configurable parameters)',
+    description:
+      'Get grantee activity statistics for this treasury (optimized with configurable parameters)',
     args: [
       {
         name: 'timeWindow',
-        description: 'Time window in days for activity analysis (default: 7, min: 1, max: 90)',
+        description:
+          'Time window in days for activity analysis (default: 7, min: 1, max: 90)',
         required: false,
         schema: { type: 'number', minimum: 1, maximum: 90 },
       },
@@ -363,11 +373,15 @@ export const granteeActivity: ContractFormula<{
       await validateTreasuryContract(env)
 
       // Framework-standard parameter extraction and validation
-      const timeWindow = typeof (env.args as any).timeWindow === 'number' ? (env.args as any).timeWindow : 7
+      const timeWindow =
+        typeof (env.args as any).timeWindow === 'number'
+          ? (env.args as any).timeWindow
+          : 7
       const validatedTimeWindow = Math.min(Math.max(timeWindow, 1), 90)
 
       // Use configurable time window with framework block filtering
-      const timeWindowMs = block.timeUnixMs - BigInt(validatedTimeWindow * 24 * 60 * 60 * 1000)
+      const timeWindowMs =
+        block.timeUnixMs - BigInt(validatedTimeWindow * 24 * 60 * 60 * 1000)
 
       // Get all active grantees using framework method
       const allowances =
@@ -499,11 +513,13 @@ export const usageMetrics: ContractFormula<{
     codeIdsKeys: ['xion', 'treasury'],
   },
   docs: {
-    description: 'Get treasury usage metrics and efficiency statistics (optimized with configurable parameters)',
+    description:
+      'Get treasury usage metrics and efficiency statistics (optimized with configurable parameters)',
     args: [
       {
         name: 'timeWindow',
-        description: 'Time window in days for activity scoring (default: 30, min: 7, max: 90)',
+        description:
+          'Time window in days for activity scoring (default: 30, min: 7, max: 90)',
         required: false,
         schema: { type: 'number', minimum: 7, maximum: 90 },
       },
@@ -517,11 +533,15 @@ export const usageMetrics: ContractFormula<{
       await validateTreasuryContract(env)
 
       // Framework-standard parameter extraction and validation
-      const timeWindow = typeof (env.args as any).timeWindow === 'number' ? (env.args as any).timeWindow : 30
+      const timeWindow =
+        typeof (env.args as any).timeWindow === 'number'
+          ? (env.args as any).timeWindow
+          : 30
       const validatedTimeWindow = Math.min(Math.max(timeWindow, 7), 90)
 
       // Use configurable time window with framework block filtering
-      const timeWindowMs = block.timeUnixMs - BigInt(validatedTimeWindow * 24 * 60 * 60 * 1000)
+      const timeWindowMs =
+        block.timeUnixMs - BigInt(validatedTimeWindow * 24 * 60 * 60 * 1000)
 
       // Get allowances using framework method for better performance
       const allowances =
@@ -671,17 +691,20 @@ export const onboardingMetrics: ContractFormula<{
     codeIdsKeys: ['xion', 'treasury'],
   },
   docs: {
-    description: 'Get treasury onboarding metrics and growth statistics (optimized with configurable parameters)',
+    description:
+      'Get treasury onboarding metrics and growth statistics (optimized with configurable parameters)',
     args: [
       {
         name: 'timeWindow',
-        description: 'Time window in days for analysis (default: 30, min: 7, max: 365)',
+        description:
+          'Time window in days for analysis (default: 30, min: 7, max: 365)',
         required: false,
         schema: { type: 'number', minimum: 7, maximum: 365 },
       },
       {
         name: 'granularity',
-        description: 'Data granularity: daily, weekly, monthly (default: daily)',
+        description:
+          'Data granularity: daily, weekly, monthly (default: daily)',
         required: false,
         schema: { type: 'string', enum: ['daily', 'weekly', 'monthly'] },
       },
@@ -695,21 +718,34 @@ export const onboardingMetrics: ContractFormula<{
       await validateTreasuryContract(env)
 
       // Framework-standard parameter extraction and validation
-      const timeWindow = typeof (env.args as any).timeWindow === 'number' ? (env.args as any).timeWindow : 30
-      const granularity = typeof (env.args as any).granularity === 'string' ? (env.args as any).granularity : 'daily'
+      const timeWindow =
+        typeof (env.args as any).timeWindow === 'number'
+          ? (env.args as any).timeWindow
+          : 30
+      const granularity =
+        typeof (env.args as any).granularity === 'string'
+          ? (env.args as any).granularity
+          : 'daily'
 
       // Parameter validation following framework standards
       const validatedTimeWindow = Math.min(Math.max(timeWindow, 7), 365)
-      const validatedGranularity = ['daily', 'weekly', 'monthly'].includes(granularity) ? granularity : 'daily'
+      const validatedGranularity = ['daily', 'weekly', 'monthly'].includes(
+        granularity
+      )
+        ? granularity
+        : 'daily'
 
       // Smart granularity mapping with optimized intervals
       const granularityConfig = {
         daily: { ms: 24 * 60 * 60 * 1000 },
         weekly: { ms: 7 * 24 * 60 * 60 * 1000 },
-        monthly: { ms: 30 * 24 * 60 * 60 * 1000 }
+        monthly: { ms: 30 * 24 * 60 * 60 * 1000 },
       }
 
-      const config = granularityConfig[validatedGranularity as keyof typeof granularityConfig]
+      const config =
+        granularityConfig[
+          validatedGranularity as keyof typeof granularityConfig
+        ]
       const timeWindowMs = validatedTimeWindow * 24 * 60 * 60 * 1000
       const windowStart = date.getTime() - timeWindowMs
 
@@ -785,14 +821,18 @@ export const onboardingMetrics: ContractFormula<{
 
       // Calculate growth rate with safe division
       const growthRate =
-        previousTotal > 0 ? (newGrantees / previousTotal) * 100 : newGrantees > 0 ? 100 : 0
+        previousTotal > 0
+          ? (newGrantees / previousTotal) * 100
+          : newGrantees > 0
+          ? 100
+          : 0
 
       // Calculate cumulative data in memory (more efficient than SQL window functions)
       let cumulativeGrantees = 0
       const onboardingTrend = onboardingData.map((row: any) => {
         const newGranteesCount = Number(row.newGrantees)
         cumulativeGrantees += newGranteesCount
-        
+
         const bucketStart = windowStart + Number(row.bucket) * config.ms
         return {
           date: new Date(bucketStart).toISOString().split('T')[0],
@@ -855,17 +895,20 @@ export const treasuryHealth: ContractFormula<{
   }
 }> = {
   docs: {
-    description: 'Get comprehensive treasury health assessment (optimized with configurable parameters)',
+    description:
+      'Get comprehensive treasury health assessment (optimized with configurable parameters)',
     args: [
       {
         name: 'activityWindow',
-        description: 'Time window in days for activity analysis (default: 7, min: 3, max: 30)',
+        description:
+          'Time window in days for activity analysis (default: 7, min: 3, max: 30)',
         required: false,
         schema: { type: 'number', minimum: 3, maximum: 30 },
       },
       {
         name: 'burnRateWindow',
-        description: 'Time window in days for burn rate calculation (default: 30, min: 7, max: 90)',
+        description:
+          'Time window in days for burn rate calculation (default: 30, min: 7, max: 90)',
         required: false,
         schema: { type: 'number', minimum: 7, maximum: 90 },
       },
@@ -879,8 +922,14 @@ export const treasuryHealth: ContractFormula<{
       await validateTreasuryContract(env)
 
       // Framework-standard parameter extraction and validation
-      const activityWindow = typeof (env.args as any).activityWindow === 'number' ? (env.args as any).activityWindow : 7
-      const burnRateWindow = typeof (env.args as any).burnRateWindow === 'number' ? (env.args as any).burnRateWindow : 30
+      const activityWindow =
+        typeof (env.args as any).activityWindow === 'number'
+          ? (env.args as any).activityWindow
+          : 7
+      const burnRateWindow =
+        typeof (env.args as any).burnRateWindow === 'number'
+          ? (env.args as any).burnRateWindow
+          : 30
 
       // Parameter validation following framework standards
       const validatedActivityWindow = Math.min(Math.max(activityWindow, 3), 30)
@@ -1056,7 +1105,8 @@ export const treasuryHealth: ContractFormula<{
         alerts.push({
           type: 'info',
           message: 'Insufficient burn rate data for accurate runway estimation',
-          recommendation: 'Monitor treasury over a longer period for better insights',
+          recommendation:
+            'Monitor treasury over a longer period for better insights',
         })
       }
 
