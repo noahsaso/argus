@@ -174,8 +174,24 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
           : [],
         // Custom upsert logic to only update when blockHeight is newer
         (async () => {
+          // Get latest event for each address/denom. The bulk insert cannot
+          // affect the same row twice, and there may be duplicates in the same
+          // block.
+          const deduplicatedEvents = Object.values(
+            events.reduce((acc, event) => {
+              const key = `${event.address}:${event.denom}`
+              if (
+                !acc[key] ||
+                BigInt(event.blockHeight) > BigInt(acc[key].blockHeight)
+              ) {
+                acc[key] = event
+              }
+              return acc
+            }, {} as Record<string, ParsedBankStateEvent>)
+          )
+
           // Build values for bulk insert with timestamps
-          const valueStrings = events
+          const valueStrings = deduplicatedEvents
             .map(
               (_, index) =>
                 `($${index * 6 + 1}, $${index * 6 + 2}, $${index * 6 + 3}, $${
@@ -185,7 +201,7 @@ export const bank: HandlerMaker<ParsedBankStateEvent> = async ({
             .join(', ')
 
           // Flatten all event values for parameterized query
-          const values = events.flatMap((event) => [
+          const values = deduplicatedEvents.flatMap((event) => [
             event.address,
             event.denom,
             event.balance,
