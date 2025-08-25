@@ -16,7 +16,6 @@ import {
   AccountWebhookCodeIdSet,
   AccountWebhookEvent,
   AccountWebhookEventAttempt,
-  BankBalance,
   BankDenomBalance,
   BankStateEvent,
   Block,
@@ -50,7 +49,6 @@ type LoadDbOptions = {
 const getModelsForType = (type: DbType): SequelizeOptions['models'] =>
   type === DbType.Data
     ? [
-        BankBalance,
         BankDenomBalance,
         BankStateEvent,
         Block,
