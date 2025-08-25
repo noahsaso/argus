@@ -1,218 +1,289 @@
-# Feegrant Module Implementation
+# Feegrant API Endpoints
 
-This document describes the complete implementation of the feegrant module for
-the Argus blockchain indexer, providing comprehensive tracking of Cosmos SDK
-feegrant allowances with full historical data and formula integration.
+This document provides a comprehensive guide to all feegrant endpoints available in the Argus API, including their parameters and usage examples.
 
-## Overview
+## Generic Feegrant Endpoints
 
-The feegrant module tracks Cosmos SDK feegrant module state changes, monitoring
-when fee allowances are granted, updated, revoked, or expire. It provides both
-raw data access and convenient formula functions for querying allowance
-relationships with full historical tracking.
+Generic endpoints available at `/api/generic/_/feegrant/[endpoint]`
 
-## Implementation Components
+### `/totals`
+Get aggregate totals for feegrant allowances.
 
-### 1. Database Model: `FeegrantAllowance`
+**Parameters:**
+- `limit` (optional): Maximum number of results to return
 
-**File**: `src/db/models/FeegrantAllowance.ts`
+**Response:** Summary statistics of feegrant allowances
 
-The main model that stores feegrant allowance relationships with full historical
-tracking:
+### `/feegrantAllowancesSummary`
+Enhanced totals with detailed address information and allowance summaries.
 
-- **Primary Key**: Composite key of `(granter, grantee, blockHeight)` for
-  historical tracking
-- **Fields**:
-  - `granter`: Address that granted the allowance
-  - `grantee`: Address that received the allowance
-  - `blockHeight`: Block height when this event occurred
-  - `blockTimeUnixMs`: Block timestamp in Unix milliseconds
-  - `blockTimestamp`: Block timestamp as Date object
-  - `allowanceData`: Raw protobuf data of the allowance (base64 encoded)
-  - `allowanceType`: Parsed allowance type (nullable, for future enhancement)
-  - `active`: Boolean indicating if the allowance is currently active
+**Parameters:**
+- `limit` (optional): Maximum number of results to return
 
-**Key Methods**:
+**Response:** Detailed summary including granter/grantee addresses and allowance counts
 
-- `getPreviousEvent()`: Get the previous allowance event for this
-  granter-grantee pair
-- `dependentKey`: Generate cache key for this allowance
-- `getWhereClauseForDependentKeys()`: Static method for efficient dependent key
-  queries
+### `/treasuryContractList`
+Get list of treasury contracts with feegrant capabilities.
 
-### 2. Tracer Handler: `feegrant`
+**Parameters:**
+- None
 
-**File**: `src/tracer/handlers/feegrant.ts`
+**Response:** List of treasury contract addresses and their metadata
 
-The handler that processes blockchain state changes with historical tracking:
+### `/amounts`
+Get allowance amounts and spending data.
 
-- **Store Name**: `feegrant`
-- **Key Prefix**: `0x00` (FeeAllowanceKeyPrefix)
-- **Key Format**: `0x00 || len(granter) || granter || len(grantee) || grantee`
-- **Operations**:
-  - `write`: Creates a new allowance record (sets `active: true`)
-  - `delete`: Creates a revocation record (sets `active: false`)
+**Parameters:**
+- `limit` (optional): Maximum number of results to return
 
-### 3. Formula Environment Functions
+**Response:** Allowance amounts and usage statistics
 
-**File**: `src/formulas/env.ts`
+### `/activity`
+Get feegrant activity and usage patterns.
 
-Three convenient functions available in all formulas:
+**Parameters:**
+- `limit` (optional): Maximum number of results to return
 
-#### `getFeegrantAllowance(granter: string, grantee: string)`
+**Response:** Activity metrics and usage patterns
 
-Get the most recent allowance between two addresses.
+### `/treasuryAnalytics`
+Comprehensive analytics for treasury feegrant usage.
 
-```typescript
-const allowance = await env.getFeegrantAllowance(
-  'xion1granter...',
-  'xion1grantee...'
-)
-if (allowance?.active) {
-  console.log(`Allowance granted at block ${allowance.blockHeight}`)
-  console.log(`Allowance type: ${allowance.allowanceType}`)
-}
-```
+**Parameters:**
+- `timeWindow` (optional): Time window for analysis (default: 30 days)
+- `granularity` (optional): Data granularity level
 
-#### `getFeegrantAllowances(address: string, type?: 'granted' | 'received')`
+**Response:** Detailed treasury analytics including spending patterns and efficiency metrics
 
-Get all active allowances for an address (defaults to 'granted').
+### `/historicalTrends`
+Historical trend analysis of feegrant usage.
 
-```typescript
-// Get all allowances granted by an address
-const granted = await env.getFeegrantAllowances('xion1granter...', 'granted')
+**Parameters:**
+- `timeWindow` (optional): Time window for analysis (default: 30 days)
+- `startTime` (optional): Start timestamp for analysis
+- `endTime` (optional): End timestamp for analysis
 
-// Get all allowances received by an address
-const received = await env.getFeegrantAllowances('xion1grantee...', 'received')
+**Response:** Historical trends and pattern analysis
 
-// Default behavior (granted)
-const defaultGranted = await env.getFeegrantAllowances('xion1granter...')
-```
+### `/tokenMovement`
+Token movement analytics for feegrant allowances.
 
-#### `hasFeegrantAllowance(granter: string, grantee: string)`
+**Parameters:**
+- `timeWindow` (optional): Time window for analysis (default: 30 days)
+- `startTime` (optional): Start timestamp for analysis
+- `endTime` (optional): End timestamp for analysis
 
-Quick boolean check for active allowance.
+**Response:** Comprehensive token movement analytics including chain-wide movement, treasury movement, and daily trends
 
-```typescript
-const hasAllowance = await env.hasFeegrantAllowance(
-  'xion1granter...',
-  'xion1grantee...'
-)
-if (hasAllowance) {
-  // Process transaction with fee grant
-}
-```
+## Treasury Contract Endpoints
+
+Treasury-specific endpoints available at `/api/contract/[contractAddress]/[endpoint]`
+
+### `/grantConfigs`
+Get grant configuration settings for the treasury contract.
+
+**Parameters:**
+- None
+
+**Response:** Current grant configuration parameters
+
+### `/feeConfig`
+Get fee configuration for the treasury contract.
+
+**Parameters:**
+- None
+
+**Response:** Fee structure and limits
+
+### `/admin`
+Get current admin address of the treasury contract.
+
+**Parameters:**
+- None
+
+**Response:** Admin address information
+
+### `/pendingAdmin`
+Get pending admin address if there's an admin change in progress.
+
+**Parameters:**
+- None
+
+**Response:** Pending admin address information
+
+### `/params`
+Get treasury contract parameters and settings.
+
+**Parameters:**
+- None
+
+**Response:** Contract parameters and configuration
+
+### `/balances`
+Get current balances in the treasury contract.
+
+**Parameters:**
+- None
+
+**Response:** Current token balances
+
+### `/balanceHistory`
+Get historical balance data for the treasury contract.
+
+**Parameters:**
+- `limit` (optional): Maximum number of records to return
+
+**Response:** Historical balance changes over time
+
+### `/activeGrantees`
+Get list of active grantees receiving allowances from the treasury.
+
+**Parameters:**
+- `limit` (optional): Maximum number of grantees to return
+
+**Response:** List of active grantees with allowance details
+
+### `/granteeActivity`
+Get activity metrics for treasury grantees.
+
+**Parameters:**
+- `limit` (optional): Maximum number of grantees to include
+- `timeWindow` (optional): Time window for activity analysis
+
+**Response:** Grantee activity patterns and usage statistics
+
+### `/usageMetrics`
+Get detailed usage metrics for the treasury contract.
+
+**Parameters:**
+- `timeWindow` (optional): Time window for metrics calculation
+
+**Response:** Comprehensive usage statistics and efficiency metrics
+
+### `/onboardingMetrics`
+Get metrics related to new grantee onboarding.
+
+**Parameters:**
+- `timeWindow` (optional): Time window for onboarding analysis
+
+**Response:** Onboarding statistics and trends
+
+### `/treasuryHealth`
+Get overall health status and metrics for the treasury.
+
+**Parameters:**
+- None
+
+**Response:** Health indicators and status metrics
+
+### `/all`
+Get comprehensive treasury data including balances, grants, and activity.
+
+**Parameters:**
+- None
+
+**Response:** Complete treasury state and statistics
+
+## Aggregator Endpoints
+
+Time-series aggregated data available at `/api/a/feegrant/[endpoint]`
+
+### `/treasuryOverTime`
+Time-series data for treasury feegrant metrics.
+
+**Parameters:**
+- `timeWindow` (optional): Time window for aggregation (default: 30 days)
+- `granularity` (optional): Data granularity (hourly, daily, weekly)
+
+**Response:** Time-series array of treasury metrics over time
+
+### `/chainwideOverTime`
+Chain-wide feegrant metrics over time.
+
+**Parameters:**
+- `timeWindow` (optional): Time window for aggregation (default: 30 days)
+- `granularity` (optional): Data granularity (hourly, daily, weekly)
+
+**Response:** Time-series array of chain-wide feegrant activity
+
+### `/treasuryOnboardingOverTime`
+Treasury onboarding metrics over time.
+
+**Parameters:**
+- `timeWindow` (optional): Time window for aggregation (default: 30 days)
+- `granularity` (optional): Data granularity (hourly, daily, weekly)
+
+**Response:** Time-series array of onboarding metrics and trends
+
+### `/tokenMovement`
+Time-series token movement data for feegrant allowances.
+
+**Parameters:**
+- `timeWindow` (optional): Time window for aggregation (default: 30 days)
+- `granularity` (optional): Data granularity (hourly, daily, weekly)
+
+**Response:** Time-series array of token movement analytics
+
+### `/tokenMovementOverTime`
+Extended time-series token movement analysis.
+
+**Parameters:**
+- `timeWindow` (optional): Time window for aggregation (default: 30 days)
+- `granularity` (optional): Data granularity (hourly, daily, weekly)
+
+**Response:** Detailed time-series token movement data with extended analytics
 
 ## Usage Examples
 
-### Formula Environment Usage
+### Generic Endpoint Usage
+```bash
+# Get feegrant totals
+GET /api/generic/_/feegrant/totals
 
-```typescript
-// In any formula (account, contract, generic, validator)
-export const myFormula: GenericFormula = {
-  async compute(env) {
-    // Check if address has any active allowances
-    const grantedAllowances = await env.getFeegrantAllowances('xion1granter...')
+# Get treasury analytics for last 7 days
+GET /api/generic/_/feegrant/treasuryAnalytics?timeWindow=7
 
-    // Check specific allowance
-    const hasAllowance = await env.hasFeegrantAllowance(
-      'xion1granter...',
-      'xion1grantee...'
-    )
-
-    // Get detailed allowance info
-    const allowance = await env.getFeegrantAllowance(
-      'xion1granter...',
-      'xion1grantee...'
-    )
-
-    return {
-      totalGranted: grantedAllowances?.length || 0,
-      hasSpecificAllowance: hasAllowance,
-      allowanceDetails: allowance,
-    }
-  },
-  docs: {
-    description: 'Example feegrant usage in formula',
-  },
-}
+# Get token movement with custom time range
+GET /api/generic/_/feegrant/tokenMovement?startTime=1640995200&endTime=1643673600
 ```
 
-### Direct Database Queries
+### Treasury Contract Usage
+```bash
+# Get treasury balances
+GET /api/contract/xion1treasury.../balances
 
-```typescript
-import { FeegrantAllowance } from '@/db'
+# Get active grantees (limit 50)
+GET /api/contract/xion1treasury.../activeGrantees?limit=50
 
-// Get current active allowances for an address
-const activeAllowances = await FeegrantAllowance.findAll({
-  attributes: [
-    Sequelize.literal(
-      'DISTINCT ON("granter", "grantee") \'\''
-    ) as unknown as string,
-    'granter',
-    'grantee',
-    'blockHeight',
-    'active',
-    'allowanceData',
-  ],
-  where: {
-    granter: 'xion1granter...',
-    active: true,
-  },
-  order: [
-    ['granter', 'ASC'],
-    ['grantee', 'ASC'],
-    ['blockHeight', 'DESC'],
-  ],
-})
-
-// Get full history for a granter-grantee pair
-const history = await FeegrantAllowance.findAll({
-  where: {
-    granter: 'xion1granter...',
-    grantee: 'xion1grantee...',
-  },
-  order: [['blockHeight', 'ASC']],
-})
-
-// Get allowance at specific block height
-const historicalAllowance = await FeegrantAllowance.findOne({
-  where: {
-    granter: 'xion1granter...',
-    grantee: 'xion1grantee...',
-    blockHeight: { [Op.lte]: '12345' },
-  },
-  order: [['blockHeight', 'DESC']],
-})
+# Get usage metrics for last 14 days
+GET /api/contract/xion1treasury.../usageMetrics?timeWindow=14
 ```
 
-## Database Schema
+### Aggregator Usage
+```bash
+# Get daily treasury metrics for last 30 days
+GET /api/a/feegrant/treasuryOverTime?timeWindow=30&granularity=daily
 
-```sql
-CREATE TABLE "FeegrantAllowances" (
-  "granter" TEXT NOT NULL,
-  "grantee" TEXT NOT NULL,
-  "blockHeight" BIGINT NOT NULL,
-  "blockTimeUnixMs" BIGINT NOT NULL,
-  "blockTimestamp" TIMESTAMP NOT NULL,
-  "allowanceData" TEXT NOT NULL,
-  "allowanceType" TEXT,
-  "active" BOOLEAN NOT NULL,
-  "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
-  "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW(),
-  PRIMARY KEY ("granter", "grantee", "blockHeight")
-);
+# Get hourly chain-wide data
+GET /api/a/feegrant/chainwideOverTime?granularity=hourly
 
--- Optimized indexes for TimescaleDB
-CREATE INDEX ON "FeegrantAllowances" ("granter", "grantee", "blockHeight" DESC);
-CREATE INDEX ON "FeegrantAllowances" ("granter" text_pattern_ops, "blockHeight" DESC);
-CREATE INDEX ON "FeegrantAllowances" ("grantee" text_pattern_ops, "blockHeight" DESC);
-CREATE INDEX ON "FeegrantAllowances" ("blockHeight");
+# Get token movement time-series
+GET /api/a/feegrant/tokenMovement?timeWindow=7&granularity=daily
 ```
 
-## Future Enhancements
+## Parameter Details
 
-- Parse specific allowance types (BasicAllowance, PeriodicAllowance, etc.)
-- Track allowance usage/spending events
-- Add expiration date parsing
-- Add allowance amount limits parsing
+### Common Parameters
+
+- **`timeWindow`**: Number of days to analyze (default: 30)
+- **`limit`**: Maximum number of results to return
+- **`startTime`**: Unix timestamp for analysis start time
+- **`endTime`**: Unix timestamp for analysis end time
+- **`granularity`**: Time granularity for aggregated data (`hourly`, `daily`, `weekly`)
+
+### Parameter Validation
+
+- Time windows are bounded between 1 and 90 days
+- Limits are bounded between 1 and 1000 results
+- Invalid parameters will return appropriate error responses
+- Treasury contract endpoints require valid contract addresses
