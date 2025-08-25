@@ -1,7 +1,7 @@
 import request from 'supertest'
 import { beforeEach, describe, it } from 'vitest'
 
-import { BankBalance, BankStateEvent, Block, Contract, State } from '@/db'
+import { BankDenomBalance, BankStateEvent, Block, Contract, State } from '@/db'
 import { WasmCodeService } from '@/services'
 import { BANK_HISTORY_CODE_IDS_KEYS } from '@/tracer/handlers/bank'
 
@@ -330,22 +330,32 @@ export const loadBankTests = (options: ComputerTestOptions) => {
 
     describe('no history', () => {
       beforeEach(async () => {
-        await BankBalance.create({
-          address: 'address',
-          balances: {
-            utest: '2000',
-            uanother: '3000',
-            uagain: '4000',
+        await BankDenomBalance.bulkCreate([
+          {
+            address: 'address',
+            denom: 'utest',
+            balance: '2000',
+            blockHeight: 2,
+            blockTimeUnixMs: 2,
+            blockTimestamp: new Date(),
           },
-          denomUpdateBlockHeights: {
-            utest: 2,
-            uanother: 3,
-            uagain: 4,
+          {
+            address: 'address',
+            denom: 'uanother',
+            balance: '3000',
+            blockHeight: 3,
+            blockTimeUnixMs: 3,
+            blockTimestamp: new Date(),
           },
-          blockHeight: 4,
-          blockTimeUnixMs: 4,
-          blockTimestamp: new Date(),
-        })
+          {
+            address: 'address',
+            denom: 'uagain',
+            balance: '4000',
+            blockHeight: 4,
+            blockTimeUnixMs: 4,
+            blockTimestamp: new Date(),
+          },
+        ])
 
         await Block.createOne({
           height: 4,
