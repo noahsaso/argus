@@ -1,4 +1,4 @@
-import { Op, WhereOptions } from 'sequelize'
+import { Op, type WhereOptions } from 'sequelize'
 import {
   AllowNull,
   AutoIncrement,
@@ -9,8 +9,8 @@ import {
 } from 'sequelize-typescript'
 
 import {
-  Block,
-  ComputationDependentKey,
+  type Block,
+  type ComputationDependentKey,
   DependableEventModel,
   DependentKeyNamespace,
 } from '@/types'
@@ -68,6 +68,7 @@ export class BankStateEvent extends DependableEventModel {
   @Column(DataType.DATE)
   declare blockTimestamp: Date
 
+  // balance - is the balance at that block height, not the difference in balance
   @AllowNull(false)
   @Column(DataType.TEXT)
   declare balance: string

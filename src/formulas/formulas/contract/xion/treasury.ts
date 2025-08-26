@@ -16,27 +16,6 @@ const TreasuryStorageKeys = {
   PARAMS: 'params',
 }
 
-// Shared helper function for treasury contract validation
-const validateTreasuryContract = async (env: any) => {
-  const { contractAddress, contractMatchesCodeIdKeys, get } = env
-
-  // Access a WasmStateEvent key to establish block context
-  await get(contractAddress, 'dummy_key_for_block_context')
-
-  // Validate this is a treasury contract - check for either xion or treasury code keys
-  const isTreasury =
-    (await contractMatchesCodeIdKeys(contractAddress, 'xion')) ||
-    (await contractMatchesCodeIdKeys(contractAddress, 'treasury'))
-
-  if (!isTreasury) {
-    const error = new Error('Method not allowed for non-treasury contracts')
-    ;(error as any).statusCode = 405
-    throw error
-  }
-
-  return true
-}
-
 export const grantConfigs: ContractFormula<Record<string, GrantConfig>> = {
   docs: {
     description: "Get the treasury's grant configs by msg type url",
@@ -155,7 +134,7 @@ export const balanceHistory: ContractFormula<
       // Optimized raw SQL query for better performance than Sequelize ORM
       const events = await query(
         `
-        SELECT DISTINCT ON (denom) 
+        SELECT DISTINCT ON (denom)
           denom,
           "blockHeight",
           "blockTimeUnixMs",
@@ -242,9 +221,6 @@ export const activeGrantees: ContractFormula<{
   compute: async (env) => {
     try {
       const { contractAddress, getFeegrantAllowances, query, block } = env
-
-      // Use shared validation helper
-      await validateTreasuryContract(env)
 
       // Framework-standard parameter extraction and validation
       const timeWindow =
@@ -369,9 +345,6 @@ export const granteeActivity: ContractFormula<{
     try {
       const { contractAddress, getFeegrantAllowances, query, block } = env
 
-      // Use shared validation helper
-      await validateTreasuryContract(env)
-
       // Framework-standard parameter extraction and validation
       const timeWindow =
         typeof (env.args as any).timeWindow === 'number'
@@ -406,7 +379,7 @@ export const granteeActivity: ContractFormula<{
       const activityData = await query(
         `
         WITH activity_counts AS (
-          SELECT 
+          SELECT
             address,
             COUNT(*) as "transactionCount"
           FROM "BankStateEvents"
@@ -423,7 +396,7 @@ export const granteeActivity: ContractFormula<{
             AND "blockTimeUnixMs" >= $windowStart
           ORDER BY address, "blockHeight" DESC
         )
-        SELECT 
+        SELECT
           ac.address,
           ac."transactionCount",
           COALESCE(lt."lastTransactionMs", '0') as "lastTransactionMs"
@@ -528,9 +501,6 @@ export const usageMetrics: ContractFormula<{
   compute: async (env) => {
     try {
       const { contractAddress, query, block, getFeegrantAllowances } = env
-
-      // Use shared validation helper
-      await validateTreasuryContract(env)
 
       // Framework-standard parameter extraction and validation
       const timeWindow =
@@ -713,9 +683,6 @@ export const onboardingMetrics: ContractFormula<{
   compute: async (env) => {
     try {
       const { contractAddress, query, date } = env
-
-      // Use shared validation helper
-      await validateTreasuryContract(env)
 
       // Framework-standard parameter extraction and validation
       const timeWindow =
@@ -917,9 +884,6 @@ export const treasuryHealth: ContractFormula<{
   compute: async (env) => {
     try {
       const { contractAddress, getBalances, query, date } = env
-
-      // Use shared validation helper
-      await validateTreasuryContract(env)
 
       // Framework-standard parameter extraction and validation
       const activityWindow =

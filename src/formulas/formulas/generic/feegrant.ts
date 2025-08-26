@@ -184,8 +184,7 @@ export const treasuryContractList: GenericFormula<{
         try {
           const isTreasury = await contractMatchesCodeIdKeys(
             address,
-            'xion',
-            'treasury'
+            'xion-treasury'
           )
           return isTreasury ? address : null
         } catch (error) {
@@ -446,8 +445,7 @@ export const treasuryAnalytics: GenericFormula<{
       try {
         const isTreasury = await contractMatchesCodeIdKeys(
           address,
-          'xion',
-          'treasury'
+          'xion-treasury'
         )
 
         if (!isTreasury) {
