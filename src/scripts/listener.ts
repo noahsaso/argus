@@ -121,13 +121,43 @@ const main = async () => {
     blockIterator.stopIterating()
   })
 
-  // Serve health probe.
+  // Metrics object to share between health endpoint and block processor
+  const metrics = {
+    blockProcessingStartTime: 0,
+    blocksProcessed: 0,
+    overallAverage: 0,
+    rollingAverage: 0,
+    currentBlockHeight: 0,
+    lastUpdateTime: 0,
+  }
+
+  // Serve health probe with metrics.
   const app = new Koa()
   app.use(async (ctx) => {
     ctx.status = 200
     ctx.body = {
       status: 'ok',
       timestamp: new Date().toISOString(),
+      metrics: {
+        currentBlockHeight: metrics.currentBlockHeight,
+        blocksProcessed: metrics.blocksProcessed,
+        overallAverageBlocksPerSecond: Number(
+          metrics.overallAverage.toFixed(2)
+        ),
+        rollingAverageBlocksPerSecond: Number(
+          metrics.rollingAverage.toFixed(2)
+        ),
+        uptimeSeconds:
+          metrics.blockProcessingStartTime > 0
+            ? Number(
+                (
+                  (Date.now() - metrics.blockProcessingStartTime) /
+                  1000
+                ).toFixed(1)
+              )
+            : 0,
+        lastUpdateTime: new Date(metrics.lastUpdateTime).toISOString(),
+      },
     }
   })
   app.listen(port, () => {
@@ -141,10 +171,57 @@ const main = async () => {
     }
   })
 
+  // Block iteration tracking
+  metrics.blockProcessingStartTime = Date.now()
+  // let lastLogTime = Date.now()
+  // const LOG_INTERVAL_MS = 10_000 // Log every 10 seconds
+
+  // Rolling window for more accurate short-term average
+  const ROLLING_WINDOW_SIZE = 100
+  const blockTimestamps: number[] = []
+
   // Start iterating. This will resolve once the iterator is done (due to SIGINT
   // or SIGTERM).
   await blockIterator.iterate({
     onBlock: async ({ header: { chainId, height, time } }) => {
+      const currentTime = Date.now()
+      metrics.blocksProcessed++
+      metrics.currentBlockHeight = Number(height)
+      metrics.lastUpdateTime = currentTime
+
+      // Add to rolling window
+      blockTimestamps.push(currentTime)
+      if (blockTimestamps.length > ROLLING_WINDOW_SIZE) {
+        blockTimestamps.shift()
+      }
+
+      // Calculate averages
+      const overallElapsedSeconds =
+        (currentTime - metrics.blockProcessingStartTime) / 1000
+      metrics.overallAverage = metrics.blocksProcessed / overallElapsedSeconds
+
+      if (blockTimestamps.length >= 2) {
+        const rollingElapsedSeconds = (currentTime - blockTimestamps[0]) / 1000
+        metrics.rollingAverage =
+          (blockTimestamps.length - 1) / rollingElapsedSeconds
+      }
+
+      // Log metrics periodically
+      // if (currentTime - lastLogTime >= LOG_INTERVAL_MS) {
+      //   console.log(`[${new Date().toISOString()}] Block processing metrics:`)
+      //   console.log(`  - Current block: ${height}`)
+      //   console.log(`  - Blocks processed: ${metrics.blocksProcessed}`)
+      //   console.log(
+      //     `  - Overall average: ${metrics.overallAverage.toFixed(2)} blocks/sec`
+      //   )
+      //   console.log(
+      //     `  - Rolling average (${
+      //       blockTimestamps.length
+      //     } blocks): ${metrics.rollingAverage.toFixed(2)} blocks/sec`
+      //   )
+      //   lastLogTime = currentTime
+      // }
+
       const latestBlockHeight = Number(height)
       const latestBlockTimeUnixMs = Date.parse(time)
 
