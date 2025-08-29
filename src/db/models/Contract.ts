@@ -1,3 +1,4 @@
+import { CosmWasmClient } from '@cosmjs/cosmwasm-stargate'
 import {
   AllowNull,
   Column,
@@ -7,6 +8,7 @@ import {
   Table,
 } from 'sequelize-typescript'
 
+import { ConfigManager } from '@/config'
 import { WasmCodeService } from '@/services/wasm-codes'
 import { ContractJson } from '@/types'
 
@@ -77,5 +79,21 @@ export class Contract extends Model {
    */
   matchesCodeIdKeys(...keys: string[]): boolean {
     return WasmCodeService.instance.matchesWasmCodeKeys(this.codeId, ...keys)
+  }
+
+  /**
+   * Update codeId, admin, creator, and label from the chain.
+   */
+  async updateFromChain(): Promise<void> {
+    const { localRpc, remoteRpc } = ConfigManager.load()
+    const rpc = localRpc ?? remoteRpc
+    const client = await CosmWasmClient.connect(rpc)
+    const contract = await client.getContract(this.address)
+    await this.update({
+      codeId: contract.codeId,
+      admin: contract.admin || null,
+      creator: contract.creator,
+      label: contract.label,
+    })
   }
 }
