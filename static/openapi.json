@@ -12480,6 +12480,54 @@
         }
       }
     },
+    "/{chainId}/contract/{contractAddress}/xion/treasury/activeGrantees": {
+      "get": {
+        "tags": [
+          "contract"
+        ],
+        "summary": "Get all active grantees for this treasury contract (optimized with configurable parameters)",
+        "operationId": "xion_treasury_activeGrantees_4d5dedd",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "contractAddress",
+            "in": "path",
+            "description": "contract address",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "timeWindow",
+            "description": "Time window in days for activity analysis (default: 30, min: 7, max: 90)",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "minimum": 7,
+              "maximum": 90
+            },
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          },
+          "400": {
+            "description": "missing required arguments"
+          }
+        }
+      }
+    },
     "/{chainId}/contract/{contractAddress}/xion/treasury/admin": {
       "get": {
         "tags": [
@@ -12521,6 +12569,40 @@
         ],
         "summary": "Get all treasury data in a single endpoint",
         "operationId": "xion_treasury_all_42b12f8",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "contractAddress",
+            "in": "path",
+            "description": "contract address",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          }
+        }
+      }
+    },
+    "/{chainId}/contract/{contractAddress}/xion/treasury/balanceHistory": {
+      "get": {
+        "tags": [
+          "contract"
+        ],
+        "summary": "Get the treasury balance with timestamp metadata for time-series analysis (optimized with raw SQL)",
+        "operationId": "xion_treasury_balanceHistory_37cf447",
         "parameters": [
           {
             "name": "chainId",
@@ -12650,6 +12732,116 @@
         }
       }
     },
+    "/{chainId}/contract/{contractAddress}/xion/treasury/granteeActivity": {
+      "get": {
+        "tags": [
+          "contract"
+        ],
+        "summary": "Get grantee activity statistics for this treasury (optimized with configurable parameters)",
+        "operationId": "xion_treasury_granteeActivity_5aafe00",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "contractAddress",
+            "in": "path",
+            "description": "contract address",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "timeWindow",
+            "description": "Time window in days for activity analysis (default: 7, min: 1, max: 90)",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 90
+            },
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          },
+          "400": {
+            "description": "missing required arguments"
+          }
+        }
+      }
+    },
+    "/{chainId}/contract/{contractAddress}/xion/treasury/onboardingMetrics": {
+      "get": {
+        "tags": [
+          "contract"
+        ],
+        "summary": "Get treasury onboarding metrics and growth statistics (optimized with configurable parameters)",
+        "operationId": "xion_treasury_onboardingMetrics_035cc41",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "contractAddress",
+            "in": "path",
+            "description": "contract address",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "timeWindow",
+            "description": "Time window in days for analysis (default: 30, min: 7, max: 365)",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "minimum": 7,
+              "maximum": 365
+            },
+            "in": "query"
+          },
+          {
+            "name": "granularity",
+            "description": "Data granularity: daily, weekly, monthly (default: daily)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "daily",
+                "weekly",
+                "monthly"
+              ]
+            },
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          },
+          "400": {
+            "description": "missing required arguments"
+          }
+        }
+      }
+    },
     "/{chainId}/contract/{contractAddress}/xion/treasury/params": {
       "get": {
         "tags": [
@@ -12714,6 +12906,113 @@
         "responses": {
           "200": {
             "description": "success"
+          }
+        }
+      }
+    },
+    "/{chainId}/contract/{contractAddress}/xion/treasury/treasuryHealth": {
+      "get": {
+        "tags": [
+          "contract"
+        ],
+        "summary": "Get comprehensive treasury health assessment (optimized with configurable parameters)",
+        "operationId": "xion_treasury_treasuryHealth_5ca4ba6",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "contractAddress",
+            "in": "path",
+            "description": "contract address",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "activityWindow",
+            "description": "Time window in days for activity analysis (default: 7, min: 3, max: 30)",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "minimum": 3,
+              "maximum": 30
+            },
+            "in": "query"
+          },
+          {
+            "name": "burnRateWindow",
+            "description": "Time window in days for burn rate calculation (default: 30, min: 7, max: 90)",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "minimum": 7,
+              "maximum": 90
+            },
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          },
+          "400": {
+            "description": "missing required arguments"
+          }
+        }
+      }
+    },
+    "/{chainId}/contract/{contractAddress}/xion/treasury/usageMetrics": {
+      "get": {
+        "tags": [
+          "contract"
+        ],
+        "summary": "Get treasury usage metrics and efficiency statistics (optimized with configurable parameters)",
+        "operationId": "xion_treasury_usageMetrics_5242634",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "contractAddress",
+            "in": "path",
+            "description": "contract address",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "timeWindow",
+            "description": "Time window in days for activity scoring (default: 30, min: 7, max: 90)",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "minimum": 7,
+              "maximum": 90
+            },
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          },
+          "400": {
+            "description": "missing required arguments"
           }
         }
       }
@@ -13456,23 +13755,11 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "daysAgo",
-            "description": "Number of days to look back for activity (default: 30)",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "in": "query"
           }
         ],
         "responses": {
           "200": {
             "description": "success"
-          },
-          "400": {
-            "description": "missing required arguments"
           }
         }
       }
@@ -13502,6 +13789,145 @@
         }
       }
     },
+    "/{chainId}/generic/_/feegrant/feegrantAllowancesSummary": {
+      "get": {
+        "tags": [
+          "generic"
+        ],
+        "summary": "Get comprehensive feegrant totals with additional address data",
+        "operationId": "feegrant_feegrantAllowancesSummary_820d542",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          }
+        }
+      }
+    },
+    "/{chainId}/generic/_/feegrant/historicalTrends": {
+      "get": {
+        "tags": [
+          "generic"
+        ],
+        "summary": "Get historical feegrant trends and growth analytics (optimized for performance)",
+        "operationId": "feegrant_historicalTrends_c85cfeb",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "timeWindow",
+            "description": "Time window in days for analysis (default: 90, min: 7, max: 365)",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "minimum": 7,
+              "maximum": 365
+            },
+            "in": "query"
+          },
+          {
+            "name": "granularity",
+            "description": "Data granularity: daily, weekly, monthly (default: daily)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "daily",
+                "weekly",
+                "monthly"
+              ]
+            },
+            "in": "query"
+          },
+          {
+            "name": "limit",
+            "description": "Maximum data points to return (default: 1000, min: 30, max: 2000)",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "minimum": 30,
+              "maximum": 2000
+            },
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          },
+          "400": {
+            "description": "missing required arguments"
+          }
+        }
+      }
+    },
+    "/{chainId}/generic/_/feegrant/tokenMovement": {
+      "get": {
+        "tags": [
+          "generic"
+        ],
+        "summary": "Get comprehensive token movement analytics.",
+        "operationId": "feegrant_tokenMovement_b1b63cc",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "description": "Maximum number of grantees to analyze (default: 1000, min: 100, max: 5000)",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "minimum": 100,
+              "maximum": 5000
+            },
+            "in": "query"
+          },
+          {
+            "name": "timeWindow",
+            "description": "Time window in days for analysis (default: 30)",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 90
+            },
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          },
+          "400": {
+            "description": "missing required arguments"
+          }
+        }
+      }
+    },
     "/{chainId}/generic/_/feegrant/totals": {
       "get": {
         "tags": [
@@ -13509,6 +13935,56 @@
         ],
         "summary": "Get comprehensive feegrant totals and statistics",
         "operationId": "feegrant_totals_294c61f",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          }
+        }
+      }
+    },
+    "/{chainId}/generic/_/feegrant/treasuryAnalytics": {
+      "get": {
+        "tags": [
+          "generic"
+        ],
+        "summary": "Get comprehensive treasury analytics",
+        "operationId": "feegrant_treasuryAnalytics_5342bbc",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          }
+        }
+      }
+    },
+    "/{chainId}/generic/_/feegrant/treasuryContractList": {
+      "get": {
+        "tags": [
+          "generic"
+        ],
+        "summary": "Get list of treasury contract addresses (optimized with parallel processing)",
+        "operationId": "feegrant_treasuryContractList_803cce1",
         "parameters": [
           {
             "name": "chainId",
@@ -14136,6 +14612,278 @@
           {
             "name": "timeStep",
             "description": "Time step in milliseconds between data points",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          },
+          "400": {
+            "description": "missing required arguments"
+          }
+        }
+      }
+    },
+    "/{chainId}/a/feegrant/chainwideOverTime": {
+      "get": {
+        "tags": [
+          "aggregator"
+        ],
+        "summary": "Aggregate chain-wide feegrant analytics over a time range",
+        "operationId": "feegrant_chainwideOverTime_67aa99d",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "startTime",
+            "description": "Start time in Unix milliseconds",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "in": "query"
+          },
+          {
+            "name": "endTime",
+            "description": "End time in Unix milliseconds",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "in": "query"
+          },
+          {
+            "name": "timeStep",
+            "description": "Time step in milliseconds between data points (default: 24h)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          },
+          "400": {
+            "description": "missing required arguments"
+          }
+        }
+      }
+    },
+    "/{chainId}/a/feegrant/tokenMovement": {
+      "get": {
+        "tags": [
+          "aggregator"
+        ],
+        "summary": "Get current comprehensive token movement analytics for feegrant usage",
+        "operationId": "feegrant_tokenMovement_b1b63cc",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          }
+        }
+      }
+    },
+    "/{chainId}/a/feegrant/tokenMovementOverTime": {
+      "get": {
+        "tags": [
+          "aggregator"
+        ],
+        "summary": "Aggregate token movement analytics over a time range",
+        "operationId": "feegrant_tokenMovementOverTime_388b57d",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "startTime",
+            "description": "Start time in Unix milliseconds",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "in": "query"
+          },
+          {
+            "name": "endTime",
+            "description": "End time in Unix milliseconds",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "in": "query"
+          },
+          {
+            "name": "timeStep",
+            "description": "Time step in milliseconds between data points (default: 24h)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "in": "query"
+          },
+          {
+            "name": "timeWindow",
+            "description": "Time window for each data point analysis (default: 30 days)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          },
+          "400": {
+            "description": "missing required arguments"
+          }
+        }
+      }
+    },
+    "/{chainId}/a/feegrant/treasuryOnboardingOverTime": {
+      "get": {
+        "tags": [
+          "aggregator"
+        ],
+        "summary": "Aggregate treasury onboarding metrics over a time range",
+        "operationId": "feegrant_treasuryOnboardingOverTime_c3c9bda",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "contractAddress",
+            "description": "Treasury contract address",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "in": "query"
+          },
+          {
+            "name": "startTime",
+            "description": "Start time in Unix milliseconds",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "in": "query"
+          },
+          {
+            "name": "endTime",
+            "description": "End time in Unix milliseconds",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "in": "query"
+          },
+          {
+            "name": "timeStep",
+            "description": "Time step in milliseconds between data points (default: 24h)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          },
+          "400": {
+            "description": "missing required arguments"
+          }
+        }
+      }
+    },
+    "/{chainId}/a/feegrant/treasuryOverTime": {
+      "get": {
+        "tags": [
+          "aggregator"
+        ],
+        "summary": "Aggregate treasury analytics over a time range",
+        "operationId": "feegrant_treasuryOverTime_975e744",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "contractAddress",
+            "description": "Treasury contract address",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "in": "query"
+          },
+          {
+            "name": "startTime",
+            "description": "Start time in Unix milliseconds",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "in": "query"
+          },
+          {
+            "name": "endTime",
+            "description": "End time in Unix milliseconds",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "in": "query"
+          },
+          {
+            "name": "timeStep",
+            "description": "Time step in milliseconds between data points (default: 24h)",
             "required": false,
             "schema": {
               "type": "string"

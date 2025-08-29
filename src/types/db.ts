@@ -73,6 +73,10 @@ export type FeegrantAllowanceJson = {
   allowanceType: string | null
   active: boolean
   block: SerializedBlock
+  parsedAmount: string | null
+  parsedDenom: string | null
+  parsedAllowanceType: string | null
+  parsedExpirationUnixMs: string | null
 }
 
 export type ExtractionJson = {
