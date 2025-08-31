@@ -84,7 +84,7 @@ export const params: ContractFormula<Record<string, Params>> = {
 
 export const balances: ContractFormula<Record<string, string>> = {
   filter: {
-    codeIdsKeys: ['xion', 'treasury'],
+    codeIdsKeys: ['xion-treasury'],
   },
   docs: {
     description: 'Get the balance of the treasury',
@@ -109,7 +109,7 @@ export const balanceHistory: ContractFormula<
   >
 > = {
   filter: {
-    codeIdsKeys: ['xion', 'treasury'],
+    codeIdsKeys: ['xion-treasury'],
   },
   docs: {
     description:
@@ -168,7 +168,7 @@ export const balanceHistory: ContractFormula<
       > = {}
 
       // Process in memory for better performance
-      events.forEach((event: any) => {
+      for (const event of events) {
         balanceHistory[event.denom] = {
           balance: event.balance,
           blockHeight: event.blockHeight,
@@ -176,7 +176,7 @@ export const balanceHistory: ContractFormula<
           blockTimestamp: new Date(event.blockTimestamp).toISOString(),
           lastChanged: new Date(Number(event.blockTimeUnixMs)).toISOString(),
         }
-      })
+      }
 
       return balanceHistory
     } catch (error) {
@@ -203,7 +203,7 @@ export const activeGrantees: ContractFormula<{
   }
 }> = {
   filter: {
-    codeIdsKeys: ['xion', 'treasury'],
+    codeIdsKeys: ['xion-treasury'],
   },
   docs: {
     description:
@@ -276,7 +276,7 @@ export const activeGrantees: ContractFormula<{
 
       const grantees = allowances.map((allowance) => ({
         address: allowance.grantee,
-        grantedAt: allowance.block.timestamp,
+        grantedAt: allowance.blockTimestamp.toISOString(),
         allowanceAmount: allowance.parsedAmount,
         allowanceDenom: allowance.parsedDenom,
         allowanceType: allowance.parsedAllowanceType,
@@ -326,7 +326,7 @@ export const granteeActivity: ContractFormula<{
   }
 }> = {
   filter: {
-    codeIdsKeys: ['xion', 'treasury'],
+    codeIdsKeys: ['xion-treasury'],
   },
   docs: {
     description:
@@ -483,7 +483,7 @@ export const usageMetrics: ContractFormula<{
   }
 }> = {
   filter: {
-    codeIdsKeys: ['xion', 'treasury'],
+    codeIdsKeys: ['xion-treasury'],
   },
   docs: {
     description:
@@ -526,7 +526,7 @@ export const usageMetrics: ContractFormula<{
       const tokenStats = new Map<string, { total: bigint; count: number }>()
       let allowancesWithAmounts = 0
 
-      activeAllowances.forEach((allowance) => {
+      for (const allowance of activeAllowances) {
         if (allowance.parsedAmount && allowance.parsedDenom) {
           allowancesWithAmounts++
           const current = tokenStats.get(allowance.parsedDenom) || {
@@ -538,7 +538,7 @@ export const usageMetrics: ContractFormula<{
             count: current.count + 1,
           })
         }
-      })
+      }
 
       // Calculate total tokens allocated (primary token)
       let totalTokensAllocated = '0'
@@ -658,7 +658,7 @@ export const onboardingMetrics: ContractFormula<{
   }
 }> = {
   filter: {
-    codeIdsKeys: ['xion', 'treasury'],
+    codeIdsKeys: ['xion-treasury'],
   },
   docs: {
     description:

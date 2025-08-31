@@ -30,12 +30,12 @@ export const totals: GenericFormula<{
     const granteeSet = new Set<string>()
     const granterSet = new Set<string>()
 
-    allAllowancesData.forEach((allowance: any) => {
+    for (const allowance of allAllowancesData) {
       if (allowance.active) {
         granteeSet.add(allowance.grantee)
         granterSet.add(allowance.granter)
       }
-    })
+    }
 
     // Calculate totals in memory (more efficient than SQL aggregation)
     const totalActiveGrants = allAllowancesData.filter(
@@ -110,12 +110,12 @@ export const feegrantAllowancesSummary: GenericFormula<{
     allAllowances.push(...allAllowancesData)
 
     // Process in memory
-    allAllowancesData.forEach((allowance: any) => {
+    for (const allowance of allAllowancesData) {
       if (allowance.active) {
         granteeSet.add(allowance.grantee)
         granterSet.add(allowance.granter)
       }
-    })
+    }
 
     // Process totals in memory
     const totalActiveGrants = allAllowances.filter((a) => a.active).length

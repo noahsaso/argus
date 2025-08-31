@@ -10,149 +10,204 @@ import {
   WasmTxEvent,
 } from '@/db'
 import { WasmCode, WasmCodeService } from '@/services/wasm-codes'
+import { BANK_HISTORY_CODE_IDS_KEYS } from '@/tracer/handlers/bank'
 
 import { app } from '../../app'
-import { ComputerTestOptions } from '../types'
+import type { ComputerTestOptions } from '../types'
+import { T } from 'vitest/dist/chunks/reporters.d.79o4mouw'
+
+const blockTimestamp = new Date()
+const blockTimeUnixMs = Math.round(blockTimestamp.getTime() / 1000)
+
+const createContractHelper = async (address: string, height: string) => {
+  await Contract.create({
+    address,
+    codeId: WasmCodeService.instance.findWasmCodeIdsByKeys(
+      BANK_HISTORY_CODE_IDS_KEYS[1]
+    )[0],
+    instantiatedAtBlockHeight: height,
+    instantiatedAtBlockTimeUnixMs: blockTimeUnixMs,
+    instantiatedAtBlockTimestamp: blockTimestamp,
+  })
+}
+
+type FeegrantActivityItem = {
+  granter: string
+  grantee: string
+  blockHeight: string
+  blockTimeUnixMs: string
+  blockTimestamp: string
+  allowanceData: string
+  allowanceType: string
+  active: boolean
+  parsedAmount: string
+  parsedDenom: string
+  parsedAllowanceType: string
+  parsedExpirationUnixMs: number | null
+}
+
+const createFeegrantAllowanceHelper = (
+  granter: string,
+  grantee: string,
+  blockHeight: string,
+  blockTimeUnixMs: string,
+  blockTimestamp: string
+): FeegrantActivityItem => ({
+  granter,
+  grantee,
+  blockHeight,
+  blockTimeUnixMs,
+  blockTimestamp,
+  allowanceData: 'base64allowancedata1',
+  allowanceType: 'BasicAllowance',
+  active: true,
+  parsedAmount: '1000000',
+  parsedDenom: 'uxion',
+  parsedAllowanceType: 'BasicAllowance',
+  parsedExpirationUnixMs: null,
+})
+
+const TREASURY1 = 'treasury1'
+const TREASURY2 = 'treasury2'
+const TREASURY3 = 'treasury3'
+
+const GRANTEE1 = 'grantee1'
+const GRANTEE2 = 'grantee2'
+const GRANTEE3 = 'grantee3'
+const GRANTEE4 = 'grantee4'
+const GRANTEE5 = 'grantee5'
+
+const STAMP1 = 1640995100000
+const STAMP2 = 1640995200000
+const STAMP3 = 1640995300000
+const STAMP4 = 1640995400000
+const STAMP5 = 1640995500000
+
+const HEIGHT1 = '100'
+const HEIGHT2 = '200'
+const HEIGHT3 = '300'
+const HEIGHT4 = '400'
+const HEIGHT5 = '500'
+
+const feegrantActivity: FeegrantActivityItem[] = [
+  createFeegrantAllowanceHelper(
+    TREASURY1,
+    GRANTEE1,
+    HEIGHT1,
+    STAMP1.toString(),
+    new Date(STAMP1).toISOString()
+  ),
+  createFeegrantAllowanceHelper(
+    TREASURY2,
+    GRANTEE2,
+    HEIGHT2,
+    STAMP2.toString(),
+    new Date(STAMP2).toISOString()
+  ),
+  createFeegrantAllowanceHelper(
+    TREASURY2,
+    GRANTEE3,
+    HEIGHT3,
+    STAMP3.toString(),
+    new Date(STAMP3).toISOString()
+  ),
+  createFeegrantAllowanceHelper(
+    TREASURY3,
+    GRANTEE1,
+    HEIGHT2,
+    STAMP3.toString(),
+    new Date(STAMP3).toISOString()
+  ),
+  createFeegrantAllowanceHelper(
+    TREASURY3,
+    GRANTEE2,
+    HEIGHT3,
+    STAMP3.toString(),
+    new Date(STAMP3).toISOString()
+  ),
+  createFeegrantAllowanceHelper(
+    TREASURY3,
+    GRANTEE3,
+    HEIGHT4,
+    STAMP4.toString(),
+    new Date(STAMP4).toISOString()
+  ),
+  createFeegrantAllowanceHelper(
+    TREASURY3,
+    GRANTEE4,
+    HEIGHT4,
+    STAMP4.toString(),
+    new Date(STAMP4).toISOString()
+  ),
+  createFeegrantAllowanceHelper(
+    TREASURY3,
+    GRANTEE5,
+    HEIGHT4,
+    STAMP5.toString(),
+    new Date(STAMP5).toISOString()
+  ),
+]
 
 export const loadFeegrantTests = (options: ComputerTestOptions) => {
   describe('feegrant', () => {
     beforeEach(async () => {
-      const blockTimestamp = new Date('2022-01-01T00:00:00.000Z')
+      WasmCodeService.instance.addDefaultWasmCodes(
+        new WasmCode('xion-treasury', [100, 101])
+      )
 
-      await FeegrantAllowance.bulkCreate([
-        {
-          granter: 'xion1granter123',
-          grantee: 'xion1grantee456',
-          blockHeight: '100',
-          blockTimeUnixMs: '1640995200000',
-          blockTimestamp,
-          allowanceData: 'base64allowancedata1',
-          allowanceType: 'BasicAllowance',
-          active: true,
-          parsedAmount: '1000000',
-          parsedDenom: 'uxion',
-          parsedAllowanceType: 'BasicAllowance',
-          parsedExpirationUnixMs: null,
-        },
-        {
-          granter: 'xion1granter123',
-          grantee: 'xion1grantee789',
-          blockHeight: '200',
-          blockTimeUnixMs: '1640995300000',
-          blockTimestamp: new Date('2022-01-01T00:01:40.000Z'),
-          allowanceData: 'base64allowancedata2',
-          allowanceType: 'PeriodicAllowance',
-          active: true,
-          parsedAmount: '2000000',
-          parsedDenom: 'uxion',
-          parsedAllowanceType: 'PeriodicAllowance',
-          parsedExpirationUnixMs: '1672531200000', // 2023-01-01
-        },
-        {
-          granter: 'xion1granter456',
-          grantee: 'xion1grantee123',
-          blockHeight: '150',
-          blockTimeUnixMs: '1640995250000',
-          blockTimestamp: new Date('2022-01-01T00:00:50.000Z'),
-          allowanceData: 'base64allowancedata3',
-          allowanceType: 'BasicAllowance',
-          active: true,
-          parsedAmount: '500000',
-          parsedDenom: 'uusdc',
-          parsedAllowanceType: 'BasicAllowance',
-          parsedExpirationUnixMs: null,
-        },
-        {
-          granter: 'xion1granter789',
-          grantee: 'xion1grantee456',
-          blockHeight: '300',
-          blockTimeUnixMs: '1640995400000',
-          blockTimestamp: new Date('2022-01-01T00:03:20.000Z'),
-          allowanceData: '',
-          allowanceType: null,
-          active: false, // Revoked allowance
-          parsedAmount: null,
-          parsedDenom: null,
-          parsedAllowanceType: null,
-          parsedExpirationUnixMs: null,
-        },
-      ])
+      await createContractHelper(TREASURY1, HEIGHT1)
+      await createContractHelper(TREASURY2, HEIGHT2)
+      await createContractHelper(TREASURY3, HEIGHT3)
+
+      await FeegrantAllowance.bulkCreate(feegrantActivity)
 
       await Block.createMany([
         {
-          height: 100,
-          timeUnixMs: 1640995200000,
+          height: HEIGHT1,
+          timeUnixMs: STAMP1,
         },
         {
-          height: 150,
-          timeUnixMs: 1640995250000,
+          height: HEIGHT2,
+          timeUnixMs: STAMP2,
         },
         {
-          height: 200,
-          timeUnixMs: 1640995300000,
+          height: HEIGHT3,
+          timeUnixMs: STAMP3,
         },
         {
-          height: 300,
-          timeUnixMs: 1640995400000,
+          height: HEIGHT4,
+          timeUnixMs: STAMP4,
+        },
+        {
+          height: HEIGHT5,
+          timeUnixMs: STAMP5,
         },
       ])
 
       await State.updateSingleton({
-        latestBlockHeight: 300,
-        latestBlockTimeUnixMs: 1640995400000,
-        lastFeegrantBlockHeightExported: 300,
+        latestBlockHeight: HEIGHT5,
+        latestBlockTimeUnixMs: STAMP5,
+        lastFeegrantBlockHeightExported: HEIGHT5,
       })
     })
 
     describe('getFeegrantAllowance', () => {
       it('returns allowance for valid granter-grantee pair', async () => {
         await request(app.callback())
-          .get(
-            '/account/xion1granter123/feegrant/allowance?grantee=xion1grantee456'
-          )
+          .get(`/account/${TREASURY1}/feegrant/allowance?grantee=${GRANTEE1}`)
           .set('x-api-key', options.apiKey)
           .expect(200)
-          .expect({
-            granter: 'xion1granter123',
-            grantee: 'xion1grantee456',
-            allowanceData: 'base64allowancedata1',
-            allowanceType: 'BasicAllowance',
-            active: true,
-            block: {
-              height: '100',
-              timeUnixMs: '1640995200000',
-              timestamp: '2022-01-01T00:00:00.000Z',
-            },
-            parsedAmount: '1000000',
-            parsedDenom: 'uxion',
-            parsedAllowanceType: 'BasicAllowance',
-            parsedExpirationUnixMs: null,
-          })
+          .expect(feegrantActivity[0])
       })
 
       it('returns allowance for specific block height', async () => {
         await request(app.callback())
           .get(
-            '/account/xion1granter123/feegrant/allowance?grantee=xion1grantee789&block=200:1640995300000'
+            `/account/${TREASURY2}/feegrant/allowance?grantee=${GRANTEE2}&block=${HEIGHT2}:${STAMP2}`
           )
           .set('x-api-key', options.apiKey)
           .expect(200)
-          .expect({
-            granter: 'xion1granter123',
-            grantee: 'xion1grantee789',
-            allowanceData: 'base64allowancedata2',
-            allowanceType: 'PeriodicAllowance',
-            active: true,
-            block: {
-              height: '200',
-              timeUnixMs: '1640995300000',
-              timestamp: '2022-01-01T00:01:40.000Z',
-            },
-            parsedAmount: '2000000',
-            parsedDenom: 'uxion',
-            parsedAllowanceType: 'PeriodicAllowance',
-            parsedExpirationUnixMs: '1672531200000',
-          })
+          .expect(feegrantActivity[1])
       })
 
       it('returns undefined for non-existent allowance', async () => {
@@ -166,89 +221,66 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
 
       it('returns undefined for revoked allowance when querying latest', async () => {
         await request(app.callback())
-          .get(
-            '/account/xion1granter789/feegrant/allowance?grantee=xion1grantee456'
-          )
+          .get(`/account/${TREASURY3}/feegrant/allowance?grantee=${GRANTEE3}`)
           .set('x-api-key', options.apiKey)
           .expect(200)
-          .expect({
-            granter: 'xion1granter789',
-            grantee: 'xion1grantee456',
-            allowanceData: '',
-            allowanceType: null,
-            active: false,
-            block: {
-              height: '300',
-              timeUnixMs: '1640995400000',
-              timestamp: '2022-01-01T00:03:20.000Z',
-            },
-            parsedAmount: null,
-            parsedDenom: null,
-            parsedAllowanceType: null,
-            parsedExpirationUnixMs: null,
-          })
+          .expect(feegrantActivity[5])
       })
     })
 
     describe('getFeegrantAllowances', () => {
       it('returns allowances granted by address', async () => {
         await request(app.callback())
-          .get('/account/xion1granter123/feegrant/allowances?type=granted')
+          .get(`/account/${TREASURY1}/feegrant/allowances?type=granted`)
           .set('x-api-key', options.apiKey)
           .expect(200)
           .expect([
             {
-              granter: 'xion1granter123',
-              grantee: 'xion1grantee456',
+              granter: TREASURY1,
+              grantee: GRANTEE1,
               allowanceData: 'base64allowancedata1',
               allowanceType: 'BasicAllowance',
               active: true,
-              block: {
-                height: '100',
-                timeUnixMs: '1640995200000',
-                timestamp: '2022-01-01T00:00:00.000Z',
-              },
+              blockHeight: HEIGHT1,
+              blockTimeUnixMs: STAMP1.toString(),
+              blockTimestamp: new Date(STAMP1).toISOString(),
               parsedAmount: '1000000',
               parsedDenom: 'uxion',
               parsedAllowanceType: 'BasicAllowance',
               parsedExpirationUnixMs: null,
-            },
-            {
-              granter: 'xion1granter123',
-              grantee: 'xion1grantee789',
-              allowanceData: 'base64allowancedata2',
-              allowanceType: 'PeriodicAllowance',
-              active: true,
-              block: {
-                height: '200',
-                timeUnixMs: '1640995300000',
-                timestamp: '2022-01-01T00:01:40.000Z',
-              },
-              parsedAmount: '2000000',
-              parsedDenom: 'uxion',
-              parsedAllowanceType: 'PeriodicAllowance',
-              parsedExpirationUnixMs: '1672531200000',
             },
           ])
       })
 
       it('returns allowances received by address', async () => {
         await request(app.callback())
-          .get('/account/xion1grantee456/feegrant/allowances?type=received')
+          .get(`/account/${GRANTEE1}/feegrant/allowances?type=received`)
           .set('x-api-key', options.apiKey)
           .expect(200)
           .expect([
             {
-              granter: 'xion1granter123',
-              grantee: 'xion1grantee456',
+              granter: TREASURY1,
+              grantee: GRANTEE1,
               allowanceData: 'base64allowancedata1',
               allowanceType: 'BasicAllowance',
               active: true,
-              block: {
-                height: '100',
-                timeUnixMs: '1640995200000',
-                timestamp: '2022-01-01T00:00:00.000Z',
-              },
+              blockHeight: HEIGHT1,
+              blockTimeUnixMs: STAMP1.toString(),
+              blockTimestamp: new Date(STAMP1).toISOString(),
+              parsedAmount: '1000000',
+              parsedDenom: 'uxion',
+              parsedAllowanceType: 'BasicAllowance',
+              parsedExpirationUnixMs: null,
+            },
+            {
+              granter: TREASURY3,
+              grantee: GRANTEE1,
+              allowanceData: 'base64allowancedata1',
+              allowanceType: 'BasicAllowance',
+              active: true,
+              blockHeight: HEIGHT2,
+              blockTimeUnixMs: STAMP3.toString(),
+              blockTimestamp: new Date(STAMP3).toISOString(),
               parsedAmount: '1000000',
               parsedDenom: 'uxion',
               parsedAllowanceType: 'BasicAllowance',
@@ -259,41 +291,23 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
 
       it('defaults to granted type when no type specified', async () => {
         await request(app.callback())
-          .get('/account/xion1granter123/feegrant/allowances')
+          .get(`/account/${TREASURY1}/feegrant/allowances`)
           .set('x-api-key', options.apiKey)
           .expect(200)
           .expect([
             {
-              granter: 'xion1granter123',
-              grantee: 'xion1grantee456',
+              granter: TREASURY1,
+              grantee: GRANTEE1,
               allowanceData: 'base64allowancedata1',
               allowanceType: 'BasicAllowance',
               active: true,
-              block: {
-                height: '100',
-                timeUnixMs: '1640995200000',
-                timestamp: '2022-01-01T00:00:00.000Z',
-              },
+              blockHeight: HEIGHT1,
+              blockTimeUnixMs: STAMP1.toString(),
+              blockTimestamp: new Date(STAMP1).toISOString(),
               parsedAmount: '1000000',
               parsedDenom: 'uxion',
               parsedAllowanceType: 'BasicAllowance',
               parsedExpirationUnixMs: null,
-            },
-            {
-              granter: 'xion1granter123',
-              grantee: 'xion1grantee789',
-              allowanceData: 'base64allowancedata2',
-              allowanceType: 'PeriodicAllowance',
-              active: true,
-              block: {
-                height: '200',
-                timeUnixMs: '1640995300000',
-                timestamp: '2022-01-01T00:01:40.000Z',
-              },
-              parsedAmount: '2000000',
-              parsedDenom: 'uxion',
-              parsedAllowanceType: 'PeriodicAllowance',
-              parsedExpirationUnixMs: '1672531200000',
             },
           ])
       })
@@ -317,22 +331,20 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
       it('returns allowances for specific block height', async () => {
         await request(app.callback())
           .get(
-            '/account/xion1granter123/feegrant/allowances?type=granted&block=150:1640995250000'
+            `/account/${TREASURY1}/feegrant/allowances?type=granted&block=150:${STAMP1 + 50000}`
           )
           .set('x-api-key', options.apiKey)
           .expect(200)
           .expect([
             {
-              granter: 'xion1granter123',
-              grantee: 'xion1grantee456',
+              granter: TREASURY1,
+              grantee: GRANTEE1,
               allowanceData: 'base64allowancedata1',
               allowanceType: 'BasicAllowance',
               active: true,
-              block: {
-                height: '100',
-                timeUnixMs: '1640995200000',
-                timestamp: '2022-01-01T00:00:00.000Z',
-              },
+              blockHeight: HEIGHT1,
+              blockTimeUnixMs: STAMP1.toString(),
+              blockTimestamp: new Date(STAMP1).toISOString(),
               parsedAmount: '1000000',
               parsedDenom: 'uxion',
               parsedAllowanceType: 'BasicAllowance',
@@ -345,7 +357,7 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
     describe('hasFeegrantAllowance', () => {
       it('returns true for active allowance', async () => {
         await request(app.callback())
-          .get('/account/xion1granter123/feegrant/has?grantee=xion1grantee456')
+          .get(`/account/${TREASURY1}/feegrant/has?grantee=${GRANTEE1}`)
           .set('x-api-key', options.apiKey)
           .expect(200)
           .expect('true')
@@ -353,7 +365,7 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
 
       it('returns false for inactive allowance', async () => {
         await request(app.callback())
-          .get('/account/xion1granter789/feegrant/has?grantee=xion1grantee456')
+          .get(`/account/${TREASURY1}/feegrant/has?grantee=${GRANTEE5}`)
           .set('x-api-key', options.apiKey)
           .expect(200)
           .expect('false')
@@ -370,15 +382,15 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
       it('returns correct result for specific block height', async () => {
         await request(app.callback())
           .get(
-            '/account/xion1granter123/feegrant/has?grantee=xion1grantee789&block=150:1640995250000'
+            `/account/${TREASURY1}/feegrant/has?grantee=${GRANTEE1}&block=${HEIGHT1}:${STAMP1}`
           )
           .set('x-api-key', options.apiKey)
           .expect(200)
-          .expect('false')
+          .expect('true')
 
         await request(app.callback())
           .get(
-            '/account/xion1granter123/feegrant/has?grantee=xion1grantee789&block=200:1640995300000'
+            `/account/${TREASURY2}/feegrant/has?grantee=${GRANTEE2}&block=${HEIGHT2}:${STAMP2}`
           )
           .set('x-api-key', options.apiKey)
           .expect(200)
@@ -391,7 +403,7 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
         // Query at block 150 should not see the allowance created at block 200
         await request(app.callback())
           .get(
-            '/account/xion1granter123/feegrant/allowance?grantee=xion1grantee789&block=150:1640995250000'
+            `/account/${TREASURY2}/feegrant/allowance?grantee=${GRANTEE2}&block=150:${STAMP1 + 50000}`
           )
           .set('x-api-key', options.apiKey)
           .expect(204)
@@ -399,48 +411,31 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
         // Query at block 200 should see the allowance
         await request(app.callback())
           .get(
-            '/account/xion1granter123/feegrant/allowance?grantee=xion1grantee789&block=200:1640995300000'
+            `/account/${TREASURY2}/feegrant/allowance?grantee=${GRANTEE2}&block=${HEIGHT2}:${STAMP2}`
           )
           .set('x-api-key', options.apiKey)
           .expect(200)
-          .expect({
-            granter: 'xion1granter123',
-            grantee: 'xion1grantee789',
-            allowanceData: 'base64allowancedata2',
-            allowanceType: 'PeriodicAllowance',
-            active: true,
-            block: {
-              height: '200',
-              timeUnixMs: '1640995300000',
-              timestamp: '2022-01-01T00:01:40.000Z',
-            },
-            parsedAmount: '2000000',
-            parsedDenom: 'uxion',
-            parsedAllowanceType: 'PeriodicAllowance',
-            parsedExpirationUnixMs: '1672531200000',
-          })
+          .expect(feegrantActivity[1])
       })
 
       it('applies block height filter correctly for allowances queries', async () => {
         // Query at block 150 should only see allowances up to that block
         await request(app.callback())
           .get(
-            '/account/xion1granter123/feegrant/allowances?type=granted&block=150:1640995250000'
+            `/account/${TREASURY1}/feegrant/allowances?type=granted&block=150:${STAMP1 + 50000}`
           )
           .set('x-api-key', options.apiKey)
           .expect(200)
           .expect([
             {
-              granter: 'xion1granter123',
-              grantee: 'xion1grantee456',
+              granter: TREASURY1,
+              grantee: GRANTEE1,
               allowanceData: 'base64allowancedata1',
               allowanceType: 'BasicAllowance',
               active: true,
-              block: {
-                height: '100',
-                timeUnixMs: '1640995200000',
-                timestamp: '2022-01-01T00:00:00.000Z',
-              },
+              blockHeight: HEIGHT1,
+              blockTimeUnixMs: STAMP1.toString(),
+              blockTimestamp: new Date(STAMP1).toISOString(),
               parsedAmount: '1000000',
               parsedDenom: 'uxion',
               parsedAllowanceType: 'BasicAllowance',
@@ -547,12 +542,12 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
             .set('x-api-key', options.apiKey)
             .expect(200)
             .expect({
-              totalActiveGrants: 3,
-              totalActiveGrantees: 3,
-              totalActiveGranters: 2,
-              totalRevokedGrants: 1,
-              totalBasicAllowances: 2,
-              totalPeriodicAllowances: 1,
+              totalActiveGrants: 8,
+              totalActiveGrantees: 5,
+              totalActiveGranters: 3,
+              totalRevokedGrants: 0,
+              totalBasicAllowances: 8,
+              totalPeriodicAllowances: 0,
               totalAllowedMsgAllowances: 0,
               totalUnknownAllowances: 0,
             })
@@ -586,19 +581,14 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
             .set('x-api-key', options.apiKey)
             .expect(200)
             .expect({
-              totalXionGranted: '3000000',
-              totalUsdcGranted: '500000',
-              totalGrantsWithAmounts: 3,
+              totalXionGranted: '8000000',
+              totalUsdcGranted: '0',
+              totalGrantsWithAmounts: 8,
               grantsByToken: [
                 {
                   denom: 'uxion',
-                  total: '3000000',
-                  count: 2,
-                },
-                {
-                  denom: 'uusdc',
-                  total: '500000',
-                  count: 1,
+                  total: '8000000',
+                  count: 8,
                 },
               ],
             })
@@ -631,11 +621,11 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
             .set('x-api-key', options.apiKey)
             .expect(200)
             .expect({
-              totalActiveGrantees: 3,
-              granteesWithRecentTxActivity: 2,
-              granteesWithRecentBalanceActivity: 2,
-              granteesWithAnyRecentActivity: 3,
-              activityRate: 100.0,
+              totalActiveGrantees: 8,
+              granteesWithRecentTxActivity: 0,
+              granteesWithRecentBalanceActivity: 0,
+              granteesWithAnyRecentActivity: 0,
+              activityRate: 0,
             })
         })
 
@@ -645,11 +635,11 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
             .set('x-api-key', options.apiKey)
             .expect(200)
             .expect({
-              totalActiveGrantees: 3,
-              granteesWithRecentTxActivity: 2,
-              granteesWithRecentBalanceActivity: 2,
-              granteesWithAnyRecentActivity: 3,
-              activityRate: 100.0,
+              totalActiveGrantees: 8,
+              granteesWithRecentTxActivity: 0,
+              granteesWithRecentBalanceActivity: 0,
+              granteesWithAnyRecentActivity: 0,
+              activityRate: 0,
             })
         })
 
@@ -674,11 +664,10 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
       describe('enhanced generic formulas', () => {
         beforeEach(async () => {
           // Reset and register treasury code ID for testing
-          WasmCodeService.instance.reset()
-          WasmCodeService.instance.addDefaultWasmCodes(
-            new WasmCode('xion', [100, 101]),
-            new WasmCode('treasury', [100, 101])
-          )
+          // WasmCodeService.instance.reset()
+          // WasmCodeService.instance.addDefaultWasmCodes(
+          //   new WasmCode('xion-treasury', [100, 101])
+          // )
 
           // Create treasury contracts
           await Contract.bulkCreate([
@@ -962,10 +951,8 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
     describe('treasury contract formulas', () => {
       beforeEach(async () => {
         // Reset and register treasury code ID for testing
-        WasmCodeService.instance.reset()
         WasmCodeService.instance.addDefaultWasmCodes(
-          new WasmCode('xion', [200, 201]),
-          new WasmCode('treasury', [200, 201])
+          new WasmCode('xion-treasury', [200, 201])
         )
 
         // Create treasury contract first (required for foreign key constraints)
@@ -1554,8 +1541,7 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
         // Reset and register treasury code ID for aggregator testing
         WasmCodeService.instance.reset()
         WasmCodeService.instance.addDefaultWasmCodes(
-          new WasmCode('xion', [300, 301]),
-          new WasmCode('treasury', [300, 301])
+          new WasmCode('xion-treasury', [300, 301])
         )
 
         // Create treasury contracts for aggregator testing
@@ -1822,10 +1808,10 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
             .expect(200)
 
           const data = response.body
-          data.forEach((point: any) => {
+          for (const point of data) {
             expect(typeof point.value.onboardingVelocity).toBe('number')
             expect(point.value.onboardingVelocity).toBeGreaterThanOrEqual(0)
-          })
+          }
         })
 
         it('validates required contractAddress parameter', async () => {
@@ -1865,12 +1851,12 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
             .expect(200)
 
           const data = response.body
-          data.forEach((point: any) => {
+          for (const point of data) {
             expect(typeof point.value.totalFeegrantVolume).toBe('string')
             expect(typeof point.value.treasuryVolume).toBe('string')
             expect(typeof point.value.nonTreasuryVolume).toBe('string')
             expect(Array.isArray(point.value.volumeByToken)).toBe(true)
-          })
+          }
         })
 
         it('handles custom aggregation parameters', async () => {

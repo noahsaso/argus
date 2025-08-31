@@ -1,4 +1,4 @@
-import { Op, WhereOptions } from 'sequelize'
+import { Op, type WhereOptions } from 'sequelize'
 import {
   AllowNull,
   AutoIncrement,
@@ -9,11 +9,11 @@ import {
 } from 'sequelize-typescript'
 
 import {
-  Block,
-  ComputationDependentKey,
+  type Block,
+  type ComputationDependentKey,
   DependableEventModel,
   DependentKeyNamespace,
-  FeegrantAllowanceJson,
+  type FeegrantAllowanceJson,
 } from '@/types'
 import { getDependentKey, serializeBlock } from '@/utils'
 
@@ -150,7 +150,9 @@ export class FeegrantAllowance extends DependableEventModel {
       allowanceData: this.allowanceData,
       allowanceType: this.allowanceType,
       active: this.active,
-      block: serializeBlock(this.block),
+      blockHeight: this.blockHeight,
+      blockTimeUnixMs: this.blockTimeUnixMs,
+      blockTimestamp: this.blockTimestamp,
       parsedAmount: this.parsedAmount,
       parsedDenom: this.parsedDenom,
       parsedAllowanceType: this.parsedAllowanceType,
@@ -195,8 +197,8 @@ export class FeegrantAllowance extends DependableEventModel {
   }
 
   static dependentKeyNamespace = DependentKeyNamespace.FeegrantAllowance
-  static blockHeightKey: string = 'blockHeight'
-  static blockTimeUnixMsKey: string = 'blockTimeUnixMs'
+  static blockHeightKey = 'blockHeight'
+  static blockTimeUnixMsKey = 'blockTimeUnixMs'
 
   // Returns a where clause that will match all events that are described by the
   // dependent keys.
