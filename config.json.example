@@ -11,13 +11,13 @@
     "data": {
       "dialect": "postgres",
       "host": "localhost",
-      "database": "data_db",
+      "database": "dev_data",
       "username": "user"
     },
     "accounts": {
       "dialect": "postgres",
       "host": "localhost",
-      "database": "accounts_db",
+      "database": "dev_accounts",
       "username": "user"
     }
   },
@@ -37,7 +37,8 @@
     "cw4-group": [178],
     "polytone-note": [],
     "polytone-voice": [],
-    "valence-account": []
+    "valence-account": [],
+    "dao-rbam": []
   },
   "daoDaoBase": "https://testnet.daodao.zone",
   "discordNotifierApiKey": "key",
