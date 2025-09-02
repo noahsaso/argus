@@ -1,9 +1,11 @@
+import { dao as daoRbam } from '@/formulas/formulas/contract/external/daoRbam'
 import { dao as daoProposalMultipleDao } from '@/formulas/formulas/contract/proposal/daoProposalMultiple'
 import { dao as daoProposalSingleDao } from '@/formulas/formulas/contract/proposal/daoProposalSingle'
 import { ContractEnv } from '@/types'
 
 const CODE_IDS_KEY_SINGLE = 'dao-proposal-single'
 const CODE_IDS_KEY_MULTIPLE = 'dao-proposal-multiple'
+const CODE_IDS_KEY_RBAM = 'dao-rbam'
 
 export const getDaoAddressForProposalModule = async (
   env: ContractEnv
@@ -28,6 +30,11 @@ export const getDaoAddressForProposalModule = async (
   ) {
     daoAddress = await daoProposalMultipleDao.compute(env)
   }
-
+  // dao-rbam
+  else if (
+    await env.contractMatchesCodeIdKeys(env.contractAddress, CODE_IDS_KEY_RBAM)
+  ) {
+    daoAddress = await daoRbam.compute(env)
+  }
   return daoAddress
 }
