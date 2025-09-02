@@ -7,6 +7,7 @@ import {
   ExtractorHandlerOutput,
   ExtractorSyncEnv,
 } from '@/types'
+import { getContractInfo } from '@/utils'
 
 import {
   WasmEventData,
@@ -58,7 +59,7 @@ export class DaoExtractor extends Extractor {
       throw new Error('CosmWasm client not connected')
     }
 
-    const contract = await client.getContract(address)
+    const contract = await getContractInfo({ client, address })
 
     // Only process if the contract is a dao-dao-core contract.
     if (
@@ -175,9 +176,10 @@ export class DaoExtractor extends Extractor {
                     }),
                   ])
 
-                const { codeId: votingModuleCodeId } = await client.getContract(
-                  voting_module
-                )
+                const { codeId: votingModuleCodeId } = await getContractInfo({
+                  client,
+                  address: voting_module,
+                })
 
                 return [
                   // Voting module.
@@ -199,7 +201,10 @@ export class DaoExtractor extends Extractor {
                           ? proposalModule
                           : proposalModule.address
 
-                      const { codeId } = await client.getContract(address)
+                      const { codeId } = await getContractInfo({
+                        client,
+                        address,
+                      })
 
                       return WasmInstantiateOrMigrateDataSource.data({
                         type: 'instantiate',

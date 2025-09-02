@@ -1,6 +1,7 @@
 export * from './AutoCosmWasmClient'
 export * from './block'
 export * from './chain'
+export * from './contract'
 export * from './gov'
 export * from './keys'
 export * from './misc'

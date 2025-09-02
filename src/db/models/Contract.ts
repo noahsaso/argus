@@ -1,4 +1,3 @@
-import { CosmWasmClient } from '@cosmjs/cosmwasm-stargate'
 import {
   AllowNull,
   Column,
@@ -11,6 +10,7 @@ import {
 import { ConfigManager } from '@/config'
 import { WasmCodeService } from '@/services/wasm-codes'
 import { ContractJson } from '@/types'
+import { getContractInfo } from '@/utils'
 
 @Table({
   timestamps: true,
@@ -86,9 +86,10 @@ export class Contract extends Model {
    */
   async updateFromChain(): Promise<void> {
     const { localRpc, remoteRpc } = ConfigManager.load()
-    const rpc = localRpc ?? remoteRpc
-    const client = await CosmWasmClient.connect(rpc)
-    const contract = await client.getContract(this.address)
+    const contract = await getContractInfo({
+      rpc: localRpc ?? remoteRpc,
+      address: this.address,
+    })
     await this.update({
       codeId: contract.codeId,
       admin: contract.admin || null,

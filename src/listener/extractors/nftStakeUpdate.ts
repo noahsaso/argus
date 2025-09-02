@@ -4,6 +4,7 @@ import {
   ExtractorHandler,
   ExtractorHandlerOutput,
 } from '@/types'
+import { getContractInfo } from '@/utils'
 
 import { WasmEventData, WasmEventDataSource } from '../sources'
 import { Extractor } from './base'
@@ -50,7 +51,10 @@ export class NftStakeUpdateExtractor extends Extractor {
       await new Promise((resolve) => setTimeout(resolve, 1000))
     }
 
-    const { codeId } = await client.getContract(contractAddress)
+    const { codeId } = await getContractInfo({
+      client,
+      address: contractAddress,
+    })
 
     // Only process if the contract is a dao-voting-cw721-staked contract.
     if (

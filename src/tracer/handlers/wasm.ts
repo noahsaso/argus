@@ -9,7 +9,7 @@ import { WasmCodeTrackersQueue } from '@/queues/queues'
 import { WasmCodeService } from '@/services'
 import { transformParsedStateEvents } from '@/transformers'
 import { Handler, HandlerMaker, WasmExportData } from '@/types'
-import { dbKeyForKeys, retry } from '@/utils'
+import { dbKeyForKeys, getContractInfo, retry } from '@/utils'
 
 const STORE_NAME = 'wasm'
 const DEFAULT_CONTRACT_BYTE_LENGTH = 32
@@ -85,15 +85,12 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
     const loadIntoCache = async () => {
       let codeId = 0
       try {
-        if (autoCosmWasmClient.client) {
-          codeId = (
-            await autoCosmWasmClient.client.getContract(contractAddress)
-          ).codeId
-        } else {
-          throw new Error(
-            `CosmWasm client not connected, cannot get code ID for ${contractAddress}.`
-          )
-        }
+        codeId = (
+          await getContractInfo({
+            client: autoCosmWasmClient,
+            address: contractAddress,
+          })
+        ).codeId
       } catch (err) {
         // If contract not found, ignore, leaving as 0. Otherwise, throw err.
         if (

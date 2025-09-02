@@ -6,6 +6,7 @@ import { Extraction } from '@/db'
 import * as listenerModule from '@/listener'
 import * as search from '@/search'
 import { AutoCosmWasmClient } from '@/utils'
+import * as utils from '@/utils'
 import * as webhooks from '@/webhooks'
 
 import { ExtractQueue, ExtractQueuePayload } from './extract'
@@ -52,12 +53,7 @@ describe('ExtractQueue', () => {
     }))
 
     vi.spyOn(AutoCosmWasmClient.prototype, 'update').mockImplementation(vi.fn())
-    vi.spyOn(AutoCosmWasmClient.prototype, 'client', 'get').mockImplementation(
-      () =>
-        ({
-          getContract: vi.fn(),
-        } as any)
-    )
+    vi.spyOn(utils, 'getContractInfo').mockImplementation(vi.fn())
 
     // Create extract queue
     extractQueue = new ExtractQueue({

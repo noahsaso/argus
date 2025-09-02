@@ -8,6 +8,7 @@ import {
   ExtractorHandlerOutput,
   ExtractorSyncEnv,
 } from '@/types'
+import { getContractInfo } from '@/utils'
 
 import {
   WasmInstantiateOrMigrateData,
@@ -31,7 +32,7 @@ export class ContractExtractor extends Extractor {
     }
 
     const [contract, response] = await Promise.all([
-      client.getContract(address),
+      getContractInfo({ client, address }),
       // Skip redundant getContract query in the normal
       // queryContractRaw.
       client['forceGetQueryClient']().wasm.queryContractRaw(

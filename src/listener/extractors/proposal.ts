@@ -7,6 +7,7 @@ import {
   ExtractorHandlerOutput,
   ExtractorSyncEnv,
 } from '@/types'
+import { getContractInfo } from '@/utils'
 
 import {
   WasmEventData,
@@ -58,7 +59,7 @@ export class ProposalExtractor extends Extractor {
     }
 
     const [contract, config] = await Promise.all([
-      client.getContract(address),
+      getContractInfo({ client, address }),
       client.queryContractSmart(address, {
         config: {},
       }),
@@ -115,7 +116,7 @@ export class ProposalExtractor extends Extractor {
     // Set if vote is cast during propose or vote action.
     const voteCast = !!sender && !!attributes.position?.[0]
 
-    const contract = await client.getContract(address)
+    const contract = await getContractInfo({ client, address })
 
     // Only process if the contract is a dao-proposal-single or
     // dao-proposal-multiple contract.
@@ -256,7 +257,10 @@ export class ProposalExtractor extends Extractor {
                         ? proposalModule
                         : proposalModule.address
 
-                    const { codeId } = await client.getContract(address)
+                    const { codeId } = await getContractInfo({
+                      client,
+                      address,
+                    })
 
                     return WasmInstantiateOrMigrateDataSource.data({
                       type: 'instantiate',

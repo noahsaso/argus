@@ -100,6 +100,7 @@
   },
   "dependencies": {
     "@bull-board/koa": "^5.8.4",
+    "@burnt-labs/xion-types": "^21.0.0-alpha.3",
     "@cosmjs/amino": "^0.32.3",
     "@cosmjs/cosmwasm-stargate": "^0.32.3",
     "@cosmjs/crypto": "^0.32.3",

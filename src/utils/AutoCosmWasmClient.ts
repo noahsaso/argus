@@ -142,4 +142,26 @@ export class AutoCosmWasmClient {
   get chainId(): string | undefined {
     return this._chainId
   }
+
+  async getValidClient(): Promise<CosmWasmClient> {
+    if (this._cosmWasmClient) {
+      return this._cosmWasmClient
+    }
+    await this.update()
+    if (!this._cosmWasmClient) {
+      throw new Error('CosmWasm client not connected')
+    }
+    return this._cosmWasmClient
+  }
+
+  async getValidChainId(): Promise<string> {
+    if (this._chainId) {
+      return this._chainId
+    }
+    await this.update()
+    if (!this._chainId) {
+      throw new Error('CosmWasm client not connected')
+    }
+    return this._chainId
+  }
 }

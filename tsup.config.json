@@ -10,5 +10,5 @@
   "splitting": false,
   "sourcemap": false,
   "clean": true,
-  "noExternal": ["@dao-dao/types"]
+  "noExternal": ["@dao-dao/types", "@burnt-labs/xion-types"]
 }

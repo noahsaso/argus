@@ -1,17 +1,26 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  MockInstance,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
 
 import { ConfigManager } from '@/config'
 import { Extraction } from '@/db'
 import { WasmCodeService } from '@/services'
 import { ExtractorEnv, ExtractorHandleableData } from '@/types'
-import { AutoCosmWasmClient } from '@/utils'
+import * as utils from '@/utils'
 
 import { WasmEventDataSource } from '../sources'
 import { NftStakeUpdateExtractor } from './nftStakeUpdate'
 
 describe('NFT Stake Update Extractor', () => {
-  let mockAutoCosmWasmClient: AutoCosmWasmClient
+  let mockAutoCosmWasmClient: utils.AutoCosmWasmClient
   let extractor: NftStakeUpdateExtractor
+  let getContractMock: MockInstance
 
   beforeAll(async () => {
     const instance = await WasmCodeService.setUpInstance()
@@ -26,11 +35,14 @@ describe('NFT Stake Update Extractor', () => {
   })
 
   beforeEach(async () => {
+    vi.clearAllMocks()
+
+    getContractMock = vi.spyOn(utils, 'getContractInfo')
+
     // Create mock AutoCosmWasmClient
     mockAutoCosmWasmClient = {
       update: vi.fn(),
       client: {
-        getContract: vi.fn(),
         queryContractSmart: vi.fn(),
         getBlock: vi.fn(),
         getHeight: vi.fn().mockResolvedValue(1001),
@@ -105,7 +117,7 @@ describe('NFT Stake Update Extractor', () => {
       ]
 
       // Mock the client methods
-      vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockResolvedValue({
+      getContractMock.mockResolvedValue({
         address: 'juno1nftvoting123contract456',
         codeId: 123,
         admin: 'juno1admin123',
@@ -138,8 +150,10 @@ describe('NFT Stake Update Extractor', () => {
 
       const result = (await extractor.extract(data)) as Extraction[]
 
-      expect(mockAutoCosmWasmClient.client!.getContract).toHaveBeenCalledWith(
-        'juno1nftvoting123contract456'
+      expect(getContractMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          address: 'juno1nftvoting123contract456',
+        })
       )
       expect(
         mockAutoCosmWasmClient.client!.queryContractSmart
@@ -252,7 +266,7 @@ describe('NFT Stake Update Extractor', () => {
       ]
 
       // Mock additional contract calls
-      vi.mocked(mockAutoCosmWasmClient.client!.getContract)
+      getContractMock
         .mockResolvedValueOnce({
           address: 'juno1nftvoting123contract456',
           codeId: 123,
@@ -439,7 +453,7 @@ describe('NFT Stake Update Extractor', () => {
       ]
 
       // Mock one successful and one failing contract
-      vi.mocked(mockAutoCosmWasmClient.client!.getContract)
+      getContractMock
         .mockResolvedValueOnce({
           address: 'juno1nftvoting123contract456',
           codeId: 123,
@@ -521,7 +535,7 @@ describe('NFT Stake Update Extractor', () => {
       ]
 
       // Mock one correct code ID and one incorrect code ID
-      vi.mocked(mockAutoCosmWasmClient.client!.getContract)
+      getContractMock
         .mockResolvedValueOnce({
           address: 'juno1nftvoting123contract456',
           codeId: 123,

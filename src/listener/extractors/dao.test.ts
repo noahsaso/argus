@@ -1,10 +1,18 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  MockInstance,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
 
 import { ConfigManager } from '@/config'
 import { Contract, Extraction } from '@/db'
 import { WasmCode, WasmCodeService } from '@/services'
 import { ExtractorEnv, ExtractorHandleableData } from '@/types'
-import { AutoCosmWasmClient } from '@/utils'
+import * as utils from '@/utils'
 
 import {
   WasmEventDataSource,
@@ -13,8 +21,9 @@ import {
 import { DaoExtractor } from './dao'
 
 describe('DAO Extractor', () => {
-  let mockAutoCosmWasmClient: AutoCosmWasmClient
+  let mockAutoCosmWasmClient: utils.AutoCosmWasmClient
   let extractor: DaoExtractor
+  let getContractMock: MockInstance
 
   const mockContractInfo = {
     info: {
@@ -53,11 +62,14 @@ describe('DAO Extractor', () => {
   })
 
   beforeEach(async () => {
+    vi.clearAllMocks()
+
+    getContractMock = vi.spyOn(utils, 'getContractInfo')
+
     // Create mock AutoCosmWasmClient
     mockAutoCosmWasmClient = {
       update: vi.fn(),
       client: {
-        getContract: vi.fn(),
         getContracts: vi.fn(),
         queryContractSmart: vi.fn(),
         getBlock: vi.fn(),
@@ -120,7 +132,7 @@ describe('DAO Extractor', () => {
       ]
 
       // Mock the client methods
-      vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockResolvedValue({
+      getContractMock.mockResolvedValue({
         address: 'juno1dao123contract456',
         codeId: 1,
         admin: 'juno1admin123',
@@ -135,8 +147,10 @@ describe('DAO Extractor', () => {
 
       const result = (await extractor.extract(data)) as Extraction[]
 
-      expect(mockAutoCosmWasmClient.client!.getContract).toHaveBeenCalledWith(
-        'juno1dao123contract456'
+      expect(getContractMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          address: 'juno1dao123contract456',
+        })
       )
       expect(
         mockAutoCosmWasmClient.client!.queryContractSmart
@@ -215,7 +229,7 @@ describe('DAO Extractor', () => {
       ]
 
       // Mock the client methods
-      vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockResolvedValue({
+      getContractMock.mockResolvedValue({
         address: 'juno1dao123contract456',
         codeId: 1,
         admin: 'juno1admin123',
@@ -230,8 +244,10 @@ describe('DAO Extractor', () => {
 
       const result = (await extractor.extract(data)) as Extraction[]
 
-      expect(mockAutoCosmWasmClient.client!.getContract).toHaveBeenCalledWith(
-        'juno1dao123contract456'
+      expect(getContractMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          address: 'juno1dao123contract456',
+        })
       )
       expect(
         mockAutoCosmWasmClient.client!.queryContractSmart
@@ -281,7 +297,7 @@ describe('DAO Extractor', () => {
       ]
 
       // Mock additional contract calls
-      vi.mocked(mockAutoCosmWasmClient.client!.getContract)
+      getContractMock
         .mockResolvedValueOnce({
           address: 'juno1dao123contract456',
           codeId: 1,
@@ -332,29 +348,27 @@ describe('DAO Extractor', () => {
       ]
 
       // Mock one correct code ID and one incorrect code ID
-      vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockImplementation(
-        async (address: string) => {
-          if (address === 'juno1dao123contract456') {
-            return {
-              address: 'juno1dao123contract456',
-              codeId: 1,
-              admin: 'juno1admin123',
-              creator: 'juno1creator123',
-              label: 'Test DAO',
-              ibcPortId: 'juno1ibc123',
-            }
-          } else {
-            return {
-              address: 'juno1dao789contract012',
-              codeId: 9999,
-              admin: 'juno1admin123',
-              creator: 'juno1creator123',
-              label: 'Test DAO',
-              ibcPortId: 'juno1ibc123',
-            }
+      getContractMock.mockImplementation(async (address: string) => {
+        if (address === 'juno1dao123contract456') {
+          return {
+            address: 'juno1dao123contract456',
+            codeId: 1,
+            admin: 'juno1admin123',
+            creator: 'juno1creator123',
+            label: 'Test DAO',
+            ibcPortId: 'juno1ibc123',
+          }
+        } else {
+          return {
+            address: 'juno1dao789contract012',
+            codeId: 9999,
+            admin: 'juno1admin123',
+            creator: 'juno1creator123',
+            label: 'Test DAO',
+            ibcPortId: 'juno1ibc123',
           }
         }
-      )
+      })
 
       // Mock successful queries for first contract only
       vi.mocked(
@@ -431,7 +445,7 @@ describe('DAO Extractor', () => {
       ]
 
       // Mock the client methods
-      vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockResolvedValue({
+      getContractMock.mockResolvedValue({
         address: 'juno1dao123contract456',
         codeId: 1,
         admin: 'juno1admin123',
@@ -517,26 +531,24 @@ describe('DAO Extractor', () => {
         }
       )
 
-      vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockImplementation(
-        async (address: string) => {
-          if (address === 'juno1voting123') {
-            return {
-              codeId: 3,
-            } as any
-          } else if (
-            address === 'juno1proposal123' ||
-            address === 'juno1proposal456'
-          ) {
-            return {
-              codeId: 4,
-            } as any
-          } else {
-            return {
-              codeId: 5,
-            } as any
-          }
+      getContractMock.mockImplementation(async (address: string) => {
+        if (address === 'juno1voting123') {
+          return {
+            codeId: 3,
+          } as any
+        } else if (
+          address === 'juno1proposal123' ||
+          address === 'juno1proposal456'
+        ) {
+          return {
+            codeId: 4,
+          } as any
+        } else {
+          return {
+            codeId: 5,
+          } as any
         }
-      )
+      })
 
       const result = await Array.fromAsync(
         DaoExtractor.sync!({

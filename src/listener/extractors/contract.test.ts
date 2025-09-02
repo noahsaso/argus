@@ -4,24 +4,27 @@ import { MockInstance, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ConfigManager } from '@/config'
 import { Contract, Extraction } from '@/db'
 import { ExtractorEnv, ExtractorHandleableData } from '@/types'
-import { AutoCosmWasmClient } from '@/utils'
+import * as utils from '@/utils'
 
 import { WasmInstantiateOrMigrateDataSource } from '../sources'
 import { ContractExtractor } from './contract'
 
 describe('Contracts Extractor', () => {
-  let mockAutoCosmWasmClient: AutoCosmWasmClient
+  let mockAutoCosmWasmClient: utils.AutoCosmWasmClient
   let extractor: ContractExtractor
   let queryContractRawMock: MockInstance
+  let getContractMock: MockInstance
 
   beforeEach(async () => {
+    vi.clearAllMocks()
+
     queryContractRawMock = vi.fn()
+    getContractMock = vi.spyOn(utils, 'getContractInfo')
 
     // Create mock AutoCosmWasmClient
     mockAutoCosmWasmClient = {
       update: vi.fn(),
       client: {
-        getContract: vi.fn(),
         getBlock: vi.fn(),
         getHeight: vi.fn(),
         getCodes: vi.fn(),
@@ -83,7 +86,7 @@ describe('Contracts Extractor', () => {
       ]
 
       // Mock the client methods
-      vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockResolvedValue({
+      getContractMock.mockResolvedValue({
         address: 'juno123contract456',
         codeId: 4862,
         admin: 'juno1admin123',
@@ -98,8 +101,10 @@ describe('Contracts Extractor', () => {
 
       const result = (await extractor.extract(data)) as Extraction[]
 
-      expect(mockAutoCosmWasmClient.client!.getContract).toHaveBeenCalledWith(
-        'juno123contract456'
+      expect(getContractMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          address: 'juno123contract456',
+        })
       )
       expect(queryContractRawMock).toHaveBeenCalledWith(
         'juno123contract456',
@@ -128,7 +133,7 @@ describe('Contracts Extractor', () => {
       ]
 
       // Mock the client methods
-      vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockResolvedValue({
+      getContractMock.mockResolvedValue({
         address: 'juno123contract456',
         codeId: 4862,
         admin: 'juno1admin123',
@@ -143,8 +148,10 @@ describe('Contracts Extractor', () => {
 
       const result = (await extractor.extract(data)) as Extraction[]
 
-      expect(mockAutoCosmWasmClient.client!.getContract).toHaveBeenCalledWith(
-        'juno123contract456'
+      expect(getContractMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          address: 'juno123contract456',
+        })
       )
       expect(queryContractRawMock).toHaveBeenCalledWith(
         'juno123contract456',
@@ -179,7 +186,7 @@ describe('Contracts Extractor', () => {
       ]
 
       // Mock additional contract calls
-      vi.mocked(mockAutoCosmWasmClient.client!.getContract)
+      getContractMock
         .mockResolvedValueOnce({
           address: 'juno123contract456',
           codeId: 4862,
@@ -232,30 +239,28 @@ describe('Contracts Extractor', () => {
       ]
 
       // Mock one successful and one failing contract
-      vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockImplementation(
-        async (address: string) => {
-          if (address === 'juno123contract456') {
-            return {
-              address: 'juno123contract456',
-              codeId: 4862,
-              admin: 'juno1admin123',
-              creator: 'juno1creator123',
-              label: 'Test Contract 1',
-              ibcPortId: undefined,
-            }
-          } else if (address === 'juno789contract012') {
-            return {
-              address: 'juno789contract012',
-              codeId: 4862,
-              admin: 'juno1admin456',
-              creator: 'juno1creator456',
-              label: 'Test Contract 2',
-              ibcPortId: undefined,
-            }
+      getContractMock.mockImplementation(async (address: string) => {
+        if (address === 'juno123contract456') {
+          return {
+            address: 'juno123contract456',
+            codeId: 4862,
+            admin: 'juno1admin123',
+            creator: 'juno1creator123',
+            label: 'Test Contract 1',
+            ibcPortId: undefined,
           }
-          throw new Error('Unknown contract')
+        } else if (address === 'juno789contract012') {
+          return {
+            address: 'juno789contract012',
+            codeId: 4862,
+            admin: 'juno1admin456',
+            creator: 'juno1creator456',
+            label: 'Test Contract 2',
+            ibcPortId: undefined,
+          }
         }
-      )
+        throw new Error('Unknown contract')
+      })
 
       // Mock successful queries for first contract, failed for second
       queryContractRawMock.mockImplementation(async (address: string) => {
@@ -283,7 +288,7 @@ describe('Contracts Extractor', () => {
       ]
 
       // Mock the client methods
-      vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockResolvedValue({
+      getContractMock.mockResolvedValue({
         address: 'juno123contract456',
         codeId: 4862,
         admin: 'juno1admin123',
@@ -320,7 +325,7 @@ describe('Contracts Extractor', () => {
       ]
 
       // Mock the client methods
-      vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockResolvedValue({
+      getContractMock.mockResolvedValue({
         address: 'juno123contract456',
         codeId: 4862,
         admin: 'juno1admin123',
