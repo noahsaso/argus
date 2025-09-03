@@ -54,12 +54,7 @@ export class SyncExtractorsQueue extends BaseQueue<SyncExtractorsQueuePayload> {
 
     job.log(`syncing extractors: ${toSync.map((e) => e.name).join(', ')}`)
 
-    await this.autoCosmWasmClient.update()
-    const client = this.autoCosmWasmClient.client
-    if (!client) {
-      throw new Error('CosmWasm client not connected')
-    }
-
+    const client = await this.autoCosmWasmClient.getValidClient()
     const block = await client.getBlock()
     let count = 0
 

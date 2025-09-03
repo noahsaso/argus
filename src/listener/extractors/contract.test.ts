@@ -22,19 +22,21 @@ describe('Contracts Extractor', () => {
     getContractMock = vi.spyOn(utils, 'getContractInfo')
 
     // Create mock AutoCosmWasmClient
+    const mockClient: any = {
+      getBlock: vi.fn(),
+      getHeight: vi.fn(),
+      getCodes: vi.fn(),
+      getContracts: vi.fn(),
+      forceGetQueryClient: vi.fn().mockReturnValue({
+        wasm: {
+          queryContractRaw: queryContractRawMock,
+        },
+      }),
+    }
     mockAutoCosmWasmClient = {
       update: vi.fn(),
-      client: {
-        getBlock: vi.fn(),
-        getHeight: vi.fn(),
-        getCodes: vi.fn(),
-        getContracts: vi.fn(),
-        forceGetQueryClient: vi.fn().mockReturnValue({
-          wasm: {
-            queryContractRaw: queryContractRawMock,
-          },
-        }),
-      },
+      client: mockClient,
+      getValidClient: vi.fn().mockResolvedValue(mockClient),
     } as any
 
     // Set up the extractor environment
@@ -239,28 +241,30 @@ describe('Contracts Extractor', () => {
       ]
 
       // Mock one successful and one failing contract
-      getContractMock.mockImplementation(async (address: string) => {
-        if (address === 'juno123contract456') {
-          return {
-            address: 'juno123contract456',
-            codeId: 4862,
-            admin: 'juno1admin123',
-            creator: 'juno1creator123',
-            label: 'Test Contract 1',
-            ibcPortId: undefined,
+      getContractMock.mockImplementation(
+        async ({ address }: { address: string }) => {
+          if (address === 'juno123contract456') {
+            return {
+              address: 'juno123contract456',
+              codeId: 4862,
+              admin: 'juno1admin123',
+              creator: 'juno1creator123',
+              label: 'Test Contract 1',
+              ibcPortId: undefined,
+            }
+          } else if (address === 'juno789contract012') {
+            return {
+              address: 'juno789contract012',
+              codeId: 4862,
+              admin: 'juno1admin456',
+              creator: 'juno1creator456',
+              label: 'Test Contract 2',
+              ibcPortId: undefined,
+            }
           }
-        } else if (address === 'juno789contract012') {
-          return {
-            address: 'juno789contract012',
-            codeId: 4862,
-            admin: 'juno1admin456',
-            creator: 'juno1creator456',
-            label: 'Test Contract 2',
-            ibcPortId: undefined,
-          }
+          throw new Error('Unknown contract')
         }
-        throw new Error('Unknown contract')
-      })
+      )
 
       // Mock successful queries for first contract, failed for second
       queryContractRawMock.mockImplementation(async (address: string) => {

@@ -53,6 +53,12 @@ describe('ExtractQueue', () => {
     }))
 
     vi.spyOn(AutoCosmWasmClient.prototype, 'update').mockImplementation(vi.fn())
+    vi.spyOn(AutoCosmWasmClient.prototype, 'client', 'get').mockImplementation(
+      () => ({} as any)
+    )
+    vi.spyOn(AutoCosmWasmClient.prototype, 'getValidClient').mockResolvedValue(
+      {} as any
+    )
     vi.spyOn(utils, 'getContractInfo').mockImplementation(vi.fn())
 
     // Create extract queue
@@ -192,13 +198,14 @@ describe('ExtractQueue', () => {
       )
 
       const processPromise = extractQueue.process(mockJob)
-
-      // Fast-forward time to trigger timeout
-      vi.advanceTimersByTime(30000)
-
-      await expect(processPromise).rejects.toThrow(
+      const expectPromise = expect(processPromise).rejects.toThrow(
         'Extract timed out after 30 seconds.'
       )
+
+      // Fast-forward time to trigger timeout
+      await vi.advanceTimersByTimeAsync(30000)
+
+      await expectPromise
 
       vi.useRealTimers()
     })

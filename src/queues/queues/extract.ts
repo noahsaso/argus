@@ -41,12 +41,7 @@ export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
   }
 
   async process(job: Job<ExtractQueuePayload>) {
-    if (!this.autoCosmWasmClient.client) {
-      await this.autoCosmWasmClient.update()
-      if (!this.autoCosmWasmClient.client) {
-        throw new Error('CosmWasm client not connected')
-      }
-    }
+    await this.autoCosmWasmClient.getValidClient()
 
     const extractors = getExtractorMap()
 

@@ -40,13 +40,15 @@ describe('NFT Stake Update Extractor', () => {
     getContractMock = vi.spyOn(utils, 'getContractInfo')
 
     // Create mock AutoCosmWasmClient
+    const mockClient: any = {
+      queryContractSmart: vi.fn(),
+      getBlock: vi.fn(),
+      getHeight: vi.fn().mockResolvedValue(1001),
+    }
     mockAutoCosmWasmClient = {
       update: vi.fn(),
-      client: {
-        queryContractSmart: vi.fn(),
-        getBlock: vi.fn(),
-        getHeight: vi.fn().mockResolvedValue(1001),
-      },
+      client: mockClient,
+      getValidClient: vi.fn().mockResolvedValue(mockClient),
     } as any
 
     // Set up the extractor environment

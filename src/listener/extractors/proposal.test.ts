@@ -42,14 +42,16 @@ describe('Proposal Extractor', () => {
     getContractMock = vi.spyOn(utils, 'getContractInfo')
 
     // Create mock AutoCosmWasmClient
+    const mockClient: any = {
+      getContracts: vi.fn(),
+      queryContractSmart: vi.fn(),
+      getBlock: vi.fn(),
+      getHeight: vi.fn(),
+    }
     mockAutoCosmWasmClient = {
       update: vi.fn(),
-      client: {
-        getContracts: vi.fn(),
-        queryContractSmart: vi.fn(),
-        getBlock: vi.fn(),
-        getHeight: vi.fn(),
-      },
+      client: mockClient,
+      getValidClient: vi.fn().mockResolvedValue(mockClient),
     } as any
 
     // Set up the extractor environment
@@ -607,37 +609,39 @@ describe('Proposal Extractor', () => {
   describe('sync function', () => {
     it('should sync config, proposal, and vote data for all contracts', async () => {
       // Mock contracts
-      getContractMock.mockImplementation(async (address: string) => {
-        if (address === 'juno1dao') {
-          return {
-            address: 'juno1dao',
-            codeId: 1,
-            admin: 'juno1admin123',
-            creator: 'juno1creator123',
-            label: 'Test DAO',
-            ibcPortId: 'juno1ibc123',
+      getContractMock.mockImplementation(
+        async ({ address }: { address: string }) => {
+          if (address === 'juno1dao') {
+            return {
+              address: 'juno1dao',
+              codeId: 1,
+              admin: 'juno1admin123',
+              creator: 'juno1creator123',
+              label: 'Test DAO',
+              ibcPortId: 'juno1ibc123',
+            }
+          } else if (address === 'juno1proposal123') {
+            return {
+              address: 'juno1proposal123',
+              codeId: 2,
+              admin: 'juno1admin123',
+              creator: 'juno1creator123',
+              label: 'Test Proposal Contract',
+              ibcPortId: 'juno1ibc123',
+            }
+          } else if (address === 'juno1proposal456') {
+            return {
+              address: 'juno1proposal456',
+              codeId: 3,
+              admin: 'juno1admin123',
+              creator: 'juno1creator123',
+              label: 'Test Proposal Contract',
+              ibcPortId: 'juno1ibc123',
+            }
           }
-        } else if (address === 'juno1proposal123') {
-          return {
-            address: 'juno1proposal123',
-            codeId: 2,
-            admin: 'juno1admin123',
-            creator: 'juno1creator123',
-            label: 'Test Proposal Contract',
-            ibcPortId: 'juno1ibc123',
-          }
-        } else if (address === 'juno1proposal456') {
-          return {
-            address: 'juno1proposal456',
-            codeId: 3,
-            admin: 'juno1admin123',
-            creator: 'juno1creator123',
-            label: 'Test Proposal Contract',
-            ibcPortId: 'juno1ibc123',
-          }
+          throw new Error('Unknown contract')
         }
-        throw new Error('Unknown contract')
-      })
+      )
       vi.mocked(mockAutoCosmWasmClient.client!.getContracts).mockImplementation(
         async (codeId: number) => {
           if (codeId === 1) {
@@ -778,37 +782,39 @@ describe('Proposal Extractor', () => {
     })
 
     it('should handle pagination in sync function', async () => {
-      getContractMock.mockImplementation(async (address: string) => {
-        if (address === 'juno1dao') {
-          return {
-            address: 'juno1dao',
-            codeId: 1,
-            admin: 'juno1admin123',
-            creator: 'juno1creator123',
-            label: 'Test DAO',
-            ibcPortId: 'juno1ibc123',
+      getContractMock.mockImplementation(
+        async ({ address }: { address: string }) => {
+          if (address === 'juno1dao') {
+            return {
+              address: 'juno1dao',
+              codeId: 1,
+              admin: 'juno1admin123',
+              creator: 'juno1creator123',
+              label: 'Test DAO',
+              ibcPortId: 'juno1ibc123',
+            }
+          } else if (address === 'juno1proposal123') {
+            return {
+              address: 'juno1proposal123',
+              codeId: 2,
+              admin: 'juno1admin123',
+              creator: 'juno1creator123',
+              label: 'Test Proposal Contract',
+              ibcPortId: 'juno1ibc123',
+            }
+          } else if (address === 'juno1proposal456') {
+            return {
+              address: 'juno1proposal456',
+              codeId: 3,
+              admin: 'juno1admin123',
+              creator: 'juno1creator123',
+              label: 'Test Proposal Contract',
+              ibcPortId: 'juno1ibc123',
+            }
           }
-        } else if (address === 'juno1proposal123') {
-          return {
-            address: 'juno1proposal123',
-            codeId: 2,
-            admin: 'juno1admin123',
-            creator: 'juno1creator123',
-            label: 'Test Proposal Contract',
-            ibcPortId: 'juno1ibc123',
-          }
-        } else if (address === 'juno1proposal456') {
-          return {
-            address: 'juno1proposal456',
-            codeId: 3,
-            admin: 'juno1admin123',
-            creator: 'juno1creator123',
-            label: 'Test Proposal Contract',
-            ibcPortId: 'juno1ibc123',
-          }
+          throw new Error('Unknown contract')
         }
-        throw new Error('Unknown contract')
-      })
+      )
       vi.mocked(mockAutoCosmWasmClient.client!.getContracts).mockImplementation(
         async (codeId: number) => {
           if (codeId === 1) {

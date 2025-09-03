@@ -103,6 +103,7 @@ describe('BlockIterator', () => {
 
     mockAutoCosmWasmClient = {
       update: vi.fn().mockResolvedValue(undefined),
+      getValidClient: vi.fn().mockResolvedValue(mockClient),
       client: mockClient,
     } as any
 
@@ -157,6 +158,9 @@ describe('BlockIterator', () => {
         autoCosmWasmClient: {
           ...mockAutoCosmWasmClient,
           client: undefined,
+          getValidClient: vi
+            .fn()
+            .mockRejectedValue(new Error('Client is not initialized')),
         } as any,
       })
 
@@ -164,7 +168,7 @@ describe('BlockIterator', () => {
         iterator.iterate({
           onBlock: vi.fn(),
         })
-      ).rejects.toThrow('AutoCosmWasmClient is not initialized')
+      ).rejects.toThrow('Client is not initialized')
     })
 
     it('should throw error when end height is less than start height', async () => {

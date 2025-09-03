@@ -67,14 +67,16 @@ describe('DAO Extractor', () => {
     getContractMock = vi.spyOn(utils, 'getContractInfo')
 
     // Create mock AutoCosmWasmClient
+    const mockClient: any = {
+      getContracts: vi.fn(),
+      queryContractSmart: vi.fn(),
+      getBlock: vi.fn(),
+      getHeight: vi.fn(),
+    }
     mockAutoCosmWasmClient = {
       update: vi.fn(),
-      client: {
-        getContracts: vi.fn(),
-        queryContractSmart: vi.fn(),
-        getBlock: vi.fn(),
-        getHeight: vi.fn(),
-      },
+      client: mockClient,
+      getValidClient: vi.fn().mockResolvedValue(mockClient),
     } as any
 
     // Set up the extractor environment
@@ -348,27 +350,29 @@ describe('DAO Extractor', () => {
       ]
 
       // Mock one correct code ID and one incorrect code ID
-      getContractMock.mockImplementation(async (address: string) => {
-        if (address === 'juno1dao123contract456') {
-          return {
-            address: 'juno1dao123contract456',
-            codeId: 1,
-            admin: 'juno1admin123',
-            creator: 'juno1creator123',
-            label: 'Test DAO',
-            ibcPortId: 'juno1ibc123',
-          }
-        } else {
-          return {
-            address: 'juno1dao789contract012',
-            codeId: 9999,
-            admin: 'juno1admin123',
-            creator: 'juno1creator123',
-            label: 'Test DAO',
-            ibcPortId: 'juno1ibc123',
+      getContractMock.mockImplementation(
+        async ({ address }: { address: string }) => {
+          if (address === 'juno1dao123contract456') {
+            return {
+              address: 'juno1dao123contract456',
+              codeId: 1,
+              admin: 'juno1admin123',
+              creator: 'juno1creator123',
+              label: 'Test DAO',
+              ibcPortId: 'juno1ibc123',
+            }
+          } else {
+            return {
+              address: 'juno1dao789contract012',
+              codeId: 9999,
+              admin: 'juno1admin123',
+              creator: 'juno1creator123',
+              label: 'Test DAO',
+              ibcPortId: 'juno1ibc123',
+            }
           }
         }
-      })
+      )
 
       // Mock successful queries for first contract only
       vi.mocked(
@@ -531,24 +535,26 @@ describe('DAO Extractor', () => {
         }
       )
 
-      getContractMock.mockImplementation(async (address: string) => {
-        if (address === 'juno1voting123') {
-          return {
-            codeId: 3,
-          } as any
-        } else if (
-          address === 'juno1proposal123' ||
-          address === 'juno1proposal456'
-        ) {
-          return {
-            codeId: 4,
-          } as any
-        } else {
-          return {
-            codeId: 5,
-          } as any
+      getContractMock.mockImplementation(
+        async ({ address }: { address: string }) => {
+          if (address === 'juno1voting123') {
+            return {
+              codeId: 3,
+            } as any
+          } else if (
+            address === 'juno1proposal123' ||
+            address === 'juno1proposal456'
+          ) {
+            return {
+              codeId: 4,
+            } as any
+          } else {
+            return {
+              codeId: 5,
+            } as any
+          }
         }
-      })
+      )
 
       const result = await Array.fromAsync(
         DaoExtractor.sync!({

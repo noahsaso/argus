@@ -152,13 +152,9 @@ export class BlockIterator {
       throw new Error('No callbacks provided')
     }
 
-    await this.autoCosmWasmClient.update()
-    if (!this.autoCosmWasmClient.client) {
-      throw new Error('AutoCosmWasmClient is not initialized')
-    }
-
+    const client = await this.autoCosmWasmClient.getValidClient()
     const { earliestBlockHeight } = (
-      await this.autoCosmWasmClient.client['forceGetCometClient']().status()
+      await client['forceGetCometClient']().status()
     ).syncInfo
     if (!earliestBlockHeight) {
       throw new Error('Earliest block height is not available')
@@ -295,11 +291,9 @@ export class BlockIterator {
       // Fetch the block first.
       const block = await retry(
         5,
-        () => {
-          if (!this.autoCosmWasmClient.client) {
-            throw new Error('Client is undefined')
-          }
-          return this.autoCosmWasmClient.client.getBlock(height)
+        async () => {
+          const client = await this.autoCosmWasmClient.getValidClient()
+          return client.getBlock(height)
         },
         500
       )
@@ -396,19 +390,13 @@ export class BlockIterator {
       // Start polling the latest block height.
       if (!this.latestBlockHeightInterval) {
         this.latestBlockHeightInterval = setInterval(async () => {
-          if (!this.autoCosmWasmClient.client) {
-            await this.autoCosmWasmClient.update()
-          }
+          const client = await this.autoCosmWasmClient.getValidClient()
+          this.latestBlockHeight = await client.getHeight()
 
-          const height = await this.autoCosmWasmClient.client?.getHeight()
-          if (height) {
-            this.latestBlockHeight = height
-
-            // Resolve if we receive a block and haven't resolved yet.
-            if (!resolved) {
-              resolved = true
-              resolve()
-            }
+          // Resolve if we receive a block and haven't resolved yet.
+          if (!resolved) {
+            resolved = true
+            resolve()
           }
         }, 1_000)
       }
