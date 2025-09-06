@@ -44,7 +44,7 @@ export const dao: ContractFormula<string> = {
 }
 
 export const proposal: ContractFormula<
-  ProposalResponse<MultipleChoiceProposal> | null,
+  ProposalResponse<MultipleChoiceProposal>,
   { id: string }
 > = {
   docs: {
@@ -91,7 +91,7 @@ export const proposal: ContractFormula<
 
     const proposal = await getProposal(env, id)
     if (!proposal) {
-      return null
+      throw new Error('proposal not found')
     }
 
     return {
@@ -286,7 +286,7 @@ export const nextProposalId: ContractFormula<number> = {
 }
 
 export const vote: ContractFormula<
-  VoteInfo<Ballot> | null,
+  VoteInfo<Ballot>,
   { proposalId: string; voter: string }
 > = {
   docs: {
@@ -365,7 +365,7 @@ export const vote: ContractFormula<
     }
 
     if (!voteCast) {
-      return null
+      throw new Error('vote not found')
     }
 
     return {
