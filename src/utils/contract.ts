@@ -40,7 +40,7 @@ export const getContractInfo = async ({
   const rpcClient = createProtobufRpcClient(
     new QueryClient(client['forceGetCometClient']())
   )
-  const responseDecoder = chainId.startsWith('xion-testnet-')
+  const responseDecoder = chainId.startsWith('xion-')
     ? (XionQueryContractInfoResponse as typeof QueryContractInfoResponse)
     : QueryContractInfoResponse
 
