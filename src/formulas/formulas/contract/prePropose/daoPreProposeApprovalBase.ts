@@ -237,9 +237,10 @@ export const pendingProposals: ContractFormula<
       .filter((id) => id > startAfterNum)
       .slice(0, limitNum)
 
-    return await Promise.all(
+    const p = await Promise.all(
       proposalIds.map((id) => withMetadata(env, pendingProposals[id]))
     )
+    return p
   },
 }
 

@@ -1,4 +1,4 @@
-import { dao as daoRbam } from '@/formulas/formulas/contract/external/daoRbam'
+import { dao as daoRbam } from '@/formulas/formulas/contract/external/daoRbam/formulas'
 import { dao as daoProposalMultipleDao } from '@/formulas/formulas/contract/proposal/daoProposalMultiple'
 import { dao as daoProposalSingleDao } from '@/formulas/formulas/contract/proposal/daoProposalSingle'
 import { ContractEnv } from '@/types'
