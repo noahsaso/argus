@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/node'
 import { State } from '@/db'
 import { BlockTimeFetcher } from '@/services'
 import { NamedHandler, TracedEvent, TracedEventWithBlockTime } from '@/types'
+import { AsyncProfiler } from '@/utils'
 
 import { BatchItem, BatchedTraceExporter } from './BatchedTraceExporter'
 
@@ -167,7 +168,11 @@ export class TracerManager {
   private async export(trace: TracedEvent) {
     try {
       // Fetch block time.
-      const blockTimeUnixMs = await this.blockTimeFetcher.fetch(trace)
+      const blockTimeUnixMs = await AsyncProfiler.profile(
+        () => this.blockTimeFetcher.fetch(trace),
+        'blockTimeFetcher.fetch',
+        'tracer-manager-export-trace'
+      )
       const eventWithBlockTime: TracedEventWithBlockTime = {
         ...trace,
         blockTimeUnixMs,

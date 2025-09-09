@@ -4,6 +4,7 @@ import { State } from '@/db'
 import { ExportBackgroundQueue } from '@/queues/queues'
 import { ExportQueue } from '@/queues/queues/export'
 import { TracedEvent } from '@/types'
+import { AsyncProfiler } from '@/utils'
 
 /**
  * A single item in the batch.
@@ -148,27 +149,36 @@ export class BatchedTraceExporter {
     // are emitted in order and the last event is the most up-to-date. Multiple
     // events may occur if a state key is updated multiple times across
     // different messages within the same block.
-    const uniqueBatchData = Object.values(
-      this.pendingBatch.reduce(
-        (acc, { handler, hasBackground, data: { id, ...data } }, index) => ({
-          ...acc,
-          [handler + ':' + id]: {
-            handler,
-            hasBackground,
-            data,
-            index,
-          },
-        }),
-        {} as Record<
-          string,
-          {
-            handler: string
-            hasBackground: boolean
-            data: unknown
-            index: number
-          }
-        >
-      )
+    const uniqueBatchData = AsyncProfiler.profileSync(
+      () =>
+        Object.values(
+          this.pendingBatch.reduce(
+            (
+              acc,
+              { handler, hasBackground, data: { id, ...data } },
+              index
+            ) => ({
+              ...acc,
+              [handler + ':' + id]: {
+                handler,
+                hasBackground,
+                data,
+                index,
+              },
+            }),
+            {} as Record<
+              string,
+              {
+                handler: string
+                hasBackground: boolean
+                data: unknown
+                index: number
+              }
+            >
+          )
+        ),
+      `De-duplicate batch data (${this.pendingBatch.length} items)`,
+      'batched-trace-exporter-unique-batch-data'
     )
 
     // Preserve original order.
@@ -192,9 +202,18 @@ export class BatchedTraceExporter {
 
     // Export to queues
     await Promise.all([
-      ExportQueue.add(blockHeight.toString(), allData),
+      AsyncProfiler.profile(
+        () => ExportQueue.add(blockHeight.toString(), allData),
+        'ExportQueue.add',
+        'batched-trace-exporter-export-batch'
+      ),
       backgroundData.length > 0 &&
-        ExportBackgroundQueue.add(blockHeight.toString(), backgroundData),
+        AsyncProfiler.profile(
+          () =>
+            ExportBackgroundQueue.add(blockHeight.toString(), backgroundData),
+          'ExportBackgroundQueue.add',
+          'batched-trace-exporter-export-batch'
+        ),
     ])
 
     console.log(
