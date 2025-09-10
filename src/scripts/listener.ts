@@ -1,5 +1,5 @@
-import { decodeRawProtobufMsg } from '@dao-dao/types'
 import { Tx } from '@dao-dao/types/protobuf/codegen/cosmos/tx/v1beta1/tx'
+import { decodeRawProtobufMsg } from '@dao-dao/types/protobuf/utils'
 import * as Sentry from '@sentry/node'
 import { Command } from 'commander'
 import Koa from 'koa'
@@ -7,11 +7,11 @@ import { Sequelize } from 'sequelize'
 
 import { ConfigManager, testRedisConnection } from '@/config'
 import { Block, State, loadDb } from '@/db'
-import { extractorMakers } from '@/listener'
+import { getExtractors } from '@/listener'
 import { ExtractQueue } from '@/queues/queues'
 import { setupMeilisearch } from '@/search'
 import { BlockIterator, WasmCodeService } from '@/services'
-import { DbType, NamedExtractor } from '@/types'
+import { DbType, ExtractableTxInput, ExtractorEnv } from '@/types'
 import { AutoCosmWasmClient } from '@/utils'
 
 declare global {
@@ -97,22 +97,6 @@ const main = async () => {
   const autoCosmWasmClient = new AutoCosmWasmClient(config.remoteRpc)
   await autoCosmWasmClient.update()
 
-  console.log(`[${new Date().toISOString()}] Setting up extractors...`)
-
-  // Set up extractors.
-  const extractors = await Promise.all(
-    Object.entries(extractorMakers).map(
-      async ([name, extractorMaker]): Promise<NamedExtractor> => ({
-        name,
-        extractor: await extractorMaker({
-          config,
-          autoCosmWasmClient,
-          sendWebhooks: false,
-        }),
-      })
-    )
-  )
-
   console.log(`[${new Date().toISOString()}] Starting listener...`)
 
   const blockIterator = new BlockIterator({
@@ -126,24 +110,54 @@ const main = async () => {
     console.log(`\n[${new Date().toISOString()}] Shutting down...`)
 
     // Stop services.
-    WasmCodeService.getInstance().stopUpdater()
+    WasmCodeService.instance.stopUpdater()
     blockIterator.stopIterating()
   })
   process.on('SIGTERM', async () => {
     console.log(`\n[${new Date().toISOString()}] Shutting down...`)
 
     // Stop services.
-    WasmCodeService.getInstance().stopUpdater()
+    WasmCodeService.instance.stopUpdater()
     blockIterator.stopIterating()
   })
 
-  // Serve health probe.
+  // Metrics object to share between health endpoint and block processor
+  const metrics = {
+    blockProcessingStartTime: 0,
+    blocksProcessed: 0,
+    overallAverage: 0,
+    rollingAverage: 0,
+    currentBlockHeight: 0,
+    lastUpdateTime: 0,
+  }
+
+  // Serve health probe with metrics.
   const app = new Koa()
   app.use(async (ctx) => {
     ctx.status = 200
     ctx.body = {
       status: 'ok',
       timestamp: new Date().toISOString(),
+      metrics: {
+        currentBlockHeight: metrics.currentBlockHeight,
+        blocksProcessed: metrics.blocksProcessed,
+        overallAverageBlocksPerSecond: Number(
+          metrics.overallAverage.toFixed(2)
+        ),
+        rollingAverageBlocksPerSecond: Number(
+          metrics.rollingAverage.toFixed(2)
+        ),
+        uptimeSeconds:
+          metrics.blockProcessingStartTime > 0
+            ? Number(
+                (
+                  (Date.now() - metrics.blockProcessingStartTime) /
+                  1000
+                ).toFixed(1)
+              )
+            : 0,
+        lastUpdateTime: new Date(metrics.lastUpdateTime).toISOString(),
+      },
     }
   })
   app.listen(port, () => {
@@ -157,10 +171,57 @@ const main = async () => {
     }
   })
 
+  // Block iteration tracking
+  metrics.blockProcessingStartTime = Date.now()
+  // let lastLogTime = Date.now()
+  // const LOG_INTERVAL_MS = 10_000 // Log every 10 seconds
+
+  // Rolling window for more accurate short-term average
+  const ROLLING_WINDOW_SIZE = 100
+  const blockTimestamps: number[] = []
+
   // Start iterating. This will resolve once the iterator is done (due to SIGINT
   // or SIGTERM).
   await blockIterator.iterate({
     onBlock: async ({ header: { chainId, height, time } }) => {
+      const currentTime = Date.now()
+      metrics.blocksProcessed++
+      metrics.currentBlockHeight = Number(height)
+      metrics.lastUpdateTime = currentTime
+
+      // Add to rolling window
+      blockTimestamps.push(currentTime)
+      if (blockTimestamps.length > ROLLING_WINDOW_SIZE) {
+        blockTimestamps.shift()
+      }
+
+      // Calculate averages
+      const overallElapsedSeconds =
+        (currentTime - metrics.blockProcessingStartTime) / 1000
+      metrics.overallAverage = metrics.blocksProcessed / overallElapsedSeconds
+
+      if (blockTimestamps.length >= 2) {
+        const rollingElapsedSeconds = (currentTime - blockTimestamps[0]) / 1000
+        metrics.rollingAverage =
+          (blockTimestamps.length - 1) / rollingElapsedSeconds
+      }
+
+      // Log metrics periodically
+      // if (currentTime - lastLogTime >= LOG_INTERVAL_MS) {
+      //   console.log(`[${new Date().toISOString()}] Block processing metrics:`)
+      //   console.log(`  - Current block: ${height}`)
+      //   console.log(`  - Blocks processed: ${metrics.blocksProcessed}`)
+      //   console.log(
+      //     `  - Overall average: ${metrics.overallAverage.toFixed(2)} blocks/sec`
+      //   )
+      //   console.log(
+      //     `  - Rolling average (${
+      //       blockTimestamps.length
+      //     } blocks): ${metrics.rollingAverage.toFixed(2)} blocks/sec`
+      //   )
+      //   lastLogTime = currentTime
+      // }
+
       const latestBlockHeight = Number(height)
       const latestBlockTimeUnixMs = Date.parse(time)
 
@@ -186,7 +247,7 @@ const main = async () => {
         }),
       ])
     },
-    onTx: async ({ hash, tx: rawTx, height, events }) => {
+    onTx: async ({ hash, tx: rawTx, height, events }, { header: { time } }) => {
       let tx
       try {
         tx = Tx.decode(rawTx)
@@ -210,27 +271,47 @@ const main = async () => {
         }
       })
 
-      // Match messages with extractors and add to queue.
-      for (const { name, extractor } of extractors) {
-        const data = extractor.match({
-          hash,
-          tx,
-          messages,
-          events,
-        })
+      // Create input for extractors.
+      const input: ExtractableTxInput = {
+        hash,
+        tx,
+        messages,
+        events,
+      }
 
-        if (data) {
-          await ExtractQueue.add(`${hash}-${name}`, {
-            extractor: name,
-            data: {
-              txHash: hash,
-              height: BigInt(height).toString(),
-              data,
-            },
-          })
+      // Create extractor environment for queue.
+      const env: Pick<ExtractorEnv, 'txHash' | 'block'> = {
+        txHash: hash,
+        block: {
+          height: BigInt(height).toString(),
+          timeUnixMs: BigInt(Date.parse(time)).toString(),
+          timestamp: new Date(time).toISOString(),
+        },
+      }
+
+      // Set up extractors with environment.
+      const extractors = getExtractors()
+
+      // Match messages with extractors and add to queue.
+      for (const Extractor of extractors) {
+        const data = Extractor.match(input)
+
+        if (data.length > 0) {
+          await ExtractQueue.addBulk(
+            data.map((data) => ({
+              name: `${Extractor.type} (${data.source})`,
+              data: {
+                extractor: Extractor.type,
+                data,
+                env,
+              },
+            }))
+          )
 
           console.log(
-            `[${new Date().toISOString()}] TX ${hash} at block ${height} sent to "${name}" extractor.`
+            `[${new Date().toISOString()}] TX ${hash} at block ${height} sent to "${
+              Extractor.type
+            }" extractor.`
           )
         }
       }

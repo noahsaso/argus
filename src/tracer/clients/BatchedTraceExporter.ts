@@ -1,6 +1,7 @@
 import * as Sentry from '@sentry/node'
 
 import { State } from '@/db'
+import { ExportBackgroundQueue } from '@/queues/queues'
 import { ExportQueue } from '@/queues/queues/export'
 import { TracedEvent } from '@/types'
 
@@ -13,9 +14,13 @@ export type BatchItem = {
    */
   handler: string
   /**
+   * Whether or not the handler has a background processor.
+   */
+  hasBackground: boolean
+  /**
    * The data to export provided by the handler, derived from the trace event.
    */
-  data: any
+  data: { id: string } & Record<string, unknown>
   /**
    * The trace event.
    */
@@ -145,14 +150,24 @@ export class BatchedTraceExporter {
     // different messages within the same block.
     const uniqueBatchData = Object.values(
       this.pendingBatch.reduce(
-        (acc, data, index) => ({
+        (acc, { handler, hasBackground, data: { id, ...data } }, index) => ({
           ...acc,
-          [data.handler + ':' + data.data.id]: {
-            ...data,
+          [handler + ':' + id]: {
+            handler,
+            hasBackground,
+            data,
             index,
           },
         }),
-        {} as Record<string, BatchItem & { index: number }>
+        {} as Record<
+          string,
+          {
+            handler: string
+            hasBackground: boolean
+            data: unknown
+            index: number
+          }
+        >
       )
     )
 
@@ -163,20 +178,24 @@ export class BatchedTraceExporter {
       this.pendingBatch[this.pendingBatch.length - 1].trace.metadata.blockHeight
     )
 
-    // Export to queue
-    await ExportQueue.add(
-      blockHeight.toString(),
-      uniqueBatchData.map(({ handler, data }) => {
-        // Remove ID since it's no longer relevant.
-        const exportData = { ...data }
-        delete exportData.id
+    const allData = uniqueBatchData.map(({ handler, data }) => ({
+      handler,
+      data,
+    }))
 
-        return {
-          handler,
-          data: exportData,
-        }
-      })
-    )
+    const backgroundData = uniqueBatchData
+      .filter(({ hasBackground }) => hasBackground)
+      .map(({ handler, data }) => ({
+        handler,
+        data,
+      }))
+
+    // Export to queues
+    await Promise.all([
+      ExportQueue.add(blockHeight.toString(), allData),
+      backgroundData.length > 0 &&
+        ExportBackgroundQueue.add(blockHeight.toString(), backgroundData),
+    ])
 
     console.log(
       `\n[${new Date().toISOString()}] Exported ${this.pendingBatch.length.toLocaleString()} events for block ${blockHeight.toLocaleString()}.`

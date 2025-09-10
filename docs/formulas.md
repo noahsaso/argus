@@ -219,10 +219,9 @@ export const paused: ContractFormula<PausedResponse> = {
   compute: async (env) => {
     const { contractAddress, get, date } = env
 
-    const expiration = await get<Expiration | undefined>(
-      contractAddress,
-      'paused'
-    )
+    const expiration = (
+      await get<Expiration | undefined>(contractAddress, 'paused')
+    )?.valueJson
 
     // at_time is in nanoseconds, so convert to milliseconds.
     return !expiration || date.getTime() >= Number(expiration.at_time) / 1e6
@@ -248,9 +247,9 @@ versions of the contract.
 export const config: ContractFormula<Config | undefined> = {
   compute: async ({ contractAddress, get }) =>
     // V2.
-    (await get<Config>(contractAddress, 'config_v2')) ??
+    (await get<Config>(contractAddress, 'config_v2'))?.valueJson ??
     // V1.
-    (await get<Config>(contractAddress, 'config')),
+    (await get<Config>(contractAddress, 'config'))?.valueJson,
 }
 ```
 
@@ -284,10 +283,10 @@ export const paused: ContractFormula<PausedResponse> = {
   compute: async (env) => {
     const { contractAddress, get, date } = env
 
-    const expiration = await get<Expiration | undefined>(
+    const expiration = (await get<Expiration | undefined>(
       contractAddress,
       'paused'
-    )
+    ))?.valueJson
 
     // at_time is in nanoseconds, so convert to milliseconds.
     return !expiration || date.getTime() >= Number(expiration.at_time) / 1e6

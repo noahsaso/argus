@@ -40,8 +40,8 @@ export const feeConfig: ContractFormula<FeeConfig | null> = {
     const { contractAddress, get } = env
 
     return (
-      (await get<FeeConfig>(contractAddress, TreasuryStorageKeys.FEE_CONFIG)) ??
-      null
+      (await get<FeeConfig>(contractAddress, TreasuryStorageKeys.FEE_CONFIG))
+        ?.valueJson ?? null
     )
   },
 }
@@ -53,7 +53,10 @@ export const admin: ContractFormula<Addr | null> = {
   compute: async (env) => {
     const { contractAddress, get } = env
 
-    return (await get<Addr>(contractAddress, TreasuryStorageKeys.ADMIN)) ?? null
+    return (
+      (await get<Addr>(contractAddress, TreasuryStorageKeys.ADMIN))
+        ?.valueJson ?? null
+    )
   },
 }
 
@@ -73,7 +76,8 @@ export const params: ContractFormula<Record<string, Params>> = {
     const { contractAddress, get } = env
 
     return (
-      (await get<Params>(contractAddress, TreasuryStorageKeys.PARAMS)) ?? {}
+      (await get<Params>(contractAddress, TreasuryStorageKeys.PARAMS))
+        ?.valueJson ?? {}
     )
   },
 }

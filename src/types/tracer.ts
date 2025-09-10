@@ -3,7 +3,9 @@ import { AutoCosmWasmClient } from '@/utils'
 import { Config } from './config'
 import { DependableEventModel } from './db'
 
-export type Handler<Data extends unknown = unknown> = {
+export type Handler<
+  Data extends Record<string, unknown> = Record<string, unknown>
+> = {
   /**
    * What store name to filter by for events to handle.
    */
@@ -24,9 +26,14 @@ export type Handler<Data extends unknown = unknown> = {
     | undefined
   /**
    * The function that will be called with queued objects. Returns created
-   * events.
+   * events. This is blocking.
    */
-  process: (data: Data[]) => Promise<DependableEventModel[]>
+  process?: (data: Data[]) => Promise<DependableEventModel[]>
+  /**
+   * The function that will be called with queued objects. Returns created
+   * events. This is used for background processing and is non-blocking.
+   */
+  processBackground?: (data: Data[]) => Promise<DependableEventModel[]>
 }
 
 export type HandlerMakerOptions = {
@@ -36,9 +43,9 @@ export type HandlerMakerOptions = {
   autoCosmWasmClient: AutoCosmWasmClient
 }
 
-export type HandlerMaker<Data extends unknown = unknown> = (
-  options: HandlerMakerOptions
-) => Promise<Handler<Data>>
+export type HandlerMaker<
+  Data extends Record<string, unknown> = Record<string, unknown>
+> = (options: HandlerMakerOptions) => Promise<Handler<Data>>
 
 export type NamedHandler = {
   name: string
@@ -140,4 +147,8 @@ export type ParsedFeegrantStateEvent = {
   allowanceData: string
   allowanceType: string | null
   active: boolean
+  parsedAmount: string | null
+  parsedDenom: string | null
+  parsedAllowanceType: string | null
+  parsedExpirationUnixMs: string | null
 }

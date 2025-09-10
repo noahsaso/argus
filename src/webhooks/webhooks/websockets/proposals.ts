@@ -1,5 +1,3 @@
-import { getConfiguredChainConfig } from '@dao-dao/utils'
-
 import { GovProposal, State, WasmStateEvent } from '@/db'
 import { activeProposalModules } from '@/formulas/formulas/contract/daoCore/base'
 import { Webhook, WebhookMaker, WebhookType } from '@/types'
@@ -154,9 +152,7 @@ export const makeGovProposalStatusChanged: WebhookMaker<GovProposal> = (
     },
     endpoint: {
       type: WebhookType.Soketi,
-      channel: `${state.chainId}_${
-        getConfiguredChainConfig(state.chainId)?.name || 'GOV_PLACEHOLDER'
-      }`,
+      channel: `${state.chainId}_GOV`,
       event: 'broadcast',
     },
     getValue: async (event, getLastEvent) => {

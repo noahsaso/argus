@@ -1,5 +1,3 @@
-import { randomUUID } from 'crypto'
-
 import * as Sentry from '@sentry/node'
 
 import { State } from '@/db'
@@ -62,7 +60,7 @@ export const queueMeilisearchIndexUpdates = async (
   if (pendingUpdates.length) {
     await SearchQueue.addBulk(
       pendingUpdates.map((data) => ({
-        name: randomUUID(),
+        name: data.update.id,
         data,
       }))
     )

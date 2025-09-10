@@ -1,7 +1,14 @@
 import request from 'supertest'
 import { beforeEach, describe, it } from 'vitest'
 
-import { Block, FeegrantAllowance, State } from '@/db'
+import {
+  BankStateEvent,
+  Block,
+  Contract,
+  FeegrantAllowance,
+  State,
+  WasmTxEvent,
+} from '@/db'
 
 import { app } from '../../app'
 import { ComputerTestOptions } from '../types'
@@ -21,6 +28,10 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
           allowanceData: 'base64allowancedata1',
           allowanceType: 'BasicAllowance',
           active: true,
+          parsedAmount: '1000000',
+          parsedDenom: 'uxion',
+          parsedAllowanceType: 'BasicAllowance',
+          parsedExpirationUnixMs: null,
         },
         {
           granter: 'xion1granter123',
@@ -31,6 +42,10 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
           allowanceData: 'base64allowancedata2',
           allowanceType: 'PeriodicAllowance',
           active: true,
+          parsedAmount: '2000000',
+          parsedDenom: 'uxion',
+          parsedAllowanceType: 'PeriodicAllowance',
+          parsedExpirationUnixMs: '1672531200000', // 2023-01-01
         },
         {
           granter: 'xion1granter456',
@@ -41,6 +56,10 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
           allowanceData: 'base64allowancedata3',
           allowanceType: 'BasicAllowance',
           active: true,
+          parsedAmount: '500000',
+          parsedDenom: 'uusdc',
+          parsedAllowanceType: 'BasicAllowance',
+          parsedExpirationUnixMs: null,
         },
         {
           granter: 'xion1granter789',
@@ -51,6 +70,10 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
           allowanceData: '',
           allowanceType: null,
           active: false, // Revoked allowance
+          parsedAmount: null,
+          parsedDenom: null,
+          parsedAllowanceType: null,
+          parsedExpirationUnixMs: null,
         },
       ])
 
@@ -379,6 +402,260 @@ export const loadFeegrantTests = (options: ComputerTestOptions) => {
               },
             },
           ])
+      })
+    })
+
+    describe('generic feegrant formulas', () => {
+      beforeEach(async () => {
+        // Create contracts first (required for foreign key constraint)
+        await Contract.bulkCreate([
+          {
+            address: 'xion1contract123',
+            codeId: 1,
+            admin: null,
+            creator: 'xion1creator123',
+            label: 'Test Contract 1',
+            instantiatedAtBlockHeight: '290',
+            instantiatedAtBlockTimeUnixMs: '1640995350000',
+            instantiatedAtBlockTimestamp: new Date('2022-01-01T00:02:30.000Z'),
+            txHash: 'tx1hash',
+          },
+          {
+            address: 'xion1contract456',
+            codeId: 2,
+            admin: null,
+            creator: 'xion1creator456',
+            label: 'Test Contract 2',
+            instantiatedAtBlockHeight: '295',
+            instantiatedAtBlockTimeUnixMs: '1640995375000',
+            instantiatedAtBlockTimestamp: new Date('2022-01-01T00:02:55.000Z'),
+            txHash: 'tx2hash',
+          },
+        ])
+
+        // Add activity data for testing - using recent timestamps
+        const now = Date.now()
+        const recentTime1 = now - 2 * 60 * 60 * 1000 // 2 hours ago (within 1 day)
+        const recentTime2 = now - 6 * 60 * 60 * 1000 // 6 hours ago (within 1 day)
+        const recentTime3 = now - 12 * 60 * 60 * 1000 // 12 hours ago (within 1 day)
+        const _recentTime4 = now - 10 * 24 * 60 * 60 * 1000 // 10 days ago (outside 1 day, within 30 days)
+
+        await WasmTxEvent.bulkCreate([
+          {
+            contractAddress: 'xion1contract123',
+            sender: 'xion1grantee456', // Active grantee with recent activity
+            blockHeight: '290',
+            blockTimeUnixMs: recentTime1.toString(),
+            blockTimestamp: new Date(recentTime1),
+            txIndex: 0,
+            messageId: '0',
+            action: 'execute',
+            msg: '{}',
+            msgJson: {},
+            reply: null,
+            funds: [],
+            response: null,
+            gasUsed: '100000',
+          },
+          {
+            contractAddress: 'xion1contract456',
+            sender: 'xion1grantee123', // Another grantee with activity
+            blockHeight: '295',
+            blockTimeUnixMs: recentTime2.toString(),
+            blockTimestamp: new Date(recentTime2),
+            txIndex: 0,
+            messageId: '0',
+            action: 'execute',
+            msg: '{}',
+            msgJson: {},
+            reply: null,
+            funds: [],
+            response: null,
+            gasUsed: '100000',
+          },
+        ])
+
+        await BankStateEvent.bulkCreate([
+          {
+            address: 'xion1grantee456',
+            denom: 'uxion',
+            blockHeight: 285,
+            blockTimeUnixMs: recentTime3,
+            blockTimestamp: new Date(recentTime3),
+            balance: '1000',
+          },
+          {
+            address: 'xion1grantee789',
+            denom: 'uxion',
+            blockHeight: 280,
+            blockTimeUnixMs: recentTime3, // Changed to be within 1 day (12 hours ago)
+            blockTimestamp: new Date(recentTime3),
+            balance: '2000',
+          },
+        ])
+      })
+
+      describe('totals', () => {
+        it('returns comprehensive feegrant statistics', async () => {
+          await request(app.callback())
+            .get('/generic/_/feegrant/totals')
+            .set('x-api-key', options.apiKey)
+            .expect(200)
+            .expect({
+              totalActiveGrants: 3,
+              totalActiveGrantees: 3,
+              totalActiveGranters: 2,
+              totalRevokedGrants: 1,
+              totalBasicAllowances: 2,
+              totalPeriodicAllowances: 1,
+              totalAllowedMsgAllowances: 0,
+              totalUnknownAllowances: 0,
+            })
+        })
+
+        it('handles empty database', async () => {
+          // Clear all data
+          await FeegrantAllowance.destroy({ where: {} })
+
+          await request(app.callback())
+            .get('/generic/_/feegrant/totals')
+            .set('x-api-key', options.apiKey)
+            .expect(200)
+            .expect({
+              totalActiveGrants: 0,
+              totalActiveGrantees: 0,
+              totalActiveGranters: 0,
+              totalRevokedGrants: 0,
+              totalBasicAllowances: 0,
+              totalPeriodicAllowances: 0,
+              totalAllowedMsgAllowances: 0,
+              totalUnknownAllowances: 0,
+            })
+        })
+      })
+
+      describe('amounts', () => {
+        it('returns token amount statistics', async () => {
+          await request(app.callback())
+            .get('/generic/_/feegrant/amounts')
+            .set('x-api-key', options.apiKey)
+            .expect(200)
+            .expect({
+              totalXionGranted: '3000000',
+              totalUsdcGranted: '500000',
+              totalGrantsWithAmounts: 3,
+              grantsByToken: [
+                {
+                  denom: 'uxion',
+                  total: '3000000',
+                  count: 2,
+                },
+                {
+                  denom: 'uusdc',
+                  total: '500000',
+                  count: 1,
+                },
+              ],
+            })
+        })
+
+        it('handles no grants with amounts', async () => {
+          // Update all grants to have no parsed amounts
+          await FeegrantAllowance.update(
+            { parsedAmount: null, parsedDenom: null },
+            { where: {} }
+          )
+
+          await request(app.callback())
+            .get('/generic/_/feegrant/amounts')
+            .set('x-api-key', options.apiKey)
+            .expect(200)
+            .expect({
+              totalXionGranted: '0',
+              totalUsdcGranted: '0',
+              totalGrantsWithAmounts: 0,
+              grantsByToken: [],
+            })
+        })
+      })
+
+      describe('activity', () => {
+        it('returns activity statistics with default 30 day window', async () => {
+          await request(app.callback())
+            .get('/generic/_/feegrant/activity')
+            .set('x-api-key', options.apiKey)
+            .expect(200)
+            .expect({
+              totalActiveGrantees: 3,
+              granteesWithRecentTxActivity: 2,
+              granteesWithRecentBalanceActivity: 2,
+              granteesWithAnyRecentActivity: 3,
+              activityRate: 100.0,
+            })
+        })
+
+        it('returns activity statistics with custom time window', async () => {
+          await request(app.callback())
+            .get('/generic/_/feegrant/activity?daysAgo=1')
+            .set('x-api-key', options.apiKey)
+            .expect(200)
+            .expect({
+              totalActiveGrantees: 3,
+              granteesWithRecentTxActivity: 2,
+              granteesWithRecentBalanceActivity: 2,
+              granteesWithAnyRecentActivity: 3,
+              activityRate: 100.0,
+            })
+        })
+
+        it('handles very short time window with no activity', async () => {
+          // Use a very short time window that excludes all activity
+          const _veryRecentTime = Date.now() - 1000 // 1 second ago
+
+          // Mock the date to be very recent
+          await request(app.callback())
+            .get('/generic/_/feegrant/activity?daysAgo=0.00001') // ~1 second
+            .set('x-api-key', options.apiKey)
+            .expect(200)
+            .expect({
+              totalActiveGrantees: 3,
+              granteesWithRecentTxActivity: 0,
+              granteesWithRecentBalanceActivity: 0,
+              granteesWithAnyRecentActivity: 0,
+              activityRate: 0.0,
+            })
+        })
+
+        it('validates daysAgo parameter', async () => {
+          await request(app.callback())
+            .get('/generic/_/feegrant/activity?daysAgo=invalid')
+            .set('x-api-key', options.apiKey)
+            .expect(400)
+        })
+
+        it('validates negative daysAgo parameter', async () => {
+          await request(app.callback())
+            .get('/generic/_/feegrant/activity?daysAgo=-5')
+            .set('x-api-key', options.apiKey)
+            .expect(400)
+        })
+
+        it('handles zero active grantees', async () => {
+          // Make all allowances inactive
+          await FeegrantAllowance.update({ active: false }, { where: {} })
+
+          await request(app.callback())
+            .get('/generic/_/feegrant/activity')
+            .set('x-api-key', options.apiKey)
+            .expect(200)
+            .expect({
+              totalActiveGrantees: 0,
+              granteesWithRecentTxActivity: 0,
+              granteesWithRecentBalanceActivity: 0,
+              granteesWithAnyRecentActivity: 0,
+              activityRate: 0.0,
+            })
+        })
       })
     })
   })

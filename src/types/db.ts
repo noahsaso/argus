@@ -18,7 +18,7 @@ export enum DependentKeyNamespace {
   WasmStateEventTransformation = 'wasm_state_transformation',
   WasmTxEvent = 'wasm_tx',
   StakingSlash = 'staking_slash',
-  BankBalance = 'bank_balance',
+  BankDenomBalance = 'bank_denom_balance',
   BankStateEvent = 'bank_state',
   GovProposal = 'gov_proposal',
   GovProposalVote = 'gov_proposal_vote',
@@ -62,7 +62,7 @@ export type ContractJson = {
   admin?: string | null
   creator?: string | null
   label?: string | null
-  instantiatedAt: SerializedBlock
+  instantiatedAt?: SerializedBlock | null
   txHash?: string | null
 }
 
@@ -73,4 +73,13 @@ export type FeegrantAllowanceJson = {
   allowanceType: string | null
   active: boolean
   block: SerializedBlock
+}
+
+export type ExtractionJson = {
+  address: string
+  name: string
+  blockHeight: string
+  blockTimeUnixMs: string
+  txHash: string
+  data: unknown
 }

@@ -92,13 +92,15 @@ export class WasmCodeTrackerManager {
     // Get the latest state events for the given contract addresses.
     const stateEvents = await WasmStateEvent.findAll({
       attributes: [
-        // DISTINCT ON is not directly supported by Sequelize, so we need
-        // to cast to unknown and back to string to insert this at the
-        // beginning of the query. This ensures we use the most recent
-        // version of the key.
+        // DISTINCT ON is not directly supported by Sequelize, so we need to
+        // cast to unknown and back to string to insert this at the beginning of
+        // the query. This ensures we use the most recent version of the key.
         Sequelize.literal(
           'DISTINCT ON("contractAddress", "key") \'\''
         ) as unknown as string,
+        // Include `id` so that Sequelize doesn't prepend it to the query before
+        // the DISTINCT ON, which must come first.
+        'id',
         'key',
         'contractAddress',
         'value',
@@ -230,7 +232,7 @@ export class WasmCodeTrackerManager {
     // Update service if any code keys were updated and the service is
     // initialized.
     if (WasmCodeService.isInitialized && updatedCodeKey) {
-      await WasmCodeService.getInstance().reloadWasmCodeIdsFromDB()
+      await WasmCodeService.instance.reloadWasmCodeIdsFromDB()
     }
   }
 }

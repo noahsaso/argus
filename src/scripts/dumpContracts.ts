@@ -43,12 +43,8 @@ const main = async () => {
       : WasmCodeService.extractWasmCodeKeys(codeIdsKeys)
   const codeIds =
     extractedCodeIdsKeys === 'ALL'
-      ? WasmCodeService.getInstance()
-          .getWasmCodes()
-          .flatMap((c) => c.codeIds)
-      : WasmCodeService.getInstance().findWasmCodeIdsByKeys(
-          ...extractedCodeIdsKeys
-        )
+      ? WasmCodeService.instance.getWasmCodes().flatMap((c) => c.codeIds)
+      : WasmCodeService.instance.findWasmCodeIdsByKeys(...extractedCodeIdsKeys)
 
   if (codeIds.length === 0) {
     throw new Error(

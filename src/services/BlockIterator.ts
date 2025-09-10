@@ -145,20 +145,16 @@ export class BlockIterator {
     onError,
   }: {
     onBlock?: (block: Block) => void | Promise<void>
-    onTx?: (tx: IndexedTx) => void | Promise<void>
+    onTx?: (tx: IndexedTx, block: Block) => void | Promise<void>
     onError?: (error: BlockIteratorError) => void | Promise<void>
   }) {
     if (!onBlock && !onTx) {
       throw new Error('No callbacks provided')
     }
 
-    await this.autoCosmWasmClient.update()
-    if (!this.autoCosmWasmClient.client) {
-      throw new Error('AutoCosmWasmClient is not initialized')
-    }
-
+    const client = await this.autoCosmWasmClient.getValidClient()
     const { earliestBlockHeight } = (
-      await this.autoCosmWasmClient.client['forceGetCometClient']().status()
+      await client['forceGetCometClient']().status()
     ).syncInfo
     if (!earliestBlockHeight) {
       throw new Error('Earliest block height is not available')
@@ -222,7 +218,7 @@ export class BlockIterator {
           if (tx instanceof BlockIteratorError) {
             await onError?.(tx)
           } else {
-            await onTx?.(tx)
+            await onTx?.(tx, item.block)
           }
         }
       }
@@ -295,11 +291,9 @@ export class BlockIterator {
       // Fetch the block first.
       const block = await retry(
         5,
-        () => {
-          if (!this.autoCosmWasmClient.client) {
-            throw new Error('Client is undefined')
-          }
-          return this.autoCosmWasmClient.client.getBlock(height)
+        async () => {
+          const client = await this.autoCosmWasmClient.getValidClient()
+          return client.getBlock(height)
         },
         500
       )
@@ -378,7 +372,8 @@ export class BlockIterator {
   }
 
   /**
-   * Start tracking the latest block height.
+   * Start tracking the latest block height. Resolves once the first block is
+   * received and saved to `this.latestBlockHeight`.
    */
   private async startTrackingLatestBlockHeight() {
     if (this.trackingLatestBlockHeight) {
@@ -387,24 +382,28 @@ export class BlockIterator {
 
     this.trackingLatestBlockHeight = true
 
-    // Start polling the latest block height.
-    if (!this.latestBlockHeightInterval) {
-      this.latestBlockHeightInterval = setInterval(async () => {
-        if (!this.autoCosmWasmClient.client) {
-          await this.autoCosmWasmClient.update()
-        }
-
-        const height = await this.autoCosmWasmClient.client?.getHeight()
-        if (height) {
-          this.latestBlockHeight = height
-        }
-      }, 1_000)
-    }
-
-    // Attempt to connect to the websocket, resolving on success. If it fails on
-    // the first connection attempt, resolve. It will keep trying to reconnect
-    // while interval polling is active.
+    // Resolves when the first block is received from either the WebSocket or
+    // the interval polling.
     return new Promise<void>((resolve) => {
+      let resolved = false
+
+      // Start polling the latest block height.
+      if (!this.latestBlockHeightInterval) {
+        this.latestBlockHeightInterval = setInterval(async () => {
+          const client = await this.autoCosmWasmClient.getValidClient()
+          this.latestBlockHeight = await client.getHeight()
+
+          // Resolve if we receive a block and haven't resolved yet.
+          if (!resolved) {
+            resolved = true
+            resolve()
+          }
+        }, 1_000)
+      }
+
+      // Attempt to connect to the websocket. If it fails on the first
+      // connection attempt, resolve. It will keep trying to reconnect while
+      // interval polling is active.
       this.chainWebSocketListener = new ChainWebSocketListener('NewBlock', {
         rpc: this.rpcUrl,
       })
@@ -412,6 +411,11 @@ export class BlockIterator {
       // Set up the callback to update the latest block height.
       this.chainWebSocketListener.onNewBlock(async ({ height }) => {
         this.latestBlockHeight = Number(height)
+        // Resolve if we receive a block and haven't resolved yet.
+        if (!resolved) {
+          resolved = true
+          resolve()
+        }
       })
 
       // Detect WebSocket connection state changes to start/stop the fallback
@@ -424,7 +428,8 @@ export class BlockIterator {
               // If this is the first connection attempt and it failed, resolve.
               // It will keep trying to reconnect while interval polling is
               // active.
-              if (attempt === 1) {
+              if (attempt === 1 && !resolved) {
+                resolved = true
                 resolve()
               }
 
@@ -436,7 +441,7 @@ export class BlockIterator {
 
       // Connect to the websocket, resolving on success. Connection error
       // resolves above in the `onConnectionStateChange` handler.
-      this.chainWebSocketListener.connect({ skipWait: true }).then(resolve)
+      this.chainWebSocketListener.connect({ skipWait: true })
     })
   }
 

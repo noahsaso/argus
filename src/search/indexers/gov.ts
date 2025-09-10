@@ -51,6 +51,9 @@ export const govProposals: MeilisearchIndexer = {
         Sequelize.literal(
           'DISTINCT ON("proposalId") \'\''
         ) as unknown as string,
+        // Include `id` so that Sequelize doesn't prepend it to the query before
+        // the DISTINCT ON, which must come first.
+        'id',
         'proposalId',
       ],
       order: [
@@ -116,6 +119,9 @@ export const govProposalVotes: MeilisearchIndexer = {
         Sequelize.literal(
           'DISTINCT ON("proposalId", "voterAddress") \'\''
         ) as unknown as string,
+        // Include `id` so that Sequelize doesn't prepend it to the query before
+        // the DISTINCT ON, which must come first.
+        'id',
         'proposalId',
         'voterAddress',
       ],

@@ -86,16 +86,23 @@ export const proposalModules: ContractFormula<ProposalModuleWithInfo[]> = {
     description: 'retrieves all proposal modules for the DAO',
   },
   compute: async (env) => {
-    const { contractAddress, getTransformationMap, getMap } = env
+    const { contractAddress, getTransformationMap, getMap, getExtractionMap } =
+      env
 
     const proposalModules: ProposalModule[] = []
 
-    const transformedMap = await getTransformationMap<ProposalModule>(
-      contractAddress,
-      'proposalModule'
-    )
+    const transformedMap =
+      (await getTransformationMap<ProposalModule>(
+        contractAddress,
+        'proposalModule'
+      )) ||
+      // Fallback to extractions.
+      (await getExtractionMap<ProposalModule>(
+        contractAddress,
+        'proposalModule'
+      ))
 
-    // Transformed.
+    // Transformed / extracted.
     if (transformedMap) {
       proposalModules.push(...Object.values(transformedMap))
     } else {
@@ -179,7 +186,7 @@ export const pauseInfo: ContractFormula<PauseInfoResponse> = {
       (await getTransformationMatch<Expiration>(contractAddress, 'paused'))
         ?.value ??
       // Fallback to events.
-      (await get<Expiration>(contractAddress, 'paused'))
+      (await get<Expiration>(contractAddress, 'paused'))?.valueJson
 
     return !expiration || isExpirationExpired(env, expiration)
       ? { unpaused: {} }
@@ -198,9 +205,9 @@ export const admin: ContractFormula<string | null> = {
     return (
       (await getTransformationMatch<string>(contractAddress, 'admin'))?.value ??
       // Fallback to events.
-      (await get<string>(contractAddress, 'admin')) ??
+      (await get<string>(contractAddress, 'admin'))?.valueJson ??
       // Fallback to Neutron SubDAO config main_dao field.
-      (await get<any>(contractAddress, 'config_v2'))?.main_dao ??
+      (await get(contractAddress, 'config_v2'))?.valueJson?.main_dao ??
       // Null if nothing found because no admin set.
       null
     )
@@ -215,7 +222,7 @@ export const adminNomination: ContractFormula<string | null> = {
     (await getTransformationMatch<string>(contractAddress, 'nominatedAdmin'))
       ?.value ??
     // Fallback to events.
-    (await get<string>(contractAddress, 'nominated_admin')) ??
+    (await get<string>(contractAddress, 'nominated_admin'))?.valueJson ??
     // Null if nothing found because no admin nominated.
     null,
 }
@@ -229,7 +236,7 @@ export const votingModule: ContractFormula<string> = {
       (await getTransformationMatch<string>(contractAddress, 'votingModule'))
         ?.value ??
       // Fallback to events.
-      (await get<string>(contractAddress, 'voting_module'))
+      (await get<string>(contractAddress, 'voting_module'))?.valueJson
 
     if (!votingModule) {
       throw new Error('failed to load voting module')
@@ -267,7 +274,7 @@ export const item: ContractFormula<string | null, { key: string }> = {
       (await getTransformationMatch<string>(contractAddress, `item:${key}`))
         ?.value ??
       // Fallback to events.
-      (await get<string>(contractAddress, 'items', key)) ??
+      (await get<string>(contractAddress, 'items', key))?.valueJson ??
       // Null if nothing found because no item set.
       null
     )

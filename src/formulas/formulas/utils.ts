@@ -50,6 +50,20 @@ export const expirationPlusDuration = (
   throw new Error('expiration duration units mismatch')
 }
 
+export type Source =
+  | {
+      type: 'event'
+      key: KeyInput
+    }
+  | {
+      type: 'transformation'
+      name: string
+    }
+  | {
+      type: 'extraction'
+      name: string
+    }
+
 /**
  * Make a simple contract formula with some common error/fallback handling.
  */
@@ -68,7 +82,7 @@ export const makeSimpleContractFormula = <
       /**
        * State key to load from WasmStateEvents table.
        */
-      key: KeyInput | KeyInput[]
+      key: KeyInput
     }
   | {
       /**
@@ -80,6 +94,12 @@ export const makeSimpleContractFormula = <
        * order.
        */
       fallbackKeys?: KeyInput[]
+    }
+  | {
+      /**
+       * Sources to load from, using the first source that exists.
+       */
+      sources: Source[]
     }
 ) & {
   /**
@@ -114,28 +134,71 @@ export const makeSimpleContractFormula = <
     block,
     get,
     getTransformationMatch,
+    getExtraction,
   }) => {
-    const value =
+    const sources: Source[] =
       'key' in source
-        ? await get<T>(contractAddress, ...[source.key].flat())
-        : (
-            await getTransformationMatch<T>(
-              contractAddress,
-              source.transformation
-            )
-          )?.value ??
-          // Fallback to events if fallback keys provided.
-          (source.fallbackKeys
-            ? // Try each fallback key in order, stopping when a value is found.
-              await source.fallbackKeys.reduce(async (promise, fallbackKey) => {
-                const value = await promise
-                if (value !== undefined) {
-                  return value
-                } else {
-                  return await get<T>(contractAddress, fallbackKey)
-                }
-              }, Promise.resolve<T | undefined>(undefined) as Promise<T | undefined>)
-            : undefined)
+        ? [
+            {
+              type: 'event',
+              key: source.key,
+            } satisfies Source,
+          ]
+        : 'transformation' in source
+        ? [
+            {
+              type: 'transformation',
+              name: source.transformation,
+            } satisfies Source,
+            ...(source.fallbackKeys?.map(
+              (key): Source => ({
+                type: 'event',
+                key,
+              })
+            ) || []),
+          ]
+        : source.sources
+
+    let value: T | undefined
+    for (const source of sources) {
+      let found = false
+      switch (source.type) {
+        case 'event': {
+          const event = await get<T>(contractAddress, source.key)
+          if (event) {
+            found = true
+            value = event.valueJson as unknown as T
+          }
+          break
+        }
+        case 'transformation': {
+          const transformation = await getTransformationMatch<T>(
+            contractAddress,
+            source.name
+          )
+          if (transformation) {
+            found = true
+            value = transformation.value
+          }
+          break
+        }
+        case 'extraction': {
+          const extraction = await getExtraction<T>(
+            contractAddress,
+            source.name
+          )
+          if (extraction) {
+            found = true
+            value = extraction.data
+          }
+          break
+        }
+      }
+
+      if (found) {
+        break
+      }
+    }
 
     if (value === undefined) {
       if (fallback !== undefined) {
@@ -145,7 +208,7 @@ export const makeSimpleContractFormula = <
       throw new Error('failed to load')
     }
 
-    return transform(value, {
+    return transform(value as T, {
       args,
       block,
     })

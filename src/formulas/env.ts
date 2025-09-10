@@ -1,8 +1,9 @@
 import { Op, QueryTypes, Sequelize } from 'sequelize'
 
 import {
-  BankBalance,
+  BankDenomBalance,
   BankStateEvent,
+  Block,
   Contract,
   DistributionCommunityPoolStateEvent,
   Extraction,
@@ -17,39 +18,41 @@ import {
 } from '@/db'
 import { WasmCodeService } from '@/services/wasm-codes'
 import { BANK_HISTORY_CODE_IDS_KEYS } from '@/tracer/handlers/bank'
-import {
-  type Cache,
-  DbType,
-  type Env,
-  type EnvOptions,
-  type FormulaBalanceGetter,
-  type FormulaBalancesGetter,
-  type FormulaCodeIdKeyForContractGetter,
-  type FormulaCommunityPoolBalancesGetter,
-  type FormulaContractGetter,
-  type FormulaContractMatchesCodeIdKeysGetter,
-  type FormulaDateGetter,
-  type FormulaDateWithValueMatchGetter,
-  type FormulaExtractionGetter,
-  type FormulaGetter,
-  type FormulaMapGetter,
-  type FormulaPrefetch,
-  type FormulaPrefetchTransformations,
-  type FormulaProposalCountGetter,
-  type FormulaProposalGetter,
-  type FormulaProposalObject,
-  type FormulaProposalVoteCountGetter,
-  type FormulaProposalVoteGetter,
-  type FormulaProposalVoteObject,
-  type FormulaProposalVotesGetter,
-  type FormulaProposalsGetter,
-  type FormulaQuerier,
-  type FormulaSlashEventsGetter,
-  type FormulaTransformationDateGetter,
-  type FormulaTransformationMapGetter,
-  type FormulaTransformationMatchGetter,
-  type FormulaTransformationMatchesGetter,
-  type FormulaTxEventsGetter,
+import { DbType } from '@/types'
+import type {
+  Cache,
+  Env,
+  EnvOptions,
+  FormulaBalanceGetter,
+  FormulaBalancesGetter,
+  FormulaBlockGetter,
+  FormulaCodeIdKeyForContractGetter,
+  FormulaCommunityPoolBalancesGetter,
+  FormulaContractGetter,
+  FormulaContractMatchesCodeIdKeysGetter,
+  FormulaDateFirstExtractedGetter,
+  FormulaDateGetter,
+  FormulaDateWithValueMatchGetter,
+  FormulaExtractionGetter,
+  FormulaGetter,
+  FormulaMapGetter,
+  FormulaPrefetch,
+  FormulaPrefetchTransformations,
+  FormulaProposalCountGetter,
+  FormulaProposalGetter,
+  FormulaProposalObject,
+  FormulaProposalVoteCountGetter,
+  FormulaProposalVoteGetter,
+  FormulaProposalVoteObject,
+  FormulaProposalVotesGetter,
+  FormulaProposalsGetter,
+  FormulaQuerier,
+  FormulaSlashEventsGetter,
+  FormulaTransformationDateGetter,
+  FormulaTransformationMapGetter,
+  FormulaTransformationMatchGetter,
+  FormulaTransformationMatchesGetter,
+  FormulaTxEventsGetter,
 } from '@/types'
 import { dbKeyForKeys, dbKeyToKeys, getDependentKey } from '@/utils'
 
@@ -73,6 +76,9 @@ export const getEnv = ({
   const blockHeightFilter = {
     [Op.lte]: block.height,
   }
+
+  const getBlock: FormulaBlockGetter = async (height) =>
+    (await Block.getForHeight(height))?.block
 
   const get: FormulaGetter = async (contractAddress, ...keys) => {
     const key = dbKeyForKeys(...keys)
@@ -126,9 +132,7 @@ export const getEnv = ({
       return
     }
 
-    const value = JSON.parse(event.value ?? 'null')
-
-    return value
+    return event
   }
 
   const getMap: FormulaMapGetter = async (
@@ -166,6 +170,9 @@ export const getEnv = ({
               // beginning of the query. This ensures we use the most recent
               // version of the key.
               Sequelize.literal('DISTINCT ON("key") \'\'') as unknown as string,
+              // Include `id` so that Sequelize doesn't prepend it to the query
+              // before the DISTINCT ON, which must come first.
+              'id',
               'key',
               'contractAddress',
               'blockHeight',
@@ -421,6 +428,9 @@ export const getEnv = ({
         // cast to unknown and back to string to insert this at the beginning of
         // the query. This ensures we use the most recent version of the key.
         Sequelize.literal('DISTINCT ON("key") \'\'') as unknown as string,
+        // Include `id` so that Sequelize doesn't prepend it to the query before
+        // the DISTINCT ON, which must come first.
+        'id',
         'key',
         'contractAddress',
         'blockHeight',
@@ -527,6 +537,9 @@ export const getEnv = ({
               Sequelize.literal(
                 `DISTINCT ON("${distinctOn.join('", "')}") ''`
               ) as unknown as string,
+              // Include `id` so that Sequelize doesn't prepend it to the query
+              // before the DISTINCT ON, which must come first.
+              'id',
               'name',
               'contractAddress',
               'blockHeight',
@@ -645,6 +658,9 @@ export const getEnv = ({
               Sequelize.literal(
                 'DISTINCT ON("name") \'\''
               ) as unknown as string,
+              // Include `id` so that Sequelize doesn't prepend it to the query
+              // before the DISTINCT ON, which must come first.
+              'id',
               'name',
               'contractAddress',
               'blockHeight',
@@ -761,6 +777,9 @@ export const getEnv = ({
         // the query. This ensures we use the most recent version of the name
         // for each contract.
         Sequelize.literal('DISTINCT ON("name") \'\'') as unknown as string,
+        // Include `id` so that Sequelize doesn't prepend it to the query before
+        // the DISTINCT ON, which must come first.
+        'id',
         'name',
         'contractAddress',
         'blockHeight',
@@ -919,7 +938,7 @@ export const getEnv = ({
   }
 
   const getCodeIdsForKeys = (...keys: string[]): number[] =>
-    WasmCodeService.getInstance().findWasmCodeIdsByKeys(...keys)
+    WasmCodeService.instance.findWasmCodeIdsByKeys(...keys)
 
   const contractMatchesCodeIdKeys: FormulaContractMatchesCodeIdKeysGetter =
     async (contractAddress, ...keys) =>
@@ -935,7 +954,7 @@ export const getEnv = ({
       return
     }
 
-    return WasmCodeService.getInstance().findWasmCodeKeysById(codeId)[0]
+    return WasmCodeService.instance.findWasmCodeKeysById(codeId)[0]
   }
 
   const getSlashEvents: FormulaSlashEventsGetter = async (
@@ -1018,53 +1037,51 @@ export const getEnv = ({
   }
 
   const getBalance: FormulaBalanceGetter = async (address, denom) => {
-    // Use BankBalance if exists.
-    const bankBalanceDependentKey = getDependentKey(
-      BankBalance.dependentKeyNamespace,
-      address
+    // Get BankBalanceDenom if exists.
+    const bankDenomBalanceDependentKey = getDependentKey(
+      BankDenomBalance.dependentKeyNamespace,
+      address,
+      denom
     )
-    const cachedBalance = cache.events[bankBalanceDependentKey]
-    if (
-      cachedBalance?.length === 1 &&
-      cachedBalance[0] instanceof BankBalance
-    ) {
-      // Call hook.
-      await onFetch?.(cachedBalance)
 
-      return cachedBalance[0].balances[denom]
-    }
-
-    // Only one bank balance exists per address, since it represents the latest
-    // set of all balances. Apply the block height filter to ensure we don't
-    // access future balances if we're querying a past block height.
-    const bankBalance =
+    const cachedBalanceDenom = cache.events[bankDenomBalanceDependentKey]
+    // Only one bank balance denom exists, since it represents the latest. Apply
+    // the block height filter to ensure we don't access future balances if
+    // we're querying a past block height.
+    const bankDenomBalance =
       // If undefined, we haven't tried to fetch it yet. If not undefined,
       // either it exists or it doesn't (null).
-      cachedBalance !== undefined
-        ? cachedBalance?.[0]
-        : await BankBalance.findOne({
+      cachedBalanceDenom !== undefined
+        ? cachedBalanceDenom?.[0]
+        : await BankDenomBalance.findOne({
             where: {
               address,
+              denom,
               blockHeight: blockHeightFilter,
             },
           })
 
-    // Cache bank balance, null if nonexistent.
-    if (cachedBalance === undefined) {
-      cache.events[bankBalanceDependentKey] = bankBalance ? [bankBalance] : null
+    if (bankDenomBalance && !(bankDenomBalance instanceof BankDenomBalance)) {
+      throw new Error('Incorrect event type.')
     }
 
-    // If bank balance found, return balance. Otherwise fall back to
-    // BankStateEvent.
-    if (bankBalance && bankBalance instanceof BankBalance) {
+    // Cache bank balance denom, null if nonexistent.
+    if (cachedBalanceDenom === undefined) {
+      cache.events[bankDenomBalanceDependentKey] = bankDenomBalance
+        ? [bankDenomBalance]
+        : null
+    }
+
+    if (bankDenomBalance) {
       // Call hook.
-      await onFetch?.([bankBalance])
+      await onFetch?.([bankDenomBalance])
 
-      return bankBalance.balances[denom]
+      // Return balance.
+      return bankDenomBalance.balance
     }
 
-    // Use BankStateEvent if no BankBalance and this address is a contract that
-    // we keep history for.
+    // Use BankStateEvent if no BankDenomBalance and this address is a contract
+    // that we keep history for.
     const historyExists = await contractMatchesCodeIdKeys(
       address,
       ...BANK_HISTORY_CODE_IDS_KEYS
@@ -1122,53 +1139,77 @@ export const getEnv = ({
   }
 
   const getBalances: FormulaBalancesGetter = async (address) => {
-    // Use BankBalance if exists.
-    const bankBalanceDependentKey = getDependentKey(
-      BankBalance.dependentKeyNamespace,
+    // Use BankDenomBalance if exists.
+    const bankDenomBalanceDependentKey = getDependentKey(
+      BankDenomBalance.dependentKeyNamespace,
       address
     )
-    const cachedBalance = cache.events[bankBalanceDependentKey]
-    if (
-      cachedBalance?.length === 1 &&
-      cachedBalance[0] instanceof BankBalance
-    ) {
-      // Call hook.
-      await onFetch?.(cachedBalance)
+    const cachedDenomBalances = cache.events[bankDenomBalanceDependentKey]
 
-      return cachedBalance[0].balances
-    }
-
-    // Only one bank balance exists per address, since it represents the latest
-    // set of all balances. Apply the block height filter to ensure we don't
-    // access future balances if we're querying a past block height.
-    const bankBalance =
-      // If undefined, we haven't tried to fetch it yet. If not undefined,
-      // either it exists or it doesn't (null).
-      cachedBalance !== undefined
-        ? cachedBalance?.[0]
-        : await BankBalance.findOne({
+    // Apply the block height filter to ensure we don't access future balances
+    // if we're querying a past block height.
+    const bankDenomBalances =
+      // If undefined, we haven't tried to fetch them yet. If not undefined,
+      // either they exist or they don't (null).
+      cachedDenomBalances !== undefined
+        ? ((cachedDenomBalances ?? []) as BankDenomBalance[])
+        : await BankDenomBalance.findAll({
+            attributes: [
+              Sequelize.literal(
+                'DISTINCT ON("denom") \'\''
+              ) as unknown as string,
+              // Include `id` so that Sequelize doesn't prepend it to the query
+              // before the DISTINCT ON, which must come first.
+              'id',
+              'address',
+              'denom',
+              'blockHeight',
+              'blockTimeUnixMs',
+              'balance',
+            ],
             where: {
               address,
               blockHeight: blockHeightFilter,
             },
+            order: [
+              // Needs to be first so we can use DISTINCT ON.
+              ['denom', 'ASC'],
+              ['blockHeight', 'DESC'],
+            ],
           })
 
-    // Cache bank balance, null if nonexistent.
-    if (cachedBalance === undefined) {
-      cache.events[bankBalanceDependentKey] = bankBalance ? [bankBalance] : null
+    // Type-check. Should never happen assuming dependent key namespaces are
+    // unique across different event types.
+    if (
+      bankDenomBalances.some((event) => !(event instanceof BankDenomBalance))
+    ) {
+      throw new Error('Incorrect event type.')
     }
 
-    // If bank balance found, return balance. Otherwise fall back to
+    // Cache events, null if nonexistent.
+    if (cachedDenomBalances === undefined) {
+      cache.events[bankDenomBalanceDependentKey] = bankDenomBalances.length
+        ? bankDenomBalances
+        : null
+    }
+
+    // If bank denom balances found, return them. If none, fall back to
     // BankStateEvent.
-    if (bankBalance && bankBalance instanceof BankBalance) {
+    if (bankDenomBalances.length) {
       // Call hook.
-      await onFetch?.([bankBalance])
+      await onFetch?.(bankDenomBalances)
 
-      return bankBalance.balances
+      return bankDenomBalances.reduce(
+        (acc, denomBalance) => ({
+          ...acc,
+          [denomBalance.denom]: denomBalance.balance,
+        }),
+        {} as Record<string, string>
+      )
     }
 
-    // Use BankStateEvent if no BankBalance and this address is a contract that
-    // we keep history for.
+    // Use BankStateEvent if no BankDenomBalance and this address is a contract
+    // that we keep history for.
     const historyExists = await contractMatchesCodeIdKeys(
       address,
       ...BANK_HISTORY_CODE_IDS_KEYS
@@ -1202,6 +1243,9 @@ export const getEnv = ({
               Sequelize.literal(
                 'DISTINCT ON("denom") \'\''
               ) as unknown as string,
+              // Include `id` so that Sequelize doesn't prepend it to the query
+              // before the DISTINCT ON, which must come first.
+              'id',
               'denom',
               'address',
               'blockHeight',
@@ -1330,6 +1374,9 @@ export const getEnv = ({
               Sequelize.literal(
                 'DISTINCT ON("proposalId") \'\''
               ) as unknown as string,
+              // Include `id` so that Sequelize doesn't prepend it to the query
+              // before the DISTINCT ON, which must come first.
+              'id',
               'proposalId',
               'blockHeight',
               'blockTimeUnixMs',
@@ -1418,6 +1465,9 @@ export const getEnv = ({
               Sequelize.literal(
                 'DISTINCT ON("proposalId") \'\''
               ) as unknown as string,
+              // Include `id` so that Sequelize doesn't prepend it to the query
+              // before the DISTINCT ON, which must come first.
+              'id',
               'proposalId',
               'blockHeight',
               'blockTimeUnixMs',
@@ -1538,6 +1588,9 @@ export const getEnv = ({
               Sequelize.literal(
                 'DISTINCT ON("voterAddress", "proposalId") \'\''
               ) as unknown as string,
+              // Include `id` so that Sequelize doesn't prepend it to the query
+              // before the DISTINCT ON, which must come first.
+              'id',
               'proposalId',
               'voterAddress',
               'blockHeight',
@@ -1633,6 +1686,9 @@ export const getEnv = ({
               Sequelize.literal(
                 'DISTINCT ON("voterAddress", "proposalId") \'\''
               ) as unknown as string,
+              // Include `id` so that Sequelize doesn't prepend it to the query
+              // before the DISTINCT ON, which must come first.
+              'id',
               'proposalId',
               'voterAddress',
               'blockHeight',
@@ -1725,12 +1781,12 @@ export const getEnv = ({
     })
 
     // Check cache.
-    const cachedEvent = cache.events[dependentKey]
-    const event =
+    const cachedExtraction = cache.events[dependentKey]
+    const extraction =
       // If undefined, we haven't tried to fetch it yet. If not undefined,
       // either it exists or it doesn't (null).
-      cachedEvent !== undefined
-        ? cachedEvent?.[0]
+      cachedExtraction !== undefined
+        ? cachedExtraction?.[0]
         : await Extraction.findOne({
             where: {
               address,
@@ -1742,24 +1798,151 @@ export const getEnv = ({
 
     // Type-check. Should never happen assuming dependent key namespaces are
     // unique across different event types.
-    if (event && !(event instanceof Extraction)) {
+    if (extraction && !(extraction instanceof Extraction)) {
       throw new Error('Incorrect event type.')
     }
 
-    // Cache event, null if nonexistent.
-    if (cachedEvent === undefined) {
-      cache.events[dependentKey] = event ? [event] : null
+    // Cache extraction, null if nonexistent.
+    if (cachedExtraction === undefined) {
+      cache.events[dependentKey] = extraction ? [extraction] : null
     }
 
-    // If no event found, return undefined.
-    if (!event) {
+    // If no extraction found, return undefined.
+    if (!extraction) {
       return
     }
 
     // Call hook.
-    await onFetch?.([event])
+    await onFetch?.([extraction])
 
-    return event.toJSON()
+    return extraction
+  }
+
+  const getExtractionMap: FormulaTransformationMapGetter = async (
+    address,
+    namePrefix
+  ) => {
+    const mapNamePrefix = namePrefix + ':'
+    const dependentKey = getDependentKey(
+      Extraction.dependentKeyNamespace,
+      address,
+      mapNamePrefix
+    )
+    dependentKeys?.push({
+      key: dependentKey,
+      prefix: true,
+    })
+
+    // Check cache.
+    const cachedExtractions = cache.events[dependentKey]
+    const extractions =
+      // If undefined, we haven't tried to fetch them yet. If not undefined,
+      // either they exist or they don't (null).
+      cachedExtractions !== undefined
+        ? ((cachedExtractions ?? []) as Extraction[])
+        : await Extraction.findAll({
+            attributes: [
+              // DISTINCT ON is not directly supported by Sequelize, so we need
+              // to cast to unknown and back to string to insert this at the
+              // beginning of the query. This ensures we use the most recent
+              // version of the name for each contract.
+              Sequelize.literal(
+                'DISTINCT ON("name") \'\''
+              ) as unknown as string,
+              // Include `id` so that Sequelize doesn't prepend it to the query
+              // before the DISTINCT ON, which must come first.
+              'id',
+              'name',
+              'address',
+              'blockHeight',
+              'blockTimeUnixMs',
+              'data',
+            ],
+            where: {
+              address,
+              name: {
+                [Op.like]: mapNamePrefix + '%',
+              },
+              blockHeight: blockHeightFilter,
+            },
+            order: [
+              // Needs to be first so we can use DISTINCT ON.
+              ['name', 'ASC'],
+              ['blockHeight', 'DESC'],
+            ],
+          })
+
+    // Type-check. Should never happen assuming dependent key namespaces are
+    // unique across different event types.
+    if (extractions.some((extraction) => !(extraction instanceof Extraction))) {
+      throw new Error('Incorrect event type.')
+    }
+
+    // Cache extractions, null if nonexistent.
+    if (cachedExtractions === undefined) {
+      cache.events[dependentKey] = extractions.length ? extractions : null
+    }
+
+    // If no extractions found, return undefined.
+    if (!extractions.length) {
+      return undefined
+    }
+
+    // Call hook.
+    await onFetch?.(extractions)
+
+    // If extractions found, create map.
+    const map: Record<string, any> = {}
+    for (const extraction of extractions) {
+      map[extraction.name.slice(mapNamePrefix.length)] = extraction.data
+    }
+
+    return map
+  }
+
+  // Gets the date of the first extraction for the given name.
+  const getDateFirstExtracted: FormulaDateFirstExtractedGetter = async (
+    address,
+    name,
+    where
+  ) => {
+    const dependentKey = getDependentKey(
+      Extraction.dependentKeyNamespace,
+      address,
+      name
+    )
+    dependentKeys?.push({
+      key: dependentKey,
+      prefix: false,
+    })
+
+    // The cache consists of the most recent extractions for each name, but this
+    // fetches the first extraction, so we can't use the cache.
+
+    // Get first extraction for this name.
+    const extraction = await Extraction.findOne({
+      where: {
+        address,
+        name,
+        blockHeight: blockHeightFilter,
+        ...(where && {
+          data: where,
+        }),
+      },
+      order: [['blockHeight', 'ASC']],
+    })
+
+    if (!extraction) {
+      return undefined
+    }
+
+    // Call hook.
+    await onFetch?.([extraction])
+
+    // Convert block time to date.
+    const date = new Date(0)
+    date.setUTCSeconds(Number(extraction.blockTimeUnixMs) / 1e3)
+    return date
   }
 
   const getFeegrantAllowance = async (granter: string, grantee: string) => {
@@ -1841,6 +2024,9 @@ export const getEnv = ({
               Sequelize.literal(
                 'DISTINCT ON("granter", "grantee") \'\''
               ) as unknown as string,
+              // Include `id` so that Sequelize doesn't prepend it to the query
+              // before the DISTINCT ON, which must come first.
+              'id',
               'granter',
               'grantee',
               'blockHeight',
@@ -1910,6 +2096,7 @@ export const getEnv = ({
     date: useBlockDate ? new Date(Number(block.timeUnixMs)) : new Date(),
     args,
 
+    getBlock,
     get,
     getMap,
     getDateKeyModified,
@@ -1944,6 +2131,9 @@ export const getEnv = ({
     getCommunityPoolBalances,
 
     getExtraction,
+    getExtractionMap,
+    getDateFirstExtracted,
+
     getFeegrantAllowance,
     getFeegrantAllowances,
     hasFeegrantAllowance,

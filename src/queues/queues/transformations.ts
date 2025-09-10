@@ -59,9 +59,9 @@ export class TransformationsQueue extends BaseQueue<TransformationsQueuePayload>
       forceAll = false,
     } = job.data
 
-    const codeIds = []
+    const codeIds: number[] = []
     if (!forceAll) {
-      const foundCodeIds = WasmCodeService.getInstance().findWasmCodeIdsByKeys(
+      const foundCodeIds = WasmCodeService.instance.findWasmCodeIdsByKeys(
         ...(codeIdsKeys || [])
       )
       if (codeIdsKeys?.length && !foundCodeIds.length) {

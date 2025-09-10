@@ -15,6 +15,23 @@ module.exports = {
       listen_timeout: 5000,
     },
     {
+      name: 'workers-bg',
+      script: 'npm',
+      args: [
+        'run',
+        'with-infisical',
+        '--',
+        'npm',
+        'run',
+        'workers',
+        '--',
+        '-m',
+        'background',
+      ],
+      wait_ready: true,
+      listen_timeout: 5000,
+    },
+    {
       name: 'account-webhooks',
       script: 'npm',
       args: [

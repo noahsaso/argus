@@ -59,7 +59,7 @@ import { Contract } from './Contract'
     },
   ],
 })
-export class WasmStateEvent extends DependableEventModel {
+export class WasmStateEvent<T = any> extends DependableEventModel {
   @PrimaryKey
   @AutoIncrement
   @Column(DataType.BIGINT)
@@ -101,7 +101,7 @@ export class WasmStateEvent extends DependableEventModel {
 
   @AllowNull
   @Column(DataType.JSONB)
-  declare valueJson: any | null
+  declare valueJson: T | null
 
   @AllowNull(false)
   @Column(DataType.BOOLEAN)

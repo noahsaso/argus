@@ -394,7 +394,7 @@ export const unvotedDelegatedVotingPower: ContractFormula<
     if (vpCapPercent && Number(vpCapPercent) < 1) {
       const dao =
         (await getTransformationMatch<string>(contractAddress, 'dao'))?.value ??
-        (await get(contractAddress, 'dao'))
+        (await get(contractAddress, 'dao'))?.valueJson
       if (!dao) {
         throw new Error('DAO not found')
       }

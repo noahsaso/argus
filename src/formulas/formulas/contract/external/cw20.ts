@@ -70,11 +70,13 @@ export const balance: ContractFormula<string, { address: string }> = {
     )
     const addressData = isLegacy ? fromBech32(address).data : address
 
-    return (
-      (await get<string>(contractAddress, 'balance', addressData)) ??
-      // If no balance is found, return 0.
-      '0'
-    )
+    const balance = (await get<string>(contractAddress, 'balance', addressData))
+      ?.valueJson
+    if (!balance) {
+      throw new Error(`no balance found for ${address}`)
+    }
+
+    return balance
   },
 }
 
@@ -135,12 +137,14 @@ export const allowance: ContractFormula<
     }
 
     return (
-      (await get<AllowanceResponse>(
-        contractAddress,
-        'allowance',
-        owner,
-        spender
-      )) ?? {
+      (
+        await get<AllowanceResponse>(
+          contractAddress,
+          'allowance',
+          owner,
+          spender
+        )
+      )?.valueJson ?? {
         allowance: '0',
         expires: { never: {} },
       }

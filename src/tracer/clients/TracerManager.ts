@@ -187,6 +187,7 @@ export class TracerManager {
           return data
             ? {
                 handler: name,
+                hasBackground: !!handler.processBackground,
                 data,
                 trace,
               }

@@ -42,11 +42,9 @@ export const depositInfo: ContractFormula<any, { proposalId: string }> = {
       throw new Error('missing `proposalId`')
     }
 
-    const data = await get<[any, string]>(
-      contractAddress,
-      'deposits',
-      Number(proposalId)
-    )
+    const data = (
+      await get<[any, string]>(contractAddress, 'deposits', Number(proposalId))
+    )?.valueJson
 
     if (!data || !Array.isArray(data) || data.length !== 2) {
       throw new Error('invalid proposal ID or deposit info')

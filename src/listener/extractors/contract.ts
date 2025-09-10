@@ -1,140 +1,103 @@
 import { fromUtf8, toUtf8 } from '@cosmjs/encoding'
 
-import { Block, Contract, Extraction } from '@/db'
-import { Extractor, ExtractorMaker } from '@/types'
-import { retry } from '@/utils'
+import { Contract } from '@/db'
+import {
+  DataSourceData,
+  ExtractorDataSource,
+  ExtractorHandler,
+  ExtractorHandlerOutput,
+  ExtractorSyncEnv,
+} from '@/types'
+import { getContractInfo } from '@/utils'
 
-export type ContractsExtractorData = {
-  addresses: string[]
-}
+import {
+  WasmInstantiateOrMigrateData,
+  WasmInstantiateOrMigrateDataSource,
+} from '../sources'
+import { Extractor } from './base'
 
-export const contract: ExtractorMaker<ContractsExtractorData> = async ({
-  autoCosmWasmClient,
-}) => {
-  const match: Extractor<ContractsExtractorData>['match'] = ({ events }) => {
-    // Find addresses of contracts being instantiated.
-    const addresses = events
-      .filter(
-        (e) =>
-          e.type === 'instantiate' &&
-          e.attributes.some((a) => a.key === 'code_id') &&
-          e.attributes.some((a) => a.key === '_contract_address')
-      )
-      .flatMap((e) =>
-        e.attributes
-          .filter((a) => a.key === '_contract_address')
-          .map((a) => a.value)
-      )
+export class ContractExtractor extends Extractor {
+  static type = 'contract'
+  static sources: ExtractorDataSource[] = [
+    WasmInstantiateOrMigrateDataSource.source('instantiate', {}),
+  ]
 
-    if (addresses.length === 0) {
-      return
+  // Handlers.
+  instantiate: ExtractorHandler<WasmInstantiateOrMigrateData> = async ({
+    address,
+  }): Promise<ExtractorHandlerOutput[]> => {
+    const client = this.env.autoCosmWasmClient.client
+    if (!client) {
+      throw new Error('CosmWasm client not connected')
     }
 
-    return {
-      addresses,
+    const [contract, response] = await Promise.all([
+      getContractInfo({ client, address }),
+      // Skip redundant getContract query in the normal
+      // queryContractRaw.
+      client['forceGetQueryClient']().wasm.queryContractRaw(
+        address,
+        toUtf8('contract_info')
+      ),
+    ])
+
+    if (!response?.data.length) {
+      return []
     }
+
+    // Ensure contract exists in the DB.
+    await Contract.upsert(
+      {
+        address: contract.address,
+        codeId: contract.codeId,
+        admin: contract.admin,
+        creator: contract.creator,
+        label: contract.label,
+        instantiatedAtBlockHeight: this.env.block.height,
+        instantiatedAtBlockTimeUnixMs: this.env.block.timeUnixMs,
+        instantiatedAtBlockTimestamp: this.env.block.timestamp,
+        txHash: this.env.txHash,
+      },
+      {
+        // Update these fields if already exists.
+        fields: ['codeId', 'admin', 'creator', 'label'],
+        returning: false,
+      }
+    )
+
+    // Return extractions.
+    return [
+      {
+        address: contract.address,
+        name: 'info',
+        data: JSON.parse(fromUtf8(response.data)),
+      },
+    ]
   }
 
-  const extract: Extractor<ContractsExtractorData>['extract'] = async ({
-    txHash,
-    height,
-    data: { addresses },
-  }) => {
-    await autoCosmWasmClient.update()
+  static async *sync({
+    autoCosmWasmClient,
+  }: ExtractorSyncEnv): AsyncGenerator<DataSourceData, void, undefined> {
     const client = autoCosmWasmClient.client
     if (!client) {
       throw new Error('CosmWasm client not connected')
     }
 
-    // Get block time from the DB or RPC.
-    const blockTimeUnixMs = await retry(
-      3,
-      () =>
-        Block.findByPk(height).then((block) =>
-          block
-            ? Number(block.timeUnixMs)
-            : client
-                .getBlock(Number(height))
-                .then((b) => Date.parse(b.header.time))
-        ),
-      1_000
-    ).catch((err) => {
-      console.error(`Error getting block time for height ${height}:`, err)
-      return 0
-    })
+    // Find all code IDs on the chain.
+    const codes = await client.getCodes()
 
-    // Get contract data and info, and create extractions.
-    const extractions = (
-      await Promise.allSettled(
-        addresses.map((address) =>
-          retry(
-            3,
-            async () =>
-              Promise.all([
-                client.getContract(address),
-                // Skip redundant getContract query in the normal
-                // queryContractRaw.
-                client['forceGetQueryClient']()
-                  .wasm.queryContractRaw(address, toUtf8('contract_info'))
-                  .catch(() => null),
-              ]).then(
-                ([contract, response]) =>
-                  [
-                    contract,
-                    response?.data.length
-                      ? {
-                          address: contract.address,
-                          name: 'info',
-                          blockHeight: height,
-                          blockTimeUnixMs,
-                          txHash,
-                          data: JSON.parse(fromUtf8(response.data)),
-                        }
-                      : null,
-                  ] as const
-              ),
-            1_000
-          )
-        )
+    // Find all contracts on the chain.
+    for (const { id } of codes) {
+      const contracts = await client.getContracts(id)
+
+      yield* contracts.map((address) =>
+        WasmInstantiateOrMigrateDataSource.data({
+          type: 'instantiate',
+          address,
+          codeId: id,
+          codeIdsKeys: [],
+        })
       )
-    ).flatMap((s) => (s.status === 'fulfilled' ? [s.value] : []))
-
-    // Ensure contracts exist in the DB.
-    const [, createdExtractions] = await Promise.all([
-      Contract.bulkCreate(
-        extractions.map(([contract]) => ({
-          address: contract.address,
-          codeId: contract.codeId,
-          admin: contract.admin,
-          creator: contract.creator,
-          label: contract.label,
-          instantiatedAtBlockHeight: height,
-          instantiatedAtBlockTimeUnixMs: blockTimeUnixMs,
-          instantiatedAtBlockTimestamp: new Date(Number(blockTimeUnixMs)),
-          txHash,
-        })),
-        {
-          updateOnDuplicate: ['codeId', 'admin', 'creator', 'label', 'txHash'],
-          conflictAttributes: ['address'],
-        }
-      ),
-      Extraction.bulkCreate(
-        extractions.flatMap(([, ...extractions]) =>
-          extractions.flatMap((e) => e || [])
-        ),
-        {
-          updateOnDuplicate: ['blockTimeUnixMs', 'txHash', 'data'],
-          conflictAttributes: ['address', 'name', 'blockHeight'],
-          returning: true,
-        }
-      ),
-    ])
-
-    return createdExtractions
-  }
-
-  return {
-    match,
-    extract,
+    }
   }
 }

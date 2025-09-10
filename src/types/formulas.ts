@@ -6,7 +6,13 @@ import {
 import { OpenAPIV3_1 } from 'openapi-types'
 import { BindOrReplacements, WhereOptions } from 'sequelize'
 
-import type { Contract, Extraction, StakingSlashEvent, WasmTxEvent } from '@/db'
+import type {
+  Contract,
+  Extraction,
+  StakingSlashEvent,
+  WasmStateEvent,
+  WasmTxEvent,
+} from '@/db'
 
 import { ComputationDependentKey } from './computation'
 import { ContractJson, DependableEventModel, FeegrantAllowanceJson } from './db'
@@ -15,10 +21,12 @@ import { Block, NestedMap, RequireAtLeastOne } from './misc'
 export type KeyInput = string | number | Uint8Array
 export type KeyInputType = 'string' | 'number' | 'bytes'
 
-export type FormulaGetter = <T>(
+export type FormulaBlockGetter = (height: number) => Promise<Block | undefined>
+
+export type FormulaGetter = <T = any>(
   contractAddress: string,
   ...keys: KeyInput[]
-) => Promise<T | undefined>
+) => Promise<WasmStateEvent<T> | undefined>
 
 export type FormulaPrefetch = (
   contractAddress: string,
@@ -81,7 +89,13 @@ export type FormulaTransformationMatchesGetter = <T>(
 export type FormulaTransformationMatchGetter = <T>(
   ...args: Parameters<FormulaTransformationMatchesGetter>
 ) => Promise<
-  | { contractAddress: string; codeId: number; name: string; value: T }
+  | {
+      block: Block
+      contractAddress: string
+      codeId: number
+      name: string
+      value: T
+    }
   | undefined
 >
 
@@ -264,10 +278,21 @@ export type FormulaProposalVoteCountGetter = (
   proposalId: string
 ) => Promise<number>
 
-export type FormulaExtractionGetter = (
+export type FormulaExtractionGetter = <T = any>(
   address: string,
   name: string
-) => Promise<Extraction | undefined>
+) => Promise<Extraction<T> | undefined>
+
+export type FormulaExtractionMapGetter = <V = any>(
+  contractAddress: string,
+  namePrefix: string
+) => Promise<Record<string, V> | undefined>
+
+export type FormulaDateFirstExtractedGetter = (
+  contractAddress: string,
+  name: string,
+  where?: WhereOptions
+) => Promise<Date | undefined>
 
 export type FormulaQuerier = (
   query: string,
@@ -287,6 +312,7 @@ export type Env<Args extends Record<string, string> = {}> = {
    */
   args: Partial<Args>
 
+  getBlock: FormulaBlockGetter
   get: FormulaGetter
   getMap: FormulaMapGetter
   getDateKeyModified: FormulaDateGetter
@@ -314,6 +340,8 @@ export type Env<Args extends Record<string, string> = {}> = {
   getProposalVoteCount: FormulaProposalVoteCountGetter
   getCommunityPoolBalances: FormulaCommunityPoolBalancesGetter
   getExtraction: FormulaExtractionGetter
+  getExtractionMap: FormulaExtractionMapGetter
+  getDateFirstExtracted: FormulaDateFirstExtractedGetter
   getFeegrantAllowance: FormulaFeegrantAllowanceGetter
   getFeegrantAllowances: FormulaFeegrantAllowancesGetter
   hasFeegrantAllowance: FormulaFeegrantHasAllowanceGetter

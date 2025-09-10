@@ -30,11 +30,22 @@ export const daos: GenericFormula<
 
     // sg_dao and cw3_dao are beta/legacy DAO DAO (v0.2.5 and v0.3.0)
     const [{ count }] = await query(
-      `SELECT COUNT(*) as "count" FROM (SELECT DISTINCT ON ("contractAddress") "contractAddress" FROM "WasmStateEvents" WHERE "key" = '${dbKeyForKeys(
-        'contract_info'
-      )}' AND ("value" LIKE '%cw-core%' OR "value" LIKE '%cwd-core%' OR "value" LIKE '%dao-core%' OR "value" LIKE '%sg_dao%' OR "value" LIKE '%cw3_dao%') AND "blockTimeUnixMs" <= $end ${
+      `SELECT COUNT(*) as "count" FROM (
+        SELECT DISTINCT ON (address) address FROM (
+          SELECT "contractAddress" as address FROM "WasmStateEvents" 
+          WHERE "key" = '${dbKeyForKeys(
+            'contract_info'
+          )}' AND ("value" LIKE '%cw-core%' OR "value" LIKE '%cwd-core%' OR "value" LIKE '%dao-core%' OR "value" LIKE '%sg_dao%' OR "value" LIKE '%cw3_dao%') AND "blockTimeUnixMs" <= $end ${
         daysAgo ? 'AND "blockTimeUnixMs" >= $start' : ''
-      } ORDER BY "contractAddress") tmp`,
+      }
+          UNION ALL
+          SELECT "address" FROM "Extractions" 
+          WHERE "name" = 'info' AND ("data"->>'contract' LIKE '%cw-core%' OR "data"->>'contract' LIKE '%cwd-core%' OR "data"->>'contract' LIKE '%dao-core%' OR "data"->>'contract' LIKE '%sg_dao%' OR "data"->>'contract' LIKE '%cw3_dao%') AND "blockTimeUnixMs" <= $end ${
+            daysAgo ? 'AND "blockTimeUnixMs" >= $start' : ''
+          }
+        ) combined_daos
+        ORDER BY address
+      ) tmp`,
       {
         end: date.getTime(),
         ...(daysAgo
@@ -77,9 +88,20 @@ export const proposals: GenericFormula<
     }
 
     const [{ count }] = await query(
-      `SELECT COUNT(*) as "count" FROM (SELECT DISTINCT ON ("contractAddress", "name") "name" FROM "WasmStateEventTransformations" WHERE "name" LIKE 'proposal:%' AND "blockTimeUnixMs" <= $end ${
-        daysAgo ? 'AND "blockTimeUnixMs" >= $start' : ''
-      } ORDER BY "contractAddress", "name") tmp`,
+      `SELECT COUNT(*) as "count" FROM (
+        SELECT DISTINCT ON (address, name) name FROM (
+          SELECT "contractAddress" as address, "name" FROM "WasmStateEventTransformations" 
+          WHERE "name" LIKE 'proposal:%' AND "blockTimeUnixMs" <= $end ${
+            daysAgo ? 'AND "blockTimeUnixMs" >= $start' : ''
+          }
+          UNION ALL
+          SELECT "address", "name" FROM "Extractions" 
+          WHERE "name" LIKE 'proposal:%' AND "blockTimeUnixMs" <= $end ${
+            daysAgo ? 'AND "blockTimeUnixMs" >= $start' : ''
+          }
+        ) combined_proposals
+        ORDER BY address, name
+      ) tmp`,
       {
         end: date.getTime(),
         ...(daysAgo
@@ -122,9 +144,20 @@ export const votes: GenericFormula<
     }
 
     const [{ count }] = await query(
-      `SELECT COUNT(*) AS "count" FROM "WasmStateEventTransformations" WHERE "name" LIKE 'voteCast:%' AND "blockTimeUnixMs" <= $end ${
-        daysAgo ? 'AND "blockTimeUnixMs" >= $start' : ''
-      }`,
+      `SELECT COUNT(*) AS "count" FROM (
+        SELECT DISTINCT ON (address, name) name FROM (
+          SELECT "contractAddress" as address, "name" FROM "WasmStateEventTransformations" 
+          WHERE "name" LIKE 'voteCast:%' AND "blockTimeUnixMs" <= $end ${
+            daysAgo ? 'AND "blockTimeUnixMs" >= $start' : ''
+          }
+          UNION ALL
+          SELECT "address", "name" FROM "Extractions" 
+          WHERE "name" LIKE 'voteCast:%' AND "blockTimeUnixMs" <= $end ${
+            daysAgo ? 'AND "blockTimeUnixMs" >= $start' : ''
+          }
+        ) combined_votes
+        ORDER BY address, name
+      ) tmp`,
       {
         end: date.getTime(),
         ...(daysAgo
@@ -167,9 +200,20 @@ export const uniqueVoters: GenericFormula<
     }
 
     const [{ count }] = await query(
-      `SELECT COUNT(*) as "count" FROM (SELECT DISTINCT ON (value->'voter') value->'voter' FROM "WasmStateEventTransformations" WHERE "name" LIKE 'voteCast:%' AND "blockTimeUnixMs" <= $end ${
-        daysAgo ? 'AND "blockTimeUnixMs" >= $start' : ''
-      } ORDER BY value->'voter') tmp`,
+      `SELECT COUNT(*) as "count" FROM (
+        SELECT DISTINCT voter FROM (
+          SELECT value->>'voter' as voter FROM "WasmStateEventTransformations" 
+          WHERE "name" LIKE 'voteCast:%' AND "blockTimeUnixMs" <= $end ${
+            daysAgo ? 'AND "blockTimeUnixMs" >= $start' : ''
+          }
+          UNION
+          SELECT data->>'voter' as voter FROM "Extractions" 
+          WHERE "name" LIKE 'voteCast:%' AND "blockTimeUnixMs" <= $end ${
+            daysAgo ? 'AND "blockTimeUnixMs" >= $start' : ''
+          }
+        ) combined_voters
+        WHERE voter IS NOT NULL
+      ) tmp`,
       {
         end: date.getTime(),
         ...(daysAgo

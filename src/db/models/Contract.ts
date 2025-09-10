@@ -7,8 +7,10 @@ import {
   Table,
 } from 'sequelize-typescript'
 
+import { ConfigManager } from '@/config'
 import { WasmCodeService } from '@/services/wasm-codes'
 import { ContractJson } from '@/types'
+import { getContractInfo } from '@/utils'
 
 @Table({
   timestamps: true,
@@ -36,15 +38,15 @@ export class Contract extends Model {
 
   @AllowNull
   @Column(DataType.BIGINT)
-  declare instantiatedAtBlockHeight: string
+  declare instantiatedAtBlockHeight: string | null
 
   @AllowNull
   @Column(DataType.BIGINT)
-  declare instantiatedAtBlockTimeUnixMs: string
+  declare instantiatedAtBlockTimeUnixMs: string | null
 
   @AllowNull
   @Column(DataType.DATE)
-  declare instantiatedAtBlockTimestamp: Date
+  declare instantiatedAtBlockTimestamp: Date | null
 
   @AllowNull
   @Column(DataType.TEXT)
@@ -57,11 +59,16 @@ export class Contract extends Model {
       admin: this.admin,
       creator: this.creator,
       label: this.label,
-      instantiatedAt: {
-        height: this.instantiatedAtBlockHeight,
-        timeUnixMs: this.instantiatedAtBlockTimeUnixMs,
-        timestamp: this.instantiatedAtBlockTimestamp.toISOString(),
-      },
+      instantiatedAt:
+        this.instantiatedAtBlockHeight &&
+        this.instantiatedAtBlockTimeUnixMs &&
+        this.instantiatedAtBlockTimestamp
+          ? {
+              height: this.instantiatedAtBlockHeight,
+              timeUnixMs: this.instantiatedAtBlockTimeUnixMs,
+              timestamp: this.instantiatedAtBlockTimestamp.toISOString(),
+            }
+          : null,
       txHash: this.txHash,
     }
   }
@@ -71,8 +78,23 @@ export class Contract extends Model {
    * from the config.
    */
   matchesCodeIdKeys(...keys: string[]): boolean {
-    return WasmCodeService.getInstance()
-      .findWasmCodeIdsByKeys(...keys)
-      .includes(this.codeId)
+    return WasmCodeService.instance.matchesWasmCodeKeys(this.codeId, ...keys)
+  }
+
+  /**
+   * Update codeId, admin, creator, and label from the chain.
+   */
+  async updateFromChain(): Promise<void> {
+    const { localRpc, remoteRpc } = ConfigManager.load()
+    const contract = await getContractInfo({
+      rpc: localRpc ?? remoteRpc,
+      address: this.address,
+    })
+    await this.update({
+      codeId: contract.codeId,
+      admin: contract.admin || null,
+      creator: contract.creator,
+      label: contract.label,
+    })
   }
 }

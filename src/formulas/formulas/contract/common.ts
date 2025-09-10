@@ -13,17 +13,46 @@ export const info: ContractFormula<ContractInfo> = {
     get,
     getExtraction,
   }) => {
+    const [transformation, extraction] = await Promise.all([
+      getTransformationMatch<ContractInfo>(contractAddress, 'info')
+        .then((result) =>
+          result?.value
+            ? {
+                height: result.block.height,
+                value: result.value,
+              }
+            : get(contractAddress, 'contract_info').then((result) =>
+                result?.valueJson
+                  ? {
+                      height: result.block.height,
+                      value: result.valueJson as ContractInfo,
+                    }
+                  : null
+              )
+        )
+        .catch(() => null),
+      getExtraction(contractAddress, 'info').then(
+        (result) =>
+          result && {
+            height: result.block.height,
+            value: result.data as ContractInfo,
+          }
+      ),
+    ])
+
+    // Use whichever is more recent.
     const info =
-      (await getTransformationMatch<ContractInfo>(contractAddress, 'info'))
-        ?.value || (await get(contractAddress, 'contract_info'))
+      transformation && extraction
+        ? transformation.height > extraction.height
+          ? transformation.value
+          : extraction.value
+        : transformation && !extraction
+        ? transformation.value
+        : extraction && !transformation
+        ? extraction.value
+        : null
 
     if (!info) {
-      // If no info found in state, try to get from extraction.
-      const extraction = await getExtraction(contractAddress, 'info')
-      if (extraction) {
-        return extraction.data as ContractInfo
-      }
-
       throw new Error(`no contract info found for ${contractAddress}`)
     }
 
@@ -77,14 +106,16 @@ export const instantiatedAt: ContractFormula<string> = {
     description: 'retrieves the contract instantiation timestamp',
   },
   compute: async ({ contractAddress, getContract }) => {
-    const timestamp = (await getContract(contractAddress))?.instantiatedAt
-      .timestamp
-
-    if (!timestamp) {
+    const contract = await getContract(contractAddress)
+    if (!contract) {
       throw new Error('contract not yet indexed')
     }
 
-    return timestamp
+    if (!contract.instantiatedAt) {
+      throw new Error('contract instantiation unknown')
+    }
+
+    return contract.instantiatedAt.timestamp
   },
 }
 
@@ -132,7 +163,7 @@ export const item: ContractFormula<any, { key: string; keys: string }> = {
   },
   compute: async ({ contractAddress, get, args: { key, keys } }) => {
     if (key) {
-      return await get(contractAddress, key)
+      return (await get(contractAddress, key))?.valueJson
     }
 
     if (keys) {
@@ -147,7 +178,7 @@ export const item: ContractFormula<any, { key: string; keys: string }> = {
         )
       }
 
-      return await get(contractAddress, ...parsedKeys)
+      return (await get(contractAddress, ...parsedKeys))?.valueJson
     }
 
     throw new Error('missing key or keys')

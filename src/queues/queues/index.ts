@@ -1,6 +1,8 @@
 export { ExportQueue } from './export'
+export { ExportBackgroundQueue } from './export-background'
 export { ExtractQueue } from './extract'
 export { SearchQueue } from './search'
+export { SyncExtractorsQueue } from './sync-extractors'
 export { TransformationsQueue } from './transformations'
 export { WasmCodeTrackersQueue } from './wasm-code-trackers'
 export { WebhooksQueue } from './webhooks'

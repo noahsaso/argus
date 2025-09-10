@@ -83,11 +83,13 @@ export const nftClaims: ContractFormula<NftClaim[], { address: string }> = {
     }
 
     const legacyClaims = (
-      (await get<Omit<NftClaim, 'legacy'>[]>(
-        contractAddress,
-        'nft_claims',
-        address
-      )) ?? []
+      (
+        await get<Omit<NftClaim, 'legacy'>[]>(
+          contractAddress,
+          'nft_claims',
+          address
+        )
+      )?.valueJson ?? []
     ).map((claim) => ({
       ...claim,
       legacy: true,

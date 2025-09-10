@@ -1,0 +1,19 @@
+diff --git a/node_modules/@dao-dao/types/clients/proposal-module.ts b/node_modules/@dao-dao/types/clients/proposal-module.ts
+index a8216ec..37c6b09 100644
+--- a/node_modules/@dao-dao/types/clients/proposal-module.ts
++++ b/node_modules/@dao-dao/types/clients/proposal-module.ts
+@@ -1,5 +1,4 @@
+ import {
+-  CustomTxOptions,
+   SigningCosmWasmClient,
+ } from '@cosmjs/cosmwasm-stargate'
+ import { UndefinedInitialDataOptions } from '@tanstack/react-query'
+@@ -13,6 +12,8 @@ import { PreProposeModule } from '../dao'
+ import { ContractVersion, Feature } from '../features'
+ import { IDaoBase } from './dao'
+ 
++type CustomTxOptions = any
++
+ export interface IProposalModuleBase<
+   Dao extends IDaoBase = IDaoBase,
+   Proposal = any,

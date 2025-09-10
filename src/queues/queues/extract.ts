@@ -1,10 +1,11 @@
-import retry from 'async-await-retry'
 import { Job, Queue } from 'bullmq'
+import { Sequelize } from 'sequelize'
 
-import { extractorMakers } from '@/listener'
+import { Block, State } from '@/db'
+import { getExtractorMap } from '@/listener'
 import { queueMeilisearchIndexUpdates } from '@/search'
-import { ExtractorExtractInput, NamedExtractor } from '@/types'
-import { AutoCosmWasmClient } from '@/utils'
+import { ExtractorEnv, ExtractorHandleableData } from '@/types'
+import { AutoCosmWasmClient, retry } from '@/utils'
 import { queueWebhooks } from '@/webhooks'
 
 import { BaseQueue } from '../base'
@@ -12,12 +13,13 @@ import { closeBullQueue, getBullQueue, getBullQueueEvents } from '../connection'
 
 export type ExtractQueuePayload = {
   extractor: string
-  data: ExtractorExtractInput
+  data: ExtractorHandleableData
+  env: Pick<ExtractorEnv, 'txHash' | 'block'>
 }
 
 export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
   static queueName = 'extract'
-  static concurrency = 5
+  static concurrency = 10
 
   static getQueue = () => getBullQueue<ExtractQueuePayload>(this.queueName)
   static getQueueEvents = () => getBullQueueEvents(this.queueName)
@@ -29,30 +31,21 @@ export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
   ) => (await this.getQueue()).addBulk(...params)
   static close = () => closeBullQueue(this.queueName)
 
-  private extractors: NamedExtractor[] = []
+  private autoCosmWasmClient!: AutoCosmWasmClient
 
   async init(): Promise<void> {
-    const autoCosmWasmClient = new AutoCosmWasmClient(
+    this.autoCosmWasmClient = new AutoCosmWasmClient(
       this.options.config.remoteRpc
     )
-    await autoCosmWasmClient.update()
-
-    // Set up extractors.
-    const extractors = await Promise.all(
-      Object.entries(extractorMakers).map(async ([name, extractorMaker]) => ({
-        name,
-        extractor: await extractorMaker({
-          ...this.options,
-          autoCosmWasmClient,
-        }),
-      }))
-    )
-
-    this.extractors = extractors
+    await this.autoCosmWasmClient.update()
   }
 
-  process({ data, log }: Job<ExtractQueuePayload>): Promise<void> {
-    return new Promise<void>(async (resolve, reject) => {
+  async process(job: Job<ExtractQueuePayload>) {
+    await this.autoCosmWasmClient.getValidClient()
+
+    const extractors = getExtractorMap()
+
+    return new Promise(async (resolve, reject) => {
       // Time out if takes more than 30 seconds.
       let timeout: NodeJS.Timeout | null = setTimeout(() => {
         timeout = null
@@ -61,28 +54,60 @@ export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
 
       try {
         // Process data.
-        const extractor = this.extractors.find(
-          (e) => e.name === data.extractor
-        )?.extractor
-        if (!extractor) {
-          throw new Error(`Extractor ${data.extractor} not found.`)
+        const Extractor = extractors[job.data.extractor]
+        if (!Extractor) {
+          throw new Error(`Extractor ${job.data.extractor} not found.`)
         }
 
-        // Retry 3 times with exponential backoff starting at 100ms delay.
-        const models = await retry(extractor.extract, [data.data], {
-          retriesMax: 3,
-          exponential: true,
-          interval: 100,
+        const extractor = new Extractor({
+          config: this.options.config,
+          sendWebhooks: this.options.sendWebhooks,
+          autoCosmWasmClient: this.autoCosmWasmClient,
+          ...job.data.env,
         })
 
-        if (models && Array.isArray(models) && models.length) {
+        const models = await retry(
+          3,
+          () => extractor.extract([job.data.data]),
+          100
+        )
+
+        if (models.length > 0) {
+          const latestBlock = models.sort(
+            (a, b) => Number(a.block.height) - Number(b.block.height)
+          )[models.length - 1]
+          const latestBlockHeight = latestBlock.block.height
+          const latestBlockTimeUnixMs = latestBlock.block.timeUnixMs
+
+          // Update state singleton with latest block height/time and create
+          // block if it doesn't exist.
+          await Promise.all([
+            State.updateSingleton({
+              latestBlockHeight: Sequelize.fn(
+                'GREATEST',
+                Sequelize.col('latestBlockHeight'),
+                latestBlockHeight
+              ),
+              latestBlockTimeUnixMs: Sequelize.fn(
+                'GREATEST',
+                Sequelize.col('latestBlockTimeUnixMs'),
+                latestBlockTimeUnixMs
+              ),
+            }),
+            Block.createOne({
+              height: latestBlockHeight,
+              timeUnixMs: latestBlockTimeUnixMs,
+            }),
+          ])
+
           // Queue Meilisearch index updates.
           const queued = (
             await Promise.all(
               models.map((event) =>
                 queueMeilisearchIndexUpdates(event).catch((err) => {
                   console.error(
-                    `[${new Date().toISOString()}] Error queuing search index update: ${err}`
+                    `[${new Date().toISOString()}] Error queuing search index updates:`,
+                    err
                   )
                   return 0
                 })
@@ -91,7 +116,7 @@ export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
           ).reduce((acc, q) => acc + q, 0)
 
           if (queued > 0) {
-            console.log(
+            job.log(
               `[${new Date().toISOString()}] Queued ${queued.toLocaleString()} search index update(s).`
             )
           }
@@ -100,13 +125,14 @@ export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
           if (this.options.sendWebhooks) {
             const queued = await queueWebhooks(models).catch((err) => {
               console.error(
-                `[${new Date().toISOString()}] Error queuing webhooks: ${err}`
+                `[${new Date().toISOString()}] Error queuing webhooks:`,
+                err
               )
               return 0
             })
 
             if (queued > 0) {
-              console.log(
+              job.log(
                 `[${new Date().toISOString()}] Queued ${queued.toLocaleString()} webhook(s).`
               )
             }
@@ -114,11 +140,11 @@ export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
         }
 
         if (timeout !== null) {
-          resolve()
+          resolve(models.map((model) => model.toJSON()))
         }
       } catch (err) {
         if (timeout !== null) {
-          log(
+          job.log(
             `${err instanceof Error ? err.name : 'Error'}: ${
               err instanceof Error ? err.message : err
             } ${
@@ -127,7 +153,8 @@ export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
                 : ''
             }`.trim()
           )
-          reject(err)
+          // Convert non-error objects to errors so Bull can display it.
+          reject(new Error(err instanceof Error ? err.message : String(err)))
         }
       } finally {
         if (timeout !== null) {
