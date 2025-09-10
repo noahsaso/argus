@@ -11,13 +11,13 @@
     "data": {
       "dialect": "postgres",
       "host": "localhost",
-      "database": "dev_data",
+      "database": "data_db",
       "username": "user"
     },
     "accounts": {
       "dialect": "postgres",
       "host": "localhost",
-      "database": "dev_accounts",
+      "database": "accounts_db",
       "username": "user"
     }
   },
@@ -46,5 +46,6 @@
   "inboxSecret": "secret",
   "notifierSecret": "secret",
   "websocketsSecret": "secret",
-  "accountsJwtSecret": "secret"
+  "accountsJwtSecret": "secret",
+  "rbamWebhooksBaseUrl": ""
 }
