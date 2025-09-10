@@ -13,7 +13,7 @@ import {
 import { WebhookMaker, WebhookType } from '@/types'
 
 // Emits when a DAO with RBAM is created or updated.
-export const daoWithRBAM: WebhookMaker<Extraction> = (config, state) => ({
+export const daoWithRBAM: WebhookMaker<Extraction> = (config) => ({
   filter: {
     EventType: Extraction,
     matches: (event) => event.name === 'dao-dao-core/dump_state',
@@ -53,8 +53,7 @@ export const daoWithRBAM: WebhookMaker<Extraction> = (config, state) => ({
     })
 
     return {
-      chainId: state.chainId,
-      daoAddress,
+      dao: daoAddress,
       name: data.config?.name,
       description: data.config?.description,
       image: data.config?.image_url,
@@ -65,8 +64,7 @@ export const daoWithRBAM: WebhookMaker<Extraction> = (config, state) => ({
 
 // Emits when assignments change.
 export const makeRbamAssignmentChanged: WebhookMaker<Extraction> = (
-  config,
-  state
+  config
 ) => ({
   filter: {
     EventType: Extraction,
@@ -134,8 +132,7 @@ export const makeRbamAssignmentChanged: WebhookMaker<Extraction> = (
     if (changes.length === 0) return undefined
 
     return {
-      chainId: state.chainId,
-      daoAddress,
+      dao: daoAddress,
       changes,
     }
   },
