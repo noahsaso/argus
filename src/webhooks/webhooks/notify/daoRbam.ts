@@ -74,7 +74,7 @@ export const makeRbamAssignmentChanged: WebhookMaker<Extraction> = (
   endpoint: async () => {
     return {
       type: WebhookType.Url,
-      url: `${config.rbamWebhooksBaseUrl}/rbam`,
+      url: `${config.rbamWebhooksBaseUrl}/assignments`,
       method: 'POST',
     }
   },
