@@ -7,7 +7,7 @@ export const dao: ContractFormula<string> = {
     description: 'retrieves the address of the DAO to execute actions on.',
   },
   compute: async ({ contractAddress, get, getExtraction }) => {
-    const dao = await get<string>(contractAddress, 'dao')
+    const dao = (await get<string>(contractAddress, 'dao'))?.valueJson
 
     if (!dao) {
       // If no dao found in state, try to get from extraction.
