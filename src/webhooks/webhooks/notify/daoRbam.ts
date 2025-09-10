@@ -20,7 +20,7 @@ export const daoWithRBAM: WebhookMaker<Extraction> = (config) => ({
   },
   endpoint: () => ({
     type: WebhookType.Url,
-    url: `${config.rbamWebhookBaseUrl}/dao`,
+    url: `${config.rbamWebhooksBaseUrl}/dao`,
     method: 'POST',
   }),
   getValue: async (event, getLastEvent, env) => {
@@ -74,7 +74,7 @@ export const makeRbamAssignmentChanged: WebhookMaker<Extraction> = (
   endpoint: async () => {
     return {
       type: WebhookType.Url,
-      url: `${config.rbamWebhookBaseUrl}/rbam`,
+      url: `${config.rbamWebhooksBaseUrl}/rbam`,
       method: 'POST',
     }
   },

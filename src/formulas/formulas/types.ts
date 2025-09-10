@@ -51,5 +51,3 @@ export type VotingPowerAtHeight = {
 }
 
 export type TotalPowerAtHeight = VotingPowerAtHeight
-
-export type D
