@@ -47,5 +47,6 @@
   "notifierSecret": "secret",
   "websocketsSecret": "secret",
   "accountsJwtSecret": "secret",
-  "rbamWebhooksBaseUrl": ""
+  "rbamWebhooksBaseUrl": "",
+  "rbamWebhookSecret": ""
 }

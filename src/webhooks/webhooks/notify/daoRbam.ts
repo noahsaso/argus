@@ -22,6 +22,9 @@ export const daoWithRBAM: WebhookMaker<Extraction> = (config) => ({
     type: WebhookType.Url,
     url: `${config.rbamWebhooksBaseUrl}/dao`,
     method: 'POST',
+    headers: {
+      'X-API-Key': config.rbamWebhookSecret,
+    },
   }),
   getValue: async (event, getLastEvent, env) => {
     const daoAddress = event.address
@@ -76,6 +79,9 @@ export const makeRbamAssignmentChanged: WebhookMaker<Extraction> = (
       type: WebhookType.Url,
       url: `${config.rbamWebhooksBaseUrl}/assignments`,
       method: 'POST',
+      headers: {
+        'X-API-Key': config.rbamWebhookSecret,
+      },
     }
   },
 
