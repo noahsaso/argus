@@ -42,11 +42,11 @@ interface TransformerForMapOptions<V = any> {
      */
     input?: KeyInputType | KeyInputType[]
     /**
-     * Transform the decoded keys into a string to use as the name.
+     * Transform the decoded keys and event into a string to use as the name.
      *
      * Defaults to concatenating the keys with a colon.
      */
-    transform?: (keys: KeyInput[]) => string
+    transform?: (keys: KeyInput[], event: ParsedWasmStateEvent) => string
   }
   /**
    * Override the default value generation.
@@ -90,7 +90,8 @@ export const makeTransformerForMap = <V = any>(
           ...namer.input,
         ])
           // Ignore the decoded map namespace.
-          .slice(1)
+          .slice(1),
+        event
       )
       return `${mapPrefix}:${key}`
     },
@@ -166,9 +167,9 @@ export const makeTransformerForSnapshot = ({
       input: [...[namer?.input || 'string'].flat(), 'number'],
       transform:
         namer?.transform &&
-        ((keys) =>
+        ((keys, event) =>
           // Transform just the keys provided by the custom namer.
-          namer.transform!(keys.slice(0, -1)) +
+          namer.transform!(keys.slice(0, -1), event) +
           // Add the height.
           ':' +
           BigInt(keys[keys.length - 1] as number).toString()),

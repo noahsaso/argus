@@ -6,11 +6,16 @@ export const dao: ContractFormula<string> = {
   docs: {
     description: 'retrieves the address of the DAO to execute actions on.',
   },
-  compute: async ({ contractAddress, get, getExtraction }) => {
-    const dao = (await get<string>(contractAddress, 'dao'))?.valueJson
+  compute: async ({
+    contractAddress,
+    getTransformationMatch,
+    getExtraction,
+  }) => {
+    const dao = (await getTransformationMatch<string>(contractAddress, 'dao'))
+      ?.value
 
     if (!dao) {
-      // If no dao found in state, try to get from extraction.
+      // If not found in state, try to get from extraction.
       const extraction = await getExtraction(contractAddress, 'dao-rbam/dao')
       if (extraction) {
         return (extraction.data as { dao: string }).dao
@@ -27,23 +32,21 @@ export const assignments: ContractFormula<Assignment[]> = {
   docs: {
     description: 'retrieves the list of assignments.',
   },
-  compute: async ({ contractAddress, getMap, getExtraction }) => {
-    const assignmentsMap = await getMap<number, Assignment>(
+  compute: async ({ contractAddress, getTransformationMap, getExtraction }) => {
+    const assignmentsMap = await getTransformationMap<Assignment>(
       contractAddress,
-      'assignments',
-      {
-        keyType: 'number',
-      }
+      'assignment'
     )
     const assignments = assignmentsMap && Object.values(assignmentsMap)
 
     if (!assignments) {
-      const extraction = await getExtraction(
+      // If not found in state, try to get from extraction.
+      const extraction = await getExtraction<{ assignments: Assignment[] }>(
         contractAddress,
         'dao-rbam/list_assignments'
       )
       if (extraction) {
-        return (extraction.data as { assignments: Assignment[] }).assignments
+        return extraction.data.assignments
       }
 
       throw new Error(`no assignments found for ${contractAddress}`)
@@ -57,21 +60,18 @@ export const roles: ContractFormula<Role[]> = {
   docs: {
     description: 'retrieves the list of roles.',
   },
-  compute: async ({ contractAddress, getMap, getExtraction }) => {
-    const rolesMap = await getMap<number, Role>(contractAddress, 'roles', {
-      keyType: 'number',
-    })
-
+  compute: async ({ contractAddress, getTransformationMap, getExtraction }) => {
+    const rolesMap = await getTransformationMap<Role>(contractAddress, 'role')
     const roles = rolesMap && Object.values(rolesMap)
 
     if (!roles) {
-      // If no dao found in state, try to get from extraction.
-      const extraction = await getExtraction(
+      // If not found in state, try to get from extraction.
+      const extraction = await getExtraction<{ roles: Role[] }>(
         contractAddress,
         'dao-rbam/list_roles'
       )
       if (extraction) {
-        return (extraction.data as { roles: Role[] }).roles
+        return extraction.data.roles
       }
 
       throw new Error(`no roles found for ${contractAddress}`)
@@ -79,4 +79,22 @@ export const roles: ContractFormula<Role[]> = {
 
     return roles
   },
+}
+
+export const authorizations: ContractFormula = {
+  docs: {
+    description: 'retrieves the list of authorizations.',
+  },
+  compute: async ({ contractAddress, getTransformationMap }) =>
+    Object.values(
+      (await getTransformationMap(contractAddress, 'authorization')) || {}
+    ),
+}
+
+export const actions: ContractFormula = {
+  docs: {
+    description: 'retrieves the action log.',
+  },
+  compute: async ({ contractAddress, getTransformationMap }) =>
+    Object.values((await getTransformationMap(contractAddress, 'log')) || {}),
 }
