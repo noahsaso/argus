@@ -7173,6 +7173,108 @@
         }
       }
     },
+    "/{chainId}/contract/{contractAddress}/daoRbam/assignments": {
+      "get": {
+        "tags": [
+          "contract"
+        ],
+        "summary": "retrieves the list of assignments.",
+        "operationId": "daoRbam_assignments_3ba6d63",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "contractAddress",
+            "in": "path",
+            "description": "contract address",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          }
+        }
+      }
+    },
+    "/{chainId}/contract/{contractAddress}/daoRbam/dao": {
+      "get": {
+        "tags": [
+          "contract"
+        ],
+        "summary": "retrieves the address of the DAO to execute actions on.",
+        "operationId": "daoRbam_dao_9874f17",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "contractAddress",
+            "in": "path",
+            "description": "contract address",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          }
+        }
+      }
+    },
+    "/{chainId}/contract/{contractAddress}/daoRbam/roles": {
+      "get": {
+        "tags": [
+          "contract"
+        ],
+        "summary": "retrieves the list of roles.",
+        "operationId": "daoRbam_roles_4b4940a",
+        "parameters": [
+          {
+            "name": "chainId",
+            "in": "path",
+            "description": "chain ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "contractAddress",
+            "in": "path",
+            "description": "contract address",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          }
+        }
+      }
+    },
     "/{chainId}/contract/{contractAddress}/daoRewardsDistributor/distribution": {
       "get": {
         "tags": [
