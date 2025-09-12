@@ -8,6 +8,13 @@ module.exports = {
       listen_timeout: 5000,
     },
     {
+      name: 'listener',
+      script: 'npm',
+      args: ['run', 'with-infisical', '--', 'npm', 'run', 'listener'],
+      wait_ready: true,
+      listen_timeout: 5000,
+    },
+    {
       name: 'workers',
       script: 'npm',
       args: ['run', 'with-infisical', '--', 'npm', 'run', 'workers'],

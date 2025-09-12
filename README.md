@@ -3,6 +3,55 @@
 A state-based indexer and API builder for the Cosmos SDK, originally built for
 [DAO DAO](https://daodao.zone).
 
+There are two main data ingestion tools:
+
+- [tracer](./src/scripts/tracer.ts)
+- [listener](./src/scripts/listener.ts)
+
+### Tracer
+
+The tracer ingests state events from a blockchain node processing blocks, like
+an RPC or validator. Cosmos SDK binaries have a `--trace-store` flag that allows
+dumping read/write/delete events from its KV store to a file. `mkfifo` is a
+Linux command that creates a FIFO file, effectively a named pipe that looks like
+a file on the filesystem—perfect for blocking cross-process communication. This
+ensures the blockchain node won't progress until the state tracer reads each
+line written to the FIFO file. If the tracer fails or lags, the node will wait,
+ensuring no data is missed/lost.
+
+In order to use the tracer, the preliminary setup steps are:
+
+1. Set up a typical Cosmos SDK node and run it with the flag set, like:
+
+   `gaiad start --trace-store ~/path/to/home/trace.pipe`.
+
+2. Run `mkfifo ~/path/to/home/trace.pipe`. `~/path/to/home` corresponds to the
+   `home` config field in `config.json`.
+
+Data processors for the tracer can be found in
+[src/tracer/handlers](./src/tracer/handlers/) and are typically associated with
+a specific module, like `wasm` or `bank`. They are responsible for decoding and
+matching a state event and then exporting it to the database.
+
+There are many [DB models](./src/db/models/) corresponding to different handlers
+and event types, with indexes optimized for queries.
+
+### Listener
+
+The listener is a lightweight block/transaction/message/event processor, like
+most other indexers that exist (e.g. SubQuery, The Graph, etc.). This only
+relies on an RPC, the `remoteRpc` field in `config.json`.
+
+Data extractors for the listener can be found in
+[src/listener/extractors](./src/listener/extractors/). They depend on data
+sources, found in [src/listener/sources](./src/listener/sources), which are
+responsible for finding specific data in a transaction (probably a message or
+event), and then extractors are responsible for exporting the found data to the
+database.
+
+Extractors typically save data to [`Extraction`](./src/db/models/Extraction.ts)
+models and can associate data with any address/name for queries.
+
 ## Setup
 
 1. Create `config.json` from example `config.json.example`.
@@ -29,10 +78,12 @@ A state-based indexer and API builder for the Cosmos SDK, originally built for
    npm run db:setup
    ```
 
-5. Run the exporter or server.
+5. Run the tracer, listener, or server.
 
    ```bash
-   npm run export:prod
+   npm run trace:prod
+   # OR
+   npm run listen:prod
    # OR
    npm run serve:prod
    ```
