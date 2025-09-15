@@ -1,205 +1,172 @@
-import { Block, Contract, Extraction } from '@/db'
+import { Contract } from '@/db'
 import { WasmCodeService } from '@/services'
-import { Extractor, ExtractorMaker } from '@/types'
-import { retry } from '@/utils'
+import {
+  DataSourceData,
+  ExtractorDataSource,
+  ExtractorHandler,
+  ExtractorHandlerOutput,
+  ExtractorSyncEnv,
+} from '@/types'
+import { getContractInfo } from '@/utils'
 
-export type DaoRbamExtractorData = {
-  addresses: string[]
-}
+import {
+  WasmEventData,
+  WasmEventDataSource,
+  WasmInstantiateOrMigrateData,
+  WasmInstantiateOrMigrateDataSource,
+} from '../sources'
+import { Extractor } from './base'
 
-export const daoRbam: ExtractorMaker<DaoRbamExtractorData> = async ({
-  autoCosmWasmClient,
-}) => {
-  const match: Extractor<DaoRbamExtractorData>['match'] = ({ events }) => {
-    const daoRbamCodeIds =
-      WasmCodeService.getInstance().findWasmCodeIdsByKeys('dao-rbam')
+export class DaoRbamExtractor extends Extractor {
+  static type = 'dao-rbam'
 
-    const instantiated = events
-      .filter(
-        (e) =>
-          e.type === 'instantiate' &&
-          e.attributes.some(
-            (a) =>
-              a.key === 'code_id' &&
-              !isNaN(Number(a.value)) &&
-              daoRbamCodeIds.includes(Number(a.value))
-          )
+  // Data sources this extractor listens to.
+  static sources: ExtractorDataSource[] = [
+    // Any dao-rbam instantiation or migration.
+    WasmInstantiateOrMigrateDataSource.source('instantiate', {
+      codeIdsKeys: ['dao-rbam'],
+    }),
+    // Wasm executions with specific actions.
+    WasmEventDataSource.source('execute', {
+      key: 'action',
+      value: ['create_role', 'update_role', 'assign', 'revoke'],
+    }),
+  ]
+
+  // Handlers wire up to the sources above (by name).
+  protected instantiate: ExtractorHandler<WasmInstantiateOrMigrateData> = ({
+    address,
+  }) => this.save(address)
+
+  protected execute: ExtractorHandler<WasmEventData> = ({ address }) =>
+    this.save(address)
+
+  private async save(address: string): Promise<ExtractorHandlerOutput[]> {
+    const client = this.env.autoCosmWasmClient.client
+    if (!client) {
+      throw new Error('CosmWasm client not connected')
+    }
+
+    const contract = await getContractInfo({ client, address })
+
+    // Only process dao-rbam contracts.
+    if (
+      !WasmCodeService.instance.matchesWasmCodeKeys(contract.codeId, 'dao-rbam')
+    ) {
+      return []
+    }
+
+    // Fetch info needed for extractions.
+    const [info, dao] = await Promise.all([
+      client.queryContractSmart(address, { info: {} }),
+      client.queryContractSmart(address, { dao: {} }),
+    ])
+
+    // Paginate list_assignments
+    const limit = 20
+    let assignments: any[] = []
+    let startAfterAssignment: number | undefined
+    while (true) {
+      const { assignments: assignmentsPage } = await client.queryContractSmart(
+        address,
+        {
+          list_assignments: {
+            start_after: startAfterAssignment,
+            limit,
+          },
+        }
       )
-      .flatMap((e) =>
-        e.attributes
-          .filter((a) => a.key === '_contract_address')
-          .map((a) => a.value)
-      )
+      assignments.push(...assignmentsPage)
+      if (assignmentsPage.length < limit) {
+        break
+      }
+      startAfterAssignment =
+        assignmentsPage.length > 0
+          ? assignmentsPage[assignmentsPage.length - 1].id
+          : undefined
+    }
 
-    const executeActions: (string | [string, string[]])[] = [
-      'create_role',
-      'update_role',
-      'assign',
-      'revoke',
+    // Paginate list_roles
+    let roles: any[] = []
+    let startAfterRole: number | undefined
+    while (true) {
+      const { roles: rolesPage } = await client.queryContractSmart(address, {
+        list_roles: {
+          start_after: startAfterRole,
+          limit,
+        },
+      })
+      roles.push(...rolesPage)
+      if (rolesPage.length < limit) {
+        break
+      }
+      startAfterRole =
+        rolesPage.length > 0 ? rolesPage[rolesPage.length - 1].id : undefined
+    }
+
+    // Ensure the contract exists/updated in DB (matches new style).
+    await Contract.upsert(
+      {
+        address: contract.address,
+        codeId: contract.codeId,
+        admin: contract.admin,
+        creator: contract.creator,
+        label: contract.label,
+        txHash: this.env.txHash,
+      },
+      {
+        fields: ['codeId', 'admin', 'creator', 'label'],
+        returning: false,
+      }
+    )
+
+    // Emit extractions (framework will handle block/time metadata).
+    return [
+      {
+        address: contract.address,
+        name: 'dao-rbam/info',
+        data: info,
+      },
+      {
+        address: contract.address,
+        name: 'dao-rbam/dao',
+        data: dao,
+      },
+      {
+        address: contract.address,
+        name: 'dao-rbam/list_assignments',
+        data: assignments,
+      },
+      {
+        address: contract.address,
+        name: 'dao-rbam/list_roles',
+        data: roles,
+      },
     ]
-
-    const executions = events
-      .filter(
-        (e) =>
-          e.type === 'wasm' &&
-          e.attributes.some(
-            (a) =>
-              a.key === 'action' &&
-              executeActions.some((action) =>
-                typeof action === 'string'
-                  ? action === a.value
-                  : action[0] === a.value &&
-                    action[1].every((key) =>
-                      e.attributes.some((a) => a.key === key)
-                    )
-              )
-          )
-      )
-      .flatMap((e) =>
-        e.attributes
-          .filter((a) => a.key === '_contract_address')
-          .map((a) => a.value)
-      )
-
-    // Combine addresses from instantiations and executions.
-    const addresses = [...instantiated, ...executions]
-
-    if (addresses.length === 0) {
-      return
-    }
-
-    return {
-      addresses,
-    }
   }
 
-  const extract: Extractor<DaoRbamExtractorData>['extract'] = async ({
-    txHash,
-    height,
-    data: { addresses },
-  }) => {
-    await autoCosmWasmClient.update()
+  static async *sync({
+    autoCosmWasmClient,
+  }: ExtractorSyncEnv): AsyncGenerator<DataSourceData, void, undefined> {
     const client = autoCosmWasmClient.client
     if (!client) {
       throw new Error('CosmWasm client not connected')
     }
 
-    // Get block time from the DB or RPC.
-    const blockTimeUnixMs = await retry(
-      3,
-      () =>
-        Block.findByPk(height).then((block) =>
-          block
-            ? Number(block.timeUnixMs)
-            : client
-                .getBlock(Number(height))
-                .then((b) => Date.parse(b.header.time))
-        ),
-      1_000
-    ).catch((err) => {
-      console.error(`Error getting block time for height ${height}:`, err)
-      return 0
-    })
+    const daoRbamCodeIds =
+      WasmCodeService.instance.findWasmCodeIdsByKeys('dao-rbam')
 
-    // Get contract data, info, dao, assignments, and roles.
-    const extractions = (
-      await Promise.allSettled(
-        addresses.map((address) =>
-          retry(
-            3,
-            async () =>
-              Promise.all([
-                client.getContract(address),
-                client.queryContractSmart(address, {
-                  info: {},
-                }),
-                client.queryContractSmart(address, {
-                  dao: {},
-                }),
-                client.queryContractSmart(address, {
-                  list_assignments: {},
-                }),
-                client.queryContractSmart(address, {
-                  list_roles: {},
-                }),
-              ]).then(
-                ([contract, info, dao, assignments, roles]) =>
-                  [
-                    contract,
-                    {
-                      address: contract.address,
-                      name: 'dao-rbam/info',
-                      blockHeight: height,
-                      blockTimeUnixMs,
-                      txHash,
-                      data: info,
-                    },
-                    {
-                      address: contract.address,
-                      name: 'dao-rbam/dao',
-                      blockHeight: height,
-                      blockTimeUnixMs,
-                      txHash,
-                      data: dao,
-                    },
-                    {
-                      address: contract.address,
-                      name: 'dao-rbam/list_assignments',
-                      blockHeight: height,
-                      blockTimeUnixMs,
-                      txHash,
-                      data: assignments,
-                    },
-                    {
-                      address: contract.address,
-                      name: 'dao-rbam/list_roles',
-                      blockHeight: height,
-                      blockTimeUnixMs,
-                      txHash,
-                      data: roles,
-                    },
-                  ] as const
-              ),
-            1_000
-          )
-        )
+    for (const codeId of daoRbamCodeIds) {
+      const contracts = await client.getContracts(codeId)
+
+      yield* contracts.map((address) =>
+        WasmInstantiateOrMigrateDataSource.data({
+          type: 'instantiate',
+          address,
+          codeId,
+          codeIdsKeys: ['dao-rbam'],
+        })
       )
-    ).flatMap((s) => (s.status === 'fulfilled' ? [s.value] : []))
-
-    // Ensure contracts exist in the DB.
-    const [, createdExtractions] = await Promise.all([
-      Contract.bulkCreate(
-        extractions.map(([contract]) => ({
-          address: contract.address,
-          codeId: contract.codeId,
-          admin: contract.admin,
-          creator: contract.creator,
-          label: contract.label,
-          instantiatedAtBlockHeight: height,
-          instantiatedAtBlockTimeUnixMs: blockTimeUnixMs,
-          instantiatedAtBlockTimestamp: new Date(Number(blockTimeUnixMs)),
-          txHash,
-        })),
-        {
-          updateOnDuplicate: ['codeId', 'admin', 'creator', 'label', 'txHash'],
-          conflictAttributes: ['address'],
-        }
-      ),
-      Extraction.bulkCreate(
-        extractions.flatMap(([, ...extractions]) => extractions),
-        {
-          updateOnDuplicate: ['blockTimeUnixMs', 'txHash', 'data'],
-          conflictAttributes: ['address', 'name', 'blockHeight'],
-          returning: true,
-        }
-      ),
-    ])
-
-    return createdExtractions
-  }
-
-  return {
-    match,
-    extract,
+    }
   }
 }

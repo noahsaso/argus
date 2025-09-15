@@ -43,7 +43,7 @@ export const assignments: ContractFormula<Assignment[]> = {
         'dao-rbam/list_assignments'
       )
       if (extraction) {
-        return (extraction.data as { assignments: Assignment[] }).assignments
+        return extraction.data as Assignment[]
       }
 
       throw new Error(`no assignments found for ${contractAddress}`)
@@ -71,7 +71,7 @@ export const roles: ContractFormula<Role[]> = {
         'dao-rbam/list_roles'
       )
       if (extraction) {
-        return (extraction.data as { roles: Role[] }).roles
+        return extraction.data as Role[]
       }
 
       throw new Error(`no roles found for ${contractAddress}`)

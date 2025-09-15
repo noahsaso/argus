@@ -1,262 +1,115 @@
-import { Event } from '@cosmjs/stargate'
-import { DecodedStargateMsg } from '@dao-dao/types'
-import { Tx } from '@dao-dao/types/protobuf/codegen/cosmos/tx/v1beta1/tx'
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  MockInstance,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
 
 import { ConfigManager } from '@/config'
-import { Block, Contract, Extraction } from '@/db'
-import { WasmCodeService } from '@/services'
-import { AutoCosmWasmClient } from '@/utils'
+import { Contract, Extraction } from '@/db'
+import { WasmCode, WasmCodeService } from '@/services'
+import { ExtractorEnv, ExtractorHandleableData } from '@/types'
+import * as utils from '@/utils'
 
-import { DaoRbamExtractorData, daoRbam } from './daoRbam'
+import {
+  WasmEventDataSource,
+  WasmInstantiateOrMigrateDataSource,
+} from '../sources'
+import { DaoRbamExtractor } from './daoRbam'
 
 describe('DAO RBAM Extractor', () => {
-  let mockAutoCosmWasmClient: AutoCosmWasmClient
-  let extractor: Awaited<ReturnType<typeof daoRbam>>
+  let mockAutoCosmWasmClient: utils.AutoCosmWasmClient
+  let extractor: DaoRbamExtractor
+  let getContractMock: MockInstance
+
+  const mockInfo = {
+    info: { contract: 'crates.io:dao-rbam', version: '1.0.0' },
+  }
+  const mockDao = { dao: 'juno1daoaddress' }
+  const mockAssignments = { assignments: [{ addr: 'juno1user', role_id: 1 }] }
+  const mockRoles = { roles: [{ id: 1, name: 'Administrator' }] }
 
   beforeAll(async () => {
     const instance = await WasmCodeService.setUpInstance()
-    vi.spyOn(instance, 'findWasmCodeIdsByKeys').mockImplementation(
-      (key: string) => {
-        if (key === 'dao-rbam') {
-          return [9999, 2001] // Mock code IDs for dao-rbam
-        }
-        return []
-      }
-    )
+    instance.addDefaultWasmCodes(new WasmCode('dao-rbam', [9999, 2001]))
   })
 
   beforeEach(async () => {
+    vi.clearAllMocks()
+
+    getContractMock = vi.spyOn(utils, 'getContractInfo')
+
+    const mockClient: any = {
+      getContracts: vi.fn(),
+      queryContractSmart: vi.fn(),
+      getBlock: vi.fn(),
+      getHeight: vi.fn(),
+    }
     mockAutoCosmWasmClient = {
       update: vi.fn(),
-      client: {
-        getContract: vi.fn(),
-        queryContractSmart: vi.fn(),
-        getBlock: vi.fn(),
-        getHeight: vi.fn(),
-      },
+      client: mockClient,
+      getValidClient: vi.fn().mockResolvedValue(mockClient),
     } as any
 
-    extractor = await daoRbam({
+    const env: ExtractorEnv = {
       config: ConfigManager.load(),
       sendWebhooks: false,
       autoCosmWasmClient: mockAutoCosmWasmClient,
-    })
+      txHash: 'test-hash',
+      block: {
+        height: '1000',
+        timeUnixMs: '1640995200000',
+        timestamp: '2022-01-01T01:00:00Z',
+      },
+    }
+
+    extractor = new DaoRbamExtractor(env)
   })
 
-  describe('match function', () => {
-    const createMockTx = (): Tx => ({
-      body: {
-        messages: [],
-        memo: '',
-        timeoutHeight: 0n,
-        extensionOptions: [],
-        nonCriticalExtensionOptions: [],
-      },
-      authInfo: {
-        signerInfos: [],
-        fee: {
-          amount: [],
-          gasLimit: 0n,
-          payer: '',
-          granter: '',
-        },
-      },
-      signatures: [],
-    })
+  describe('data sources configuration', () => {
+    it('should have correct data sources configured', () => {
+      expect(extractor.sources).toHaveLength(2)
 
-    const createMockMessages = (): DecodedStargateMsg['stargate'][] => []
-
-    it('matches RBAM instantiation events', () => {
-      const events: Event[] = [
-        {
-          type: 'instantiate',
-          attributes: [
-            { key: 'code_id', value: '9999' },
-            { key: '_contract_address', value: 'juno1rbamcontract1' },
-          ],
-        },
-      ]
-
-      const result = extractor.match({
-        hash: 'hash-1',
-        tx: createMockTx(),
-        messages: createMockMessages(),
-        events,
+      const instantiateSource = extractor.sources.find(
+        (s) => s.type === WasmInstantiateOrMigrateDataSource.type
+      )
+      expect(instantiateSource).toBeDefined()
+      expect(instantiateSource!.handler).toBe('instantiate')
+      expect(instantiateSource!.config).toEqual({
+        codeIdsKeys: ['dao-rbam'],
       })
 
-      expect(result).toEqual({ addresses: ['juno1rbamcontract1'] })
-    })
-
-    it('matches multiple RBAM instantiations', () => {
-      const events: Event[] = [
-        {
-          type: 'instantiate',
-          attributes: [
-            { key: 'code_id', value: '9999' },
-            { key: '_contract_address', value: 'juno1rbamcontract1' },
-          ],
-        },
-        {
-          type: 'instantiate',
-          attributes: [
-            { key: 'code_id', value: '2001' },
-            { key: '_contract_address', value: 'juno1rbamcontract2' },
-          ],
-        },
-      ]
-
-      const result = extractor.match({
-        hash: 'hash-2',
-        tx: createMockTx(),
-        messages: createMockMessages(),
-        events,
-      })
-
-      expect(result).toEqual({
-        addresses: ['juno1rbamcontract1', 'juno1rbamcontract2'],
+      const executeSource = extractor.sources.find(
+        (s) => s.type === WasmEventDataSource.type
+      )
+      expect(executeSource).toBeDefined()
+      expect(executeSource!.handler).toBe('execute')
+      expect(executeSource!.config).toEqual({
+        key: 'action',
+        value: ['create_role', 'update_role', 'assign', 'revoke'],
       })
     })
 
-    it('does not match non-RBAM code IDs', () => {
-      const events: Event[] = [
-        {
-          type: 'instantiate',
-          attributes: [
-            { key: 'code_id', value: '4862' },
-            { key: '_contract_address', value: 'juno1other' },
-          ],
-        },
-      ]
-
-      const result = extractor.match({
-        hash: 'hash-3',
-        tx: createMockTx(),
-        messages: createMockMessages(),
-        events,
-      })
-
-      expect(result).toBeUndefined()
-    })
-
-    it('matches RBAM executions: create_role, update_role, assign, revoke', () => {
-      const events: Event[] = [
-        {
-          type: 'wasm',
-          attributes: [
-            { key: 'action', value: 'create_role' },
-            { key: '_contract_address', value: 'juno1rbamcontract1' },
-          ],
-        },
-        {
-          type: 'wasm',
-          attributes: [
-            { key: 'action', value: 'update_role' },
-            { key: '_contract_address', value: 'juno1rbamcontract2' },
-          ],
-        },
-        {
-          type: 'wasm',
-          attributes: [
-            { key: 'action', value: 'assign' },
-            { key: '_contract_address', value: 'juno1rbamcontract3' },
-          ],
-        },
-        {
-          type: 'wasm',
-          attributes: [
-            { key: 'action', value: 'revoke' },
-            { key: '_contract_address', value: 'juno1rbamcontract4' },
-          ],
-        },
-      ]
-
-      const result = extractor.match({
-        hash: 'hash-4',
-        tx: createMockTx(),
-        messages: createMockMessages(),
-        events,
-      })
-
-      expect(result).toEqual({
-        addresses: [
-          'juno1rbamcontract1',
-          'juno1rbamcontract2',
-          'juno1rbamcontract3',
-          'juno1rbamcontract4',
-        ],
-      })
-    })
-
-    it('combines instantiation and execution addresses', () => {
-      const events: Event[] = [
-        {
-          type: 'instantiate',
-          attributes: [
-            { key: 'code_id', value: '9999' },
-            { key: '_contract_address', value: 'juno1rbamcontract1' },
-          ],
-        },
-        {
-          type: 'wasm',
-          attributes: [
-            { key: 'action', value: 'assign' },
-            { key: '_contract_address', value: 'juno1rbamcontract2' },
-          ],
-        },
-      ]
-
-      const result = extractor.match({
-        hash: 'hash-5',
-        tx: createMockTx(),
-        messages: createMockMessages(),
-        events,
-      })
-
-      expect(result).toEqual({
-        addresses: ['juno1rbamcontract1', 'juno1rbamcontract2'],
-      })
-    })
-
-    it('returns undefined when no matching events', () => {
-      const events: Event[] = [
-        {
-          type: 'wasm',
-          attributes: [
-            { key: 'action', value: 'something_else' },
-            { key: '_contract_address', value: 'juno1x' },
-          ],
-        },
-      ]
-
-      const result = extractor.match({
-        hash: 'hash-6',
-        tx: createMockTx(),
-        messages: createMockMessages(),
-        events,
-      })
-
-      expect(result).toBeUndefined()
+    it('should have correct static type', () => {
+      expect(DaoRbamExtractor.type).toBe('dao-rbam')
     })
   })
 
   describe('extract function', () => {
-    const mockContractInfo = {
-      info: { contract: 'crates.io:dao-rbam', version: '1.0.0' },
-    }
-    const mockDao = { dao: 'juno1daoaddress' }
-    const mockAssignments = {
-      assignments: [{ addr: 'juno1user', role_id: 1 }],
-    }
-    const mockRoles = { roles: [{ id: 1, name: 'Administrator' }] }
+    it('should extract RBAM info from instantiate data', async () => {
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
+          type: 'instantiate',
+          address: 'juno1rbamcontract1',
+          codeId: 9999,
+          codeIdsKeys: ['dao-rbam'],
+        }),
+      ]
 
-    beforeEach(async () => {
-      await Block.createOne({
-        height: 1000,
-        timeUnixMs: 1640995200000, // 2022-01-01T00:00:00Z
-      })
-
-      vi.mocked(mockAutoCosmWasmClient.client!.getContract).mockResolvedValue({
+      getContractMock.mockResolvedValue({
         address: 'juno1rbamcontract1',
         codeId: 9999,
         admin: 'juno1admin',
@@ -266,52 +119,25 @@ describe('DAO RBAM Extractor', () => {
       })
 
       vi.mocked(mockAutoCosmWasmClient.client!.queryContractSmart)
-        .mockResolvedValueOnce(mockContractInfo) // info
+        .mockResolvedValueOnce(mockInfo) // info
         .mockResolvedValueOnce(mockDao) // dao
         .mockResolvedValueOnce(mockAssignments) // list_assignments
         .mockResolvedValueOnce(mockRoles) // list_roles
-    })
 
-    it('extracts RBAM contract data successfully', async () => {
-      const data: DaoRbamExtractorData = {
-        addresses: ['juno1rbamcontract1'],
-      }
+      const result = (await extractor.extract(data)) as Extraction[]
 
-      const result = (await extractor.extract({
-        txHash: 'hash-extract-1',
-        height: '1000',
-        data,
-      })) as Extraction[]
-
-      expect(mockAutoCosmWasmClient.update).toHaveBeenCalled()
-      expect(mockAutoCosmWasmClient.client!.getContract).toHaveBeenCalledWith(
-        'juno1rbamcontract1'
+      expect(getContractMock).toHaveBeenCalledWith(
+        expect.objectContaining({ address: 'juno1rbamcontract1' })
       )
       expect(
         mockAutoCosmWasmClient.client!.queryContractSmart
       ).toHaveBeenCalledTimes(4)
-      expect(
-        mockAutoCosmWasmClient.client!.queryContractSmart
-      ).toHaveBeenNthCalledWith(1, 'juno1rbamcontract1', { info: {} })
-      expect(
-        mockAutoCosmWasmClient.client!.queryContractSmart
-      ).toHaveBeenNthCalledWith(2, 'juno1rbamcontract1', { dao: {} })
-      expect(
-        mockAutoCosmWasmClient.client!.queryContractSmart
-      ).toHaveBeenNthCalledWith(3, 'juno1rbamcontract1', {
-        list_assignments: {},
-      })
-      expect(
-        mockAutoCosmWasmClient.client!.queryContractSmart
-      ).toHaveBeenNthCalledWith(4, 'juno1rbamcontract1', { list_roles: {} })
 
-      expect(result).toHaveLength(4)
-
-      const names = result.map((r) => r.name).sort()
+      const names = result.map((e) => e.name).sort()
       expect(names).toEqual(
         [
-          'dao-rbam/dao',
           'dao-rbam/info',
+          'dao-rbam/dao',
           'dao-rbam/list_assignments',
           'dao-rbam/list_roles',
         ].sort()
@@ -320,16 +146,73 @@ describe('DAO RBAM Extractor', () => {
       for (const r of result) {
         expect(r.address).toBe('juno1rbamcontract1')
         expect(r.blockHeight).toBe('1000')
-        expect(r.txHash).toBe('hash-extract-1')
+        expect(r.txHash).toBe('test-hash')
       }
     })
 
-    it('handles multiple RBAM addresses', async () => {
-      const data: DaoRbamExtractorData = {
-        addresses: ['juno1rbamcontract1', 'juno1rbamcontract2'],
-      }
+    it('should extract RBAM info from execute data', async () => {
+      const data: ExtractorHandleableData[] = [
+        WasmEventDataSource.handleable('execute', {
+          address: 'juno1rbamcontract2',
+          key: 'action',
+          value: 'assign',
+          attributes: {
+            _contract_address: ['juno1rbamcontract2'],
+            action: ['assign'],
+          },
+          _attributes: [
+            { key: '_contract_address', value: 'juno1rbamcontract2' },
+            { key: 'action', value: 'assign' },
+          ],
+        }),
+      ]
 
-      vi.mocked(mockAutoCosmWasmClient.client!.getContract)
+      getContractMock.mockResolvedValue({
+        address: 'juno1rbamcontract2',
+        codeId: 9999,
+        admin: 'juno1admin2',
+        creator: 'juno1creator2',
+        label: 'RBAM Contract 2',
+        ibcPortId: undefined,
+      })
+
+      vi.mocked(mockAutoCosmWasmClient.client!.queryContractSmart)
+        .mockResolvedValueOnce(mockInfo)
+        .mockResolvedValueOnce(mockDao)
+        .mockResolvedValueOnce(mockAssignments)
+        .mockResolvedValueOnce(mockRoles)
+
+      const result = (await extractor.extract(data)) as Extraction[]
+
+      expect(result).toHaveLength(4)
+      const names = result.map((e) => e.name).sort()
+      expect(names).toEqual(
+        [
+          'dao-rbam/info',
+          'dao-rbam/dao',
+          'dao-rbam/list_assignments',
+          'dao-rbam/list_roles',
+        ].sort()
+      )
+    })
+
+    it('should handle multiple RBAM addresses', async () => {
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
+          type: 'instantiate',
+          address: 'juno1rbamcontract1',
+          codeId: 9999,
+          codeIdsKeys: ['dao-rbam'],
+        }),
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
+          type: 'instantiate',
+          address: 'juno1rbamcontract2',
+          codeId: 2001,
+          codeIdsKeys: ['dao-rbam'],
+        }),
+      ]
+
+      getContractMock
         .mockResolvedValueOnce({
           address: 'juno1rbamcontract1',
           codeId: 9999,
@@ -340,7 +223,7 @@ describe('DAO RBAM Extractor', () => {
         })
         .mockResolvedValueOnce({
           address: 'juno1rbamcontract2',
-          codeId: 9999,
+          codeId: 2001,
           admin: 'juno1admin2',
           creator: 'juno1creator2',
           label: 'RBAM Contract 2',
@@ -349,72 +232,80 @@ describe('DAO RBAM Extractor', () => {
 
       vi.mocked(mockAutoCosmWasmClient.client!.queryContractSmart)
         // contract 1
-        .mockResolvedValueOnce(mockContractInfo)
+        .mockResolvedValueOnce(mockInfo)
         .mockResolvedValueOnce(mockDao)
+        // contract 2
+        .mockResolvedValueOnce(mockInfo)
+        .mockResolvedValueOnce(mockDao)
+
+        // contract 1
         .mockResolvedValueOnce(mockAssignments)
+        // contract 2
+        .mockResolvedValueOnce(mockAssignments)
+
+        // contract 1
         .mockResolvedValueOnce(mockRoles)
         // contract 2
-        .mockResolvedValueOnce(mockContractInfo)
-        .mockResolvedValueOnce(mockDao)
-        .mockResolvedValueOnce(mockAssignments)
         .mockResolvedValueOnce(mockRoles)
 
-      const result = (await extractor.extract({
-        txHash: 'hash-extract-2',
-        height: '1000',
-        data,
-      })) as Extraction[]
-
+      const result = (await extractor.extract(data)) as Extraction[]
       expect(result).toHaveLength(8) // 4 per contract
       const addresses = result.map((r) => r.address)
       expect(addresses).toContain('juno1rbamcontract1')
       expect(addresses).toContain('juno1rbamcontract2')
     })
 
-    it('handles query failures gracefully (partial success)', async () => {
-      const data: DaoRbamExtractorData = {
-        addresses: ['juno1rbamcontract1', 'juno1rbamcontract2'],
-      }
-
-      vi.mocked(mockAutoCosmWasmClient.client!.getContract)
-        .mockResolvedValueOnce({
+    it('should not extract if contract is not a dao-rbam contract', async () => {
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
+          type: 'instantiate',
           address: 'juno1rbamcontract1',
           codeId: 9999,
-          admin: 'juno1admin',
-          creator: 'juno1creator',
-          label: 'RBAM Contract 1',
-          ibcPortId: undefined,
-        })
-        .mockResolvedValueOnce({
-          address: 'juno1rbamcontract2',
-          codeId: 9999,
-          admin: 'juno1admin2',
-          creator: 'juno1creator2',
-          label: 'RBAM Contract 2',
-          ibcPortId: undefined,
-        })
+          codeIdsKeys: ['dao-rbam'],
+        }),
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
+          type: 'instantiate',
+          address: 'juno1notrbam',
+          codeId: 1234,
+          codeIdsKeys: [], // not dao-rbam
+        }),
+      ]
+
+      getContractMock.mockImplementation(
+        async ({ address }: { address: string }) => {
+          if (address === 'juno1rbamcontract1') {
+            return {
+              address,
+              codeId: 9999,
+              admin: 'juno1admin',
+              creator: 'juno1creator',
+              label: 'RBAM Contract 1',
+              ibcPortId: undefined,
+            }
+          }
+          return {
+            address,
+            codeId: 1234,
+            admin: 'juno1otheradmin',
+            creator: 'juno1othercreator',
+            label: 'Other',
+            ibcPortId: undefined,
+          }
+        }
+      )
 
       vi.mocked(
         mockAutoCosmWasmClient.client!.queryContractSmart
-      ).mockImplementation(async (address: string, queryMsg: any) => {
-        if (address === 'juno1rbamcontract1') {
-          if (queryMsg.info) return mockContractInfo
-          if (queryMsg.dao) return mockDao
-          if (queryMsg.list_assignments) return mockAssignments
-          if (queryMsg.list_roles) return mockRoles
-          throw new Error('Unknown query')
-        }
-        // Fail all queries for contract 2
-        throw new Error('Query failed')
+      ).mockImplementation(async (_, queryMsg: any) => {
+        if (queryMsg.info) return mockInfo
+        if (queryMsg.dao) return mockDao
+        if (queryMsg.list_assignments) return mockAssignments
+        if (queryMsg.list_roles) return mockRoles
+        throw new Error('Unknown query')
       })
 
-      const result = (await extractor.extract({
-        txHash: 'hash-extract-3',
-        height: '1000',
-        data,
-      })) as Extraction[]
+      const result = (await extractor.extract(data)) as Extraction[]
 
-      // Only the first contract should produce 4 extractions
       expect(result.map((r) => r.toJSON())).toEqual([
         {
           id: '1',
@@ -422,8 +313,8 @@ describe('DAO RBAM Extractor', () => {
           name: 'dao-rbam/info',
           blockHeight: '1000',
           blockTimeUnixMs: '1640995200000',
-          txHash: 'hash-extract-3',
-          data: mockContractInfo,
+          txHash: 'test-hash',
+          data: mockInfo,
           createdAt: expect.any(Date),
           updatedAt: expect.any(Date),
         },
@@ -433,7 +324,7 @@ describe('DAO RBAM Extractor', () => {
           name: 'dao-rbam/dao',
           blockHeight: '1000',
           blockTimeUnixMs: '1640995200000',
-          txHash: 'hash-extract-3',
+          txHash: 'test-hash',
           data: mockDao,
           createdAt: expect.any(Date),
           updatedAt: expect.any(Date),
@@ -444,8 +335,8 @@ describe('DAO RBAM Extractor', () => {
           name: 'dao-rbam/list_assignments',
           blockHeight: '1000',
           blockTimeUnixMs: '1640995200000',
-          txHash: 'hash-extract-3',
-          data: mockAssignments,
+          txHash: 'test-hash',
+          data: mockAssignments.assignments,
           createdAt: expect.any(Date),
           updatedAt: expect.any(Date),
         },
@@ -455,55 +346,40 @@ describe('DAO RBAM Extractor', () => {
           name: 'dao-rbam/list_roles',
           blockHeight: '1000',
           blockTimeUnixMs: '1640995200000',
-          txHash: 'hash-extract-3',
-          data: mockRoles,
+          txHash: 'test-hash',
+          data: mockRoles.roles,
           createdAt: expect.any(Date),
           updatedAt: expect.any(Date),
         },
       ])
     })
 
-    it('gets block time from RPC when not in DB', async () => {
-      const data: DaoRbamExtractorData = {
-        addresses: ['juno1rbamcontract1'],
-      }
+    it('should create/overwrite Contract row with correct info', async () => {
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
+          type: 'instantiate',
+          address: 'juno1rbamcontract1',
+          codeId: 9999,
+          codeIdsKeys: ['dao-rbam'],
+        }),
+      ]
 
-      vi.mocked(mockAutoCosmWasmClient.client!.getBlock).mockResolvedValue({
-        header: { time: '2022-01-01T01:23:45Z' },
-      } as any)
+      getContractMock.mockResolvedValue({
+        address: 'juno1rbamcontract1',
+        codeId: 9999,
+        admin: 'juno1admin',
+        creator: 'juno1creator',
+        label: 'RBAM Contract 1',
+        ibcPortId: undefined,
+      })
 
-      // set up queries again because beforeEach consumed them
       vi.mocked(mockAutoCosmWasmClient.client!.queryContractSmart)
-        .mockResolvedValueOnce(mockContractInfo)
+        .mockResolvedValueOnce(mockInfo)
         .mockResolvedValueOnce(mockDao)
         .mockResolvedValueOnce(mockAssignments)
         .mockResolvedValueOnce(mockRoles)
 
-      const result = (await extractor.extract({
-        txHash: 'hash-extract-rpc',
-        height: '2000',
-        data,
-      })) as Extraction[]
-
-      expect(mockAutoCosmWasmClient.client!.getBlock).toHaveBeenCalledWith(2000)
-      expect(result).toHaveLength(4)
-      for (const r of result) {
-        expect(r.blockTimeUnixMs).toBe(
-          Date.parse('2022-01-01T01:23:45Z').toString()
-        )
-      }
-    })
-
-    it('creates/updates Contract row with correct info', async () => {
-      const data: DaoRbamExtractorData = {
-        addresses: ['juno1rbamcontract1'],
-      }
-
-      await extractor.extract({
-        txHash: 'hash-extract-contract',
-        height: '1000',
-        data,
-      })
+      await extractor.extract(data)
 
       const contract = await Contract.findByPk('juno1rbamcontract1')
       expect(contract).toBeDefined()
@@ -511,33 +387,87 @@ describe('DAO RBAM Extractor', () => {
       expect(contract!.admin).toBe('juno1admin')
       expect(contract!.creator).toBe('juno1creator')
       expect(contract!.label).toBe('RBAM Contract 1')
-      expect(contract!.instantiatedAtBlockHeight).toBe('1000')
-      expect(contract!.instantiatedAtBlockTimeUnixMs).toBe('1640995200000')
     })
 
-    it('throws when client is not connected', async () => {
-      const brokenAutoClient = {
-        ...mockAutoCosmWasmClient,
-        client: undefined,
-      }
-
-      const brokenExtractor = await daoRbam({
+    it('should throw error when client is not connected', async () => {
+      const brokenEnv: ExtractorEnv = {
         config: ConfigManager.load(),
         sendWebhooks: false,
-        autoCosmWasmClient: brokenAutoClient as any,
-      })
-
-      const data: DaoRbamExtractorData = {
-        addresses: ['juno1rbamcontract1'],
+        autoCosmWasmClient: {
+          ...mockAutoCosmWasmClient,
+          client: undefined,
+        } as any,
+        txHash: 'test-hash-error',
+        block: {
+          height: '1000',
+          timeUnixMs: '1640995200000',
+          timestamp: '2022-01-01T01:00:00Z',
+        },
       }
 
-      await expect(
-        brokenExtractor.extract({
-          txHash: 'hash-fail',
-          height: '1000',
-          data,
+      const brokenExtractor = new DaoRbamExtractor(brokenEnv)
+
+      const data: ExtractorHandleableData[] = [
+        WasmInstantiateOrMigrateDataSource.handleable('instantiate', {
+          type: 'instantiate',
+          address: 'juno1rbamcontract1',
+          codeId: 9999,
+          codeIdsKeys: ['dao-rbam'],
+        }),
+      ]
+
+      await expect(brokenExtractor.extract(data)).rejects.toThrow(
+        'CosmWasm client not connected'
+      )
+    })
+  })
+
+  describe('sync function', () => {
+    it('should sync RBAM addresses (instantiate seeds)', async () => {
+      vi.mocked(mockAutoCosmWasmClient.client!.getContracts).mockImplementation(
+        async (codeId: number) => {
+          if (codeId === 9999) return ['juno1rbamA', 'juno1rbamB']
+          if (codeId === 2001) return ['juno1rbamC']
+          return []
+        }
+      )
+
+      const result = await Array.fromAsync(
+        DaoRbamExtractor.sync!({
+          config: extractor.env.config,
+          autoCosmWasmClient: extractor.env.autoCosmWasmClient,
         })
-      ).rejects.toThrow('CosmWasm client not connected')
+      )
+
+      expect(result).toEqual([
+        {
+          source: WasmInstantiateOrMigrateDataSource.type,
+          data: {
+            type: 'instantiate',
+            address: 'juno1rbamA',
+            codeId: 9999,
+            codeIdsKeys: ['dao-rbam'],
+          },
+        },
+        {
+          source: WasmInstantiateOrMigrateDataSource.type,
+          data: {
+            type: 'instantiate',
+            address: 'juno1rbamB',
+            codeId: 9999,
+            codeIdsKeys: ['dao-rbam'],
+          },
+        },
+        {
+          source: WasmInstantiateOrMigrateDataSource.type,
+          data: {
+            type: 'instantiate',
+            address: 'juno1rbamC',
+            codeId: 2001,
+            codeIdsKeys: ['dao-rbam'],
+          },
+        },
+      ])
     })
   })
 })
