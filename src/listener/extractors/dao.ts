@@ -29,6 +29,8 @@ export class DaoExtractor extends Extractor {
         'execute_proposal_hook',
         'execute_update_voting_module',
         'execute_update_proposal_modules',
+        'execute_set_item',
+        'execute_remove_item',
       ],
     }),
     WasmEventDataSource.source('execute', {
@@ -119,6 +121,11 @@ export class DaoExtractor extends Extractor {
         name: 'dao-dao-core/config',
         data: config,
       },
+      // {
+      //   address: contract.address,
+      //   name: 'dao-dao-core/list_items',
+      //   data: items,
+      // },
       ...(saveProposalModules
         ? dumpState.proposal_modules.map((proposalModule: any) => ({
             address: contract.address,
