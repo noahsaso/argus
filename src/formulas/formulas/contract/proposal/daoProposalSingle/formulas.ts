@@ -75,13 +75,15 @@ export const proposal: ContractFormula<
     const daoAddress = await dao.compute(env)
     const [hideFromSearch, daoProposalModules] = daoAddress
       ? await Promise.all([
-          item.compute({
-            ...env,
-            contractAddress: daoAddress,
-            args: {
-              key: 'hideFromSearch',
-            },
-          }),
+          item
+            .compute({
+              ...env,
+              contractAddress: daoAddress,
+              args: {
+                key: 'hideFromSearch',
+              },
+            })
+            .catch(() => false),
           proposalModules.compute({
             ...env,
             contractAddress: daoAddress,

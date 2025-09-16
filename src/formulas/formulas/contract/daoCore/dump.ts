@@ -1,13 +1,14 @@
 import { ContractFormula } from '@/types'
 
 import { ContractInfo } from '../../types'
-import { contractAdmin, info, instantiatedAt, item } from '../common'
+import { contractAdmin, info, instantiatedAt } from '../common'
 import {
   Config,
   ProposalModuleWithInfo,
   admin,
   config,
   initialActions,
+  item,
   listSubDaos,
   polytoneProxies,
   proposalModules,
@@ -129,12 +130,14 @@ export const dumpState: ContractFormula<DumpState> = {
       instantiatedAt.compute(env),
       proposalCount.compute(env),
       polytoneProxies.compute(env),
-      item.compute({
-        ...env,
-        args: {
-          key: 'hideFromSearch',
-        },
-      }),
+      item
+        .compute({
+          ...env,
+          args: {
+            key: 'hideFromSearch',
+          },
+        })
+        .catch(() => false),
     ])
 
     // Load admin info if admin is a DAO core contract.
