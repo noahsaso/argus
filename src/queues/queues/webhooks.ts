@@ -9,6 +9,7 @@ import { closeBullQueue, getBullQueue, getBullQueueEvents } from '../connection'
 
 export class WebhooksQueue extends BaseQueue<PendingWebhook> {
   static queueName = 'webhooks'
+  static concurrency = 5
 
   static getQueue = () => getBullQueue<PendingWebhook>(this.queueName)
   static getQueueEvents = () => getBullQueueEvents(this.queueName)
