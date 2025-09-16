@@ -12,7 +12,7 @@ export type SyncExtractorsQueuePayload = {
   /**
    * Extractor names to sync, or ALL to sync all extractors.
    */
-  extractors: string[] | 'ALL'
+  extractors: string[]
 }
 
 export class SyncExtractorsQueue extends BaseQueue<SyncExtractorsQueuePayload> {
@@ -40,12 +40,11 @@ export class SyncExtractorsQueue extends BaseQueue<SyncExtractorsQueuePayload> {
 
   async process(job: Job<SyncExtractorsQueuePayload>): Promise<void> {
     const extractors = getExtractors()
-    const toSync =
-      job.data.extractors === 'ALL'
-        ? extractors
-        : extractors.filter((extractor) =>
-            job.data.extractors.includes(extractor.type)
-          )
+    const toSync = job.data.extractors.includes('ALL')
+      ? extractors
+      : extractors.filter((extractor) =>
+          job.data.extractors.includes(extractor.type)
+        )
 
     if (toSync.length === 0) {
       job.log('no extractors to sync')
