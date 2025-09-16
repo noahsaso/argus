@@ -153,12 +153,9 @@ export class BlockIterator {
     }
 
     const client = await this.autoCosmWasmClient.getValidClient()
-    const { earliestBlockHeight } = (
+    const { earliestBlockHeight = 0 } = (
       await client['forceGetCometClient']().status()
     ).syncInfo
-    if (!earliestBlockHeight) {
-      throw new Error('Earliest block height is not available')
-    }
 
     // Start height cannot be before the earliest block height—use 10 blocks
     // after the earliest block height in case the earliest block gets pruned

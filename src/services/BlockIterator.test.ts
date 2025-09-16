@@ -186,22 +186,6 @@ describe('BlockIterator', () => {
       ).rejects.toThrow('End height 50 is less than start height 100')
     })
 
-    it('should handle missing earliest block height', async () => {
-      mockClient.forceGetCometClient.mockReturnValue({
-        status: vi.fn().mockResolvedValue({
-          syncInfo: {
-            earliestBlockHeight: undefined,
-          },
-        }),
-      })
-
-      await expect(
-        blockIterator.iterate({
-          onBlock: vi.fn(),
-        })
-      ).rejects.toThrow('Earliest block height is not available')
-    })
-
     it('should adjust start height when too low', async () => {
       const onError = vi.fn()
       const onBlock = vi.fn()
