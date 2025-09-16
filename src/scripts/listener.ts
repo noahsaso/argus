@@ -247,7 +247,15 @@ const main = async () => {
         }),
       ])
     },
-    onTx: async ({ hash, tx: rawTx, height, events }, { header: { time } }) => {
+    onTx: async (
+      { hash, code, tx: rawTx, height, events },
+      { header: { time } }
+    ) => {
+      // Ignore unsuccessful TXs.
+      if (code !== 0) {
+        return
+      }
+
       let tx
       try {
         tx = Tx.decode(rawTx)
