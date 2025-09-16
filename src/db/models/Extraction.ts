@@ -171,6 +171,13 @@ export class Extraction<T = any> extends DependableEventModel {
     return this.contract
   }
 
+  /**
+   * Optimistically treat the address as the contract address if requested.
+   */
+  get contractAddress(): string {
+    return this.address
+  }
+
   static dependentKeyNamespace = DependentKeyNamespace.Extraction
   static blockHeightKey: string = 'blockHeight'
   static blockTimeUnixMsKey: string = 'blockTimeUnixMs'

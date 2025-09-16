@@ -32,7 +32,7 @@ export type Webhook<
      * of the type of event to consider. This can be any class that extends
      * DependableEventModel, such as WasmStateEvent or GovProposal.
      */
-    EventType: new (...args: any) => Event
+    EventType: (new (...args: any) => Event) | (new (...args: any) => Event)[]
   } & Partial<{
     /**
      * If passed, contract must match one of these code IDs keys.

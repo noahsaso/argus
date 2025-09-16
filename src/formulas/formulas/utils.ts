@@ -1,13 +1,6 @@
 import { Op } from 'sequelize'
 
-import {
-  Block,
-  ContractEnv,
-  ContractFormula,
-  Env,
-  Formula,
-  KeyInput,
-} from '@/types'
+import { ContractEnv, ContractFormula, Env, Formula, KeyInput } from '@/types'
 
 import { Duration, Expiration } from './types'
 
@@ -50,32 +43,41 @@ export const expirationPlusDuration = (
   throw new Error('expiration duration units mismatch')
 }
 
-export type Source =
+export type Source<
+  Data = unknown,
+  SourceOutput = Data,
+  Args extends Record<string, string> = {}
+> = (
   | {
       type: 'event'
-      key: KeyInput
+      key: KeyInput | KeyInput[] | ((args: Args) => KeyInput | KeyInput[])
     }
   | {
       type: 'transformation'
-      name: string
+      name: string | ((args: Args) => string)
     }
   | {
       type: 'extraction'
-      name: string
+      name: string | ((args: Args) => string)
     }
+) & {
+  transform?: (data: Data) => SourceOutput
+}
 
 /**
  * Make a simple contract formula with some common error/fallback handling.
  */
 export const makeSimpleContractFormula = <
-  T = unknown,
-  R = T,
+  SourceOutput = unknown,
+  Result = SourceOutput,
   Args extends Record<string, string> = {}
 >({
   docs,
   filter,
+  dynamic,
   fallback,
-  transform = (data: T) => data as unknown as R,
+  transform = (data: SourceOutput) => data as unknown as Result,
+  validate,
   ...source
 }: (
   | {
@@ -99,7 +101,7 @@ export const makeSimpleContractFormula = <
       /**
        * Sources to load from, using the first source that exists.
        */
-      sources: Source[]
+      sources: Source<any, SourceOutput, Args>[]
     }
 ) & {
   /**
@@ -111,47 +113,53 @@ export const makeSimpleContractFormula = <
    */
   filter?: ContractFormula['filter']
   /**
+   * Optionally set dynamic.
+   */
+  dynamic?: boolean
+  /**
    * Optional fallback value if no data is found. If undefined, an error is
    * thrown.
    */
-  fallback?: R
+  fallback?: Result
+  /**
+   * Optional function to validate the arguments.
+   */
+  validate?: (args: Partial<Args>) => void
   /**
    * Optionally transform the data before returning it.
    */
-  transform?: (
-    data: T,
-    options: {
-      args: Partial<Args>
-      block: Block
-    }
-  ) => R
-}): ContractFormula<R, Args> => ({
+  transform?: (data: SourceOutput, env: ContractEnv<Args>) => Result
+}): ContractFormula<Result, Args> => ({
   docs,
   filter,
-  compute: async ({
-    contractAddress,
-    args,
-    block,
-    get,
-    getTransformationMatch,
-    getExtraction,
-  }) => {
-    const sources: Source[] =
+  dynamic,
+  compute: async (env) => {
+    const {
+      contractAddress,
+      args,
+      get,
+      getTransformationMatch,
+      getExtraction,
+    } = env
+
+    validate?.(args)
+
+    const sources: Source<any, SourceOutput, Args>[] =
       'key' in source
         ? [
             {
               type: 'event',
               key: source.key,
-            } satisfies Source,
+            } satisfies Source<any, SourceOutput, Args>,
           ]
         : 'transformation' in source
         ? [
             {
               type: 'transformation',
               name: source.transformation,
-            } satisfies Source,
+            } satisfies Source<any, SourceOutput, Args>,
             ...(source.fallbackKeys?.map(
-              (key): Source => ({
+              (key): Source<any, SourceOutput> => ({
                 type: 'event',
                 key,
               })
@@ -159,37 +167,52 @@ export const makeSimpleContractFormula = <
           ]
         : source.sources
 
-    let value: T | undefined
+    let value: SourceOutput | undefined
     for (const source of sources) {
       let found = false
       switch (source.type) {
         case 'event': {
-          const event = await get<T>(contractAddress, source.key)
+          const key = [
+            typeof source.key === 'function'
+              ? source.key(args as unknown as Args)
+              : source.key,
+          ].flat()
+          const event = await get<SourceOutput>(contractAddress, ...key)
           if (event) {
             found = true
-            value = event.valueJson as unknown as T
+            value = source.transform
+              ? source.transform(event.valueJson as unknown as SourceOutput)
+              : (event.valueJson as unknown as SourceOutput)
           }
           break
         }
         case 'transformation': {
-          const transformation = await getTransformationMatch<T>(
+          const transformation = await getTransformationMatch<SourceOutput>(
             contractAddress,
-            source.name
+            typeof source.name === 'function'
+              ? source.name(args as unknown as Args)
+              : source.name
           )
           if (transformation) {
             found = true
-            value = transformation.value
+            value = source.transform
+              ? source.transform(transformation.value)
+              : (transformation.value as unknown as SourceOutput)
           }
           break
         }
         case 'extraction': {
-          const extraction = await getExtraction<T>(
+          const extraction = await getExtraction<SourceOutput>(
             contractAddress,
-            source.name
+            typeof source.name === 'function'
+              ? source.name(args as unknown as Args)
+              : source.name
           )
           if (extraction) {
             found = true
-            value = extraction.data
+            value = source.transform
+              ? source.transform(extraction.data)
+              : (extraction.data as unknown as SourceOutput)
           }
           break
         }
@@ -208,10 +231,7 @@ export const makeSimpleContractFormula = <
       throw new Error('failed to load')
     }
 
-    return transform(value as T, {
-      args,
-      block,
-    })
+    return transform(value as SourceOutput, env)
   },
 })
 

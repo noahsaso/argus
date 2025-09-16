@@ -71,12 +71,15 @@ export class DaoExtractor extends Extractor {
       return []
     }
 
-    const [{ info }, dumpState] = await Promise.all([
+    const [{ info }, dumpState, config] = await Promise.all([
       client.queryContractSmart(address, {
         info: {},
       }),
       client.queryContractSmart(address, {
         dump_state: {},
+      }),
+      client.queryContractSmart(address, {
+        config: {},
       }),
     ])
 
@@ -110,6 +113,11 @@ export class DaoExtractor extends Extractor {
         address: contract.address,
         name: 'dao-dao-core/dump_state',
         data: dumpState,
+      },
+      {
+        address: contract.address,
+        name: 'dao-dao-core/config',
+        data: config,
       },
       ...(saveProposalModules
         ? dumpState.proposal_modules.map((proposalModule: any) => ({

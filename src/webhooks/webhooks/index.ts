@@ -37,62 +37,65 @@ export const getProcessedWebhooks = async (
         // config).
         .filter((webhook): webhook is Webhook => !!webhook)
 
-      processedWebhooks = _webhooks.map(({ filter, ...webhook }) => ({
-        ...webhook,
-        filter: (event, env) => {
-          // Filter for event type. This is necessary since the rest of the
-          // webhook's functions expect to receive the correct type.
-          if (!(event instanceof filter.EventType)) {
-            return false
-          }
-
-          // Filters specific to WasmStateEvent types.
-          if (event instanceof WasmStateEvent) {
-            const allCodeIds = WasmCodeService.instance.findWasmCodeIdsByKeys(
-              ...(filter.codeIdsKeys ?? [])
-            )
-
-            if (
-              allCodeIds?.length &&
-              !allCodeIds.includes(event.contract.codeId)
-            ) {
+      processedWebhooks = _webhooks.map(({ filter, ...webhook }) => {
+        const eventTypes = [filter.EventType].flat()
+        return {
+          ...webhook,
+          filter: (event, env) => {
+            // Filter for event type. This is necessary since the rest of the
+            // webhook's functions expect to receive the correct type.
+            if (!eventTypes.some((EventType) => event instanceof EventType)) {
               return false
             }
 
-            if (
-              filter.contractAddresses?.length &&
-              !filter.contractAddresses.includes(event.contractAddress)
-            ) {
-              return false
-            }
-          }
-
-          if (filter.matches) {
-            // Wrap in try/catch in case a webhook errors. Don't want to prevent
-            // other webhooks from sending.
-            try {
-              return filter.matches(event, env)
-            } catch (error) {
-              console.error(
-                `Error matching webhook for ${event.constructor.name} ID ${event.id} at height ${event.block.height}: ${error}`
+            // Filters specific to WasmStateEvent types.
+            if (event instanceof WasmStateEvent) {
+              const allCodeIds = WasmCodeService.instance.findWasmCodeIdsByKeys(
+                ...(filter.codeIdsKeys ?? [])
               )
-              Sentry.captureException(error, {
-                tags: {
-                  type: 'failed-webhook-match',
-                },
-                extra: {
-                  event,
-                },
-              })
 
-              // On error, do not match.
-              return false
+              if (
+                allCodeIds?.length &&
+                !allCodeIds.includes(event.contract.codeId)
+              ) {
+                return false
+              }
+
+              if (
+                filter.contractAddresses?.length &&
+                !filter.contractAddresses.includes(event.contractAddress)
+              ) {
+                return false
+              }
             }
-          }
 
-          return true
-        },
-      }))
+            if (filter.matches) {
+              // Wrap in try/catch in case a webhook errors. Don't want to
+              // prevent other webhooks from sending.
+              try {
+                return filter.matches(event, env)
+              } catch (error) {
+                console.error(
+                  `Error matching webhook for ${event.constructor.name} ID ${event.id} at height ${event.block.height}: ${error}`
+                )
+                Sentry.captureException(error, {
+                  tags: {
+                    type: 'failed-webhook-match',
+                  },
+                  extra: {
+                    event,
+                  },
+                })
+
+                // On error, do not match.
+                return false
+              }
+            }
+
+            return true
+          },
+        }
+      })
 
       return processedWebhooks
     }

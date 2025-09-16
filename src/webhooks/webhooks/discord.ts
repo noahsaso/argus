@@ -1,4 +1,4 @@
-import { WasmStateEvent } from '@/db'
+import { Extraction, WasmStateEvent } from '@/db'
 import {
   activeProposalModules,
   config as daoCoreConfig,
@@ -15,18 +15,22 @@ const KEY_PREFIX_PROPOSALS = dbKeyForKeys('proposals', '')
 const KEY_PREFIX_PROPOSALS_V2 = dbKeyForKeys('proposals_v2', '')
 
 // Fire webhook when a proposal is created.
-export const makeProposalCreated: WebhookMaker<WasmStateEvent> = (
+export const makeProposalCreated: WebhookMaker<WasmStateEvent | Extraction> = (
   config,
   state
 ) => ({
   filter: {
-    EventType: WasmStateEvent,
+    EventType: [WasmStateEvent, Extraction],
     codeIdsKeys: CODE_IDS_KEYS,
     matches: (event) =>
-      // Starts with proposals or proposals_v2.
-      (event.key.startsWith(KEY_PREFIX_PROPOSALS) ||
-        event.key.startsWith(KEY_PREFIX_PROPOSALS_V2)) &&
-      event.valueJson.status === StatusEnum.Open,
+      (event instanceof WasmStateEvent &&
+        // Starts with proposals or proposals_v2.
+        (event.key.startsWith(KEY_PREFIX_PROPOSALS) ||
+          event.key.startsWith(KEY_PREFIX_PROPOSALS_V2)) &&
+        event.valueJson.status === StatusEnum.Open) ||
+      (event instanceof Extraction &&
+        event.name.startsWith('proposal:') &&
+        event.data.status === StatusEnum.Open),
   },
   endpoint: async (event, env) => {
     const daoAddress = await getDaoAddressForProposalModule({
@@ -75,8 +79,11 @@ export const makeProposalCreated: WebhookMaker<WasmStateEvent> = (
       return
     }
 
-    // "proposals"|"proposals_v2", proposalNum
-    const [, proposalNum] = dbKeyToKeys(event.key, [false, true])
+    const proposalNum =
+      event instanceof WasmStateEvent
+        ? // "proposals"|"proposals_v2", proposalNum
+          dbKeyToKeys(event.key, [false, true])[1]
+        : Number(event.name.split(':')[1])
     const proposalId = `${proposalModule.prefix}${proposalNum}`
 
     return {

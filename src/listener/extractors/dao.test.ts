@@ -32,12 +32,14 @@ describe('DAO Extractor', () => {
     },
   }
 
+  const mockConfig = {
+    name: 'Test DAO',
+    description: 'A test DAO for testing',
+  }
+
   const mockDumpState = {
     admin: 'juno1admin123',
-    config: {
-      name: 'Test DAO',
-      description: 'A test DAO for testing',
-    },
+    config: mockConfig,
     version: { version: '2.4.0' },
     proposal_modules: [
       {
@@ -146,6 +148,7 @@ describe('DAO Extractor', () => {
       vi.mocked(mockAutoCosmWasmClient.client!.queryContractSmart)
         .mockResolvedValueOnce(mockContractInfo) // First call for info
         .mockResolvedValueOnce(mockDumpState) // Second call for dump_state
+        .mockResolvedValueOnce(mockConfig) // Third call for config
 
       const result = (await extractor.extract(data)) as Extraction[]
 
@@ -163,8 +166,11 @@ describe('DAO Extractor', () => {
       expect(
         mockAutoCosmWasmClient.client!.queryContractSmart
       ).toHaveBeenCalledWith('juno1dao123contract456', { dump_state: {} })
+      expect(
+        mockAutoCosmWasmClient.client!.queryContractSmart
+      ).toHaveBeenCalledWith('juno1dao123contract456', { config: {} })
 
-      expect(result).toHaveLength(4) // 1 info, 1 dump_state, 2 proposal modules
+      expect(result).toHaveLength(5) // 1 info, 1 dump_state, 1 config, 2 proposal modules
 
       // Check info extraction
       const infoExtraction = result.find((e) => e.name === 'info')
@@ -183,6 +189,16 @@ describe('DAO Extractor', () => {
       expect(dumpStateExtraction!.blockHeight).toBe('1000')
       expect(dumpStateExtraction!.txHash).toBe('test-hash')
       expect(dumpStateExtraction!.data).toEqual(mockDumpState)
+
+      // Check config extraction
+      const configExtraction = result.find(
+        (e) => e.name === 'dao-dao-core/config'
+      )
+      expect(configExtraction).toBeDefined()
+      expect(configExtraction!.address).toBe('juno1dao123contract456')
+      expect(configExtraction!.blockHeight).toBe('1000')
+      expect(configExtraction!.txHash).toBe('test-hash')
+      expect(configExtraction!.data).toEqual(mockConfig)
 
       // Check proposal modules extraction
       const proposalModulesExtraction = result.filter((e) =>
@@ -243,6 +259,7 @@ describe('DAO Extractor', () => {
       vi.mocked(mockAutoCosmWasmClient.client!.queryContractSmart)
         .mockResolvedValueOnce(mockContractInfo) // First call for info
         .mockResolvedValueOnce(mockDumpState) // Second call for dump_state
+        .mockResolvedValueOnce(mockConfig) // Third call for config
 
       const result = (await extractor.extract(data)) as Extraction[]
 
@@ -260,6 +277,9 @@ describe('DAO Extractor', () => {
       expect(
         mockAutoCosmWasmClient.client!.queryContractSmart
       ).toHaveBeenCalledWith('juno1dao123contract456', { dump_state: {} })
+      expect(
+        mockAutoCosmWasmClient.client!.queryContractSmart
+      ).toHaveBeenCalledWith('juno1dao123contract456', { config: {} })
 
       expect(result).toHaveLength(2)
 
@@ -280,6 +300,16 @@ describe('DAO Extractor', () => {
       expect(dumpStateExtraction!.blockHeight).toBe('1000')
       expect(dumpStateExtraction!.txHash).toBe('test-hash')
       expect(dumpStateExtraction!.data).toEqual(mockDumpState)
+
+      // Check config extraction
+      const configExtraction = result.find(
+        (e) => e.name === 'dao-dao-core/config'
+      )
+      expect(configExtraction).toBeDefined()
+      expect(configExtraction!.address).toBe('juno1dao123contract456')
+      expect(configExtraction!.blockHeight).toBe('1000')
+      expect(configExtraction!.txHash).toBe('test-hash')
+      expect(configExtraction!.data).toEqual(mockConfig)
     })
 
     it('should handle multiple DAO addresses', async () => {
@@ -321,12 +351,14 @@ describe('DAO Extractor', () => {
       vi.mocked(mockAutoCosmWasmClient.client!.queryContractSmart)
         .mockResolvedValueOnce(mockContractInfo) // info for first contract
         .mockResolvedValueOnce(mockDumpState) // dump_state for first contract
+        .mockResolvedValueOnce(mockConfig) // config for first contract
         .mockResolvedValueOnce(mockContractInfo) // info for second contract
         .mockResolvedValueOnce(mockDumpState) // dump_state for second contract
+        .mockResolvedValueOnce(mockConfig) // config for second contract
 
       const result = (await extractor.extract(data)) as Extraction[]
 
-      expect(result).toHaveLength(8) // 4 extractions per contract
+      expect(result).toHaveLength(10) // 5 extractions per contract
 
       const addresses = result.map((r) => r.address)
       expect(addresses).toContain('juno1dao123contract456')
@@ -382,6 +414,8 @@ describe('DAO Extractor', () => {
           return mockContractInfo
         } else if (queryMsg.dump_state) {
           return mockDumpState
+        } else if (queryMsg.config) {
+          return mockConfig
         } else {
           throw new Error('Unknown query')
         }
@@ -461,6 +495,7 @@ describe('DAO Extractor', () => {
       vi.mocked(mockAutoCosmWasmClient.client!.queryContractSmart)
         .mockResolvedValueOnce(mockContractInfo) // First call for info
         .mockResolvedValueOnce(mockDumpState) // Second call for dump_state
+        .mockResolvedValueOnce(mockConfig) // Third call for config
 
       await extractor.extract(data)
 

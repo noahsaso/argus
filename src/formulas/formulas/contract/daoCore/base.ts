@@ -39,6 +39,7 @@ import {
   totalPowerAtHeight as daoVotingTokenStakedTotalPowerAtHeight,
   votingPowerAtHeight as daoVotingTokenStakedVotingPowerAtHeight,
 } from '../voting/daoVotingTokenStaked'
+import { DumpState } from './dump'
 
 export type Config = {
   automatically_add_cw20s: boolean
@@ -77,8 +78,24 @@ export const config = makeSimpleContractFormula<Config>({
   docs: {
     description: 'retrieves the DAO configuration',
   },
-  transformation: 'config',
-  fallbackKeys: ['config_v2', 'config'],
+  sources: [
+    {
+      type: 'extraction',
+      name: 'dao-dao-core/config',
+    },
+    {
+      type: 'transformation',
+      name: 'config',
+    },
+    {
+      type: 'event',
+      key: 'config_v2',
+    },
+    {
+      type: 'event',
+      key: 'config',
+    },
+  ],
 })
 
 export const proposalModules: ContractFormula<ProposalModuleWithInfo[]> = {
@@ -173,80 +190,104 @@ export const activeProposalModules: ContractFormula<ProposalModuleWithInfo[]> =
     },
   }
 
-export const pauseInfo: ContractFormula<PauseInfoResponse> = {
+export const pauseInfo = makeSimpleContractFormula<
+  Expiration,
+  PauseInfoResponse
+>({
   docs: {
     description: 'retrieves the pause status of the DAO',
   },
   // This formula depends on the block height/time to check expiration.
   dynamic: true,
-  compute: async (env) => {
-    const { contractAddress, getTransformationMatch, get } = env
-
-    const expiration =
-      (await getTransformationMatch<Expiration>(contractAddress, 'paused'))
-        ?.value ??
-      // Fallback to events.
-      (await get<Expiration>(contractAddress, 'paused'))?.valueJson
-
-    return !expiration || isExpirationExpired(env, expiration)
+  sources: [
+    {
+      type: 'transformation',
+      name: 'paused',
+    },
+    {
+      type: 'event',
+      key: 'paused',
+    },
+  ],
+  transform: (expiration, env) =>
+    isExpirationExpired(env, expiration)
       ? { unpaused: {} }
-      : { paused: { expiration } }
-  },
-}
+      : { paused: { expiration } },
+})
 
 // Backwards compatibility.
 export const paused = pauseInfo
 
-export const admin: ContractFormula<string | null> = {
+export const admin = makeSimpleContractFormula<string | null>({
   docs: {
     description: 'retrieves the admin address of the DAO',
   },
-  compute: async ({ contractAddress, getTransformationMatch, get }) => {
-    return (
-      (await getTransformationMatch<string>(contractAddress, 'admin'))?.value ??
-      // Fallback to events.
-      (await get<string>(contractAddress, 'admin'))?.valueJson ??
-      // Fallback to Neutron SubDAO config main_dao field.
-      (await get(contractAddress, 'config_v2'))?.valueJson?.main_dao ??
-      // Null if nothing found because no admin set.
-      null
-    )
-  },
-}
+  sources: [
+    {
+      type: 'transformation',
+      name: 'admin',
+    },
+    {
+      type: 'event',
+      key: 'admin',
+    },
+    // Fallback to Neutron SubDAO config main_dao field.
+    {
+      type: 'event',
+      key: 'config_v2',
+      transform: (data?: { main_dao?: string }) => data?.main_dao ?? null,
+    },
+  ],
+})
 
-export const adminNomination: ContractFormula<string | null> = {
+export const adminNomination = makeSimpleContractFormula<string | null>({
   docs: {
     description: 'retrieves the nominated admin address of the DAO',
   },
-  compute: async ({ contractAddress, getTransformationMatch, get }) =>
-    (await getTransformationMatch<string>(contractAddress, 'nominatedAdmin'))
-      ?.value ??
-    // Fallback to events.
-    (await get<string>(contractAddress, 'nominated_admin'))?.valueJson ??
-    // Null if nothing found because no admin nominated.
-    null,
-}
+  sources: [
+    {
+      type: 'transformation',
+      name: 'nominatedAdmin',
+    },
+    {
+      type: 'event',
+      key: 'nominated_admin',
+    },
+  ],
+})
 
-export const votingModule: ContractFormula<string> = {
+export const votingModule = makeSimpleContractFormula<string>({
   docs: {
     description: 'retrieves the voting module address of the DAO',
   },
-  compute: async ({ contractAddress, getTransformationMatch, get }) => {
-    const votingModule =
-      (await getTransformationMatch<string>(contractAddress, 'votingModule'))
-        ?.value ??
-      // Fallback to events.
-      (await get<string>(contractAddress, 'voting_module'))?.valueJson
+  sources: [
+    {
+      type: 'extraction',
+      name: 'dao-dao-core/dump_state',
+      transform: (data: DumpState) => {
+        // Should never happen.
+        if (!data.voting_module) {
+          throw new Error('failed to load voting module')
+        }
+        return data.voting_module
+      },
+    },
+    {
+      type: 'transformation',
+      name: 'votingModule',
+    },
+    {
+      type: 'event',
+      key: 'voting_module',
+    },
+  ],
+})
 
-    if (!votingModule) {
-      throw new Error('failed to load voting module')
-    }
-
-    return votingModule
-  },
-}
-
-export const item: ContractFormula<string | null, { key: string }> = {
+export const item = makeSimpleContractFormula<
+  string | null,
+  string,
+  { key: string }
+>({
   docs: {
     description: "retrieves a specific item from the DAO's storage",
     args: [
@@ -260,26 +301,22 @@ export const item: ContractFormula<string | null, { key: string }> = {
       },
     ],
   },
-  compute: async ({
-    contractAddress,
-    getTransformationMatch,
-    get,
-    args: { key },
-  }) => {
+  validate: ({ key }) => {
     if (!key) {
       throw new Error('missing `key`')
     }
-
-    return (
-      (await getTransformationMatch<string>(contractAddress, `item:${key}`))
-        ?.value ??
-      // Fallback to events.
-      (await get<string>(contractAddress, 'items', key))?.valueJson ??
-      // Null if nothing found because no item set.
-      null
-    )
   },
-}
+  sources: [
+    {
+      type: 'transformation',
+      name: ({ key }) => `item:${key}`,
+    },
+    {
+      type: 'event',
+      key: ({ key }) => ['items', key],
+    },
+  ],
+})
 
 export const listItems: ContractFormula<[string, string][]> = {
   docs: {

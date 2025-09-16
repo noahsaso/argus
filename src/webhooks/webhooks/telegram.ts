@@ -1,15 +1,13 @@
-import { WasmStateEvent } from '@/db'
+import { Extraction, WasmStateEvent } from '@/db'
 import {
   activeProposalModules,
   config as daoCoreConfig,
 } from '@/formulas/formulas/contract/daoCore/base'
-import { MultipleChoiceProposal } from '@/formulas/formulas/contract/proposal/daoProposalMultiple/types'
-import { SingleChoiceProposal } from '@/formulas/formulas/contract/proposal/daoProposalSingle/types'
 import { StatusEnum } from '@/formulas/formulas/contract/proposal/types'
 import { WebhookMaker, WebhookType } from '@/types'
-import { dbKeyForKeys, dbKeyToKeys } from '@/utils'
+import { dbKeyForKeys } from '@/utils'
 
-import { getDaoAddressForProposalModule } from '../utils'
+import { getDaoAddressForProposalModule, getProposalFromModel } from '../utils'
 
 const CODE_IDS_KEYS = ['dao-proposal-single', 'dao-proposal-multiple']
 
@@ -17,18 +15,22 @@ const KEY_PREFIX_PROPOSALS = dbKeyForKeys('proposals', '')
 const KEY_PREFIX_PROPOSALS_V2 = dbKeyForKeys('proposals_v2', '')
 
 // Fire webhook when a proposal is created.
-export const makeProposalCreated: WebhookMaker<WasmStateEvent> = (
+export const makeProposalCreated: WebhookMaker<WasmStateEvent | Extraction> = (
   config,
   state
 ) => ({
   filter: {
-    EventType: WasmStateEvent,
+    EventType: [WasmStateEvent, Extraction],
     codeIdsKeys: CODE_IDS_KEYS,
     matches: (event) =>
-      // Starts with proposals or proposals_v2.
-      (event.key.startsWith(KEY_PREFIX_PROPOSALS) ||
-        event.key.startsWith(KEY_PREFIX_PROPOSALS_V2)) &&
-      event.valueJson.status === StatusEnum.Open,
+      (event instanceof WasmStateEvent &&
+        // Starts with proposals or proposals_v2.
+        (event.key.startsWith(KEY_PREFIX_PROPOSALS) ||
+          event.key.startsWith(KEY_PREFIX_PROPOSALS_V2)) &&
+        event.valueJson.status === StatusEnum.Open) ||
+      (event instanceof Extraction &&
+        event.name.startsWith('proposal:') &&
+        event.data.status === StatusEnum.Open),
   },
   endpoint: async (event, env) => {
     const daoAddress = await getDaoAddressForProposalModule({
@@ -77,18 +79,18 @@ export const makeProposalCreated: WebhookMaker<WasmStateEvent> = (
       return
     }
 
-    // "proposals"|"proposals_v2", proposalNum
-    const [, proposalNum] = dbKeyToKeys(event.key, [false, true])
-    const proposalId = `${proposalModule.prefix}${proposalNum}`
-
     const daoUrl = config.daoDaoBase + `/dao/${daoAddress}`
+    const { proposalId, proposal } = getProposalFromModel(
+      proposalModule.prefix,
+      event
+    )
 
     return {
       type: 'proposal_created',
       apiKey: config.telegramNotifierApiKey,
       daoName: daoConfig.name,
-      proposalTitle: event.valueJson.title,
-      proposalDescription: event.valueJson.description,
+      proposalTitle: proposal.title,
+      proposalDescription: proposal.description,
       proposalId,
       daoUrl,
       url: daoUrl + `/proposals/${proposalId}`,
@@ -97,20 +99,25 @@ export const makeProposalCreated: WebhookMaker<WasmStateEvent> = (
 })
 
 // Fire webhook when a proposal is executed or closed.
-export const makeProposalExecutedOrClosed: WebhookMaker<WasmStateEvent> = (
-  config,
-  state
-) => ({
+export const makeProposalExecutedOrClosed: WebhookMaker<
+  WasmStateEvent | Extraction
+> = (config, state) => ({
   filter: {
-    EventType: WasmStateEvent,
+    EventType: [WasmStateEvent, Extraction],
     codeIdsKeys: CODE_IDS_KEYS,
     matches: (event) =>
-      // Starts with proposals or proposals_v2.
-      (event.key.startsWith(KEY_PREFIX_PROPOSALS) ||
-        event.key.startsWith(KEY_PREFIX_PROPOSALS_V2)) &&
-      (event.valueJson.status === StatusEnum.Executed ||
-        event.valueJson.status === StatusEnum.ExecutionFailed ||
-        event.valueJson.status === StatusEnum.Closed),
+      (event instanceof WasmStateEvent &&
+        // Starts with proposals or proposals_v2.
+        (event.key.startsWith(KEY_PREFIX_PROPOSALS) ||
+          event.key.startsWith(KEY_PREFIX_PROPOSALS_V2)) &&
+        (event.valueJson.status === StatusEnum.Executed ||
+          event.valueJson.status === StatusEnum.ExecutionFailed ||
+          event.valueJson.status === StatusEnum.Closed)) ||
+      (event instanceof Extraction &&
+        event.name.startsWith('proposal:') &&
+        (event.data.status === StatusEnum.Executed ||
+          event.data.status === StatusEnum.ExecutionFailed ||
+          event.data.status === StatusEnum.Closed)),
   },
   endpoint: async (event, env) => {
     const daoAddress = await getDaoAddressForProposalModule({
@@ -129,12 +136,18 @@ export const makeProposalExecutedOrClosed: WebhookMaker<WasmStateEvent> = (
   },
   getValue: async (event, getLastEvent, env) => {
     // Only fire the webhook if the last event was not executed.
-    const lastEvent = await getLastEvent()
+    const lastEventData = await getLastEvent().then(
+      (lastEvent) =>
+        lastEvent &&
+        (lastEvent instanceof WasmStateEvent
+          ? lastEvent.valueJson
+          : lastEvent.data)
+    )
     if (
-      lastEvent &&
-      (lastEvent.valueJson.status === StatusEnum.Executed ||
-        lastEvent.valueJson.status === StatusEnum.ExecutionFailed ||
-        lastEvent.valueJson.status === StatusEnum.Closed)
+      lastEventData &&
+      (lastEventData.status === StatusEnum.Executed ||
+        lastEventData.status === StatusEnum.ExecutionFailed ||
+        lastEventData.status === StatusEnum.Closed)
     ) {
       return
     }
@@ -165,16 +178,15 @@ export const makeProposalExecutedOrClosed: WebhookMaker<WasmStateEvent> = (
       return
     }
 
-    // "proposals"|"proposals_v2", proposalNum
-    const [, proposalNum] = dbKeyToKeys(event.key, [false, true])
-    const proposalId = `${proposalModule.prefix}${proposalNum}`
-    const proposal: SingleChoiceProposal | MultipleChoiceProposal =
-      event.valueJson
+    const { proposalId, proposal } = getProposalFromModel(
+      proposalModule.prefix,
+      event
+    )
 
     // Include winning option if executed and multiple choice proposal.
     let winningOption: string | undefined
     if (
-      event.valueJson.status !== StatusEnum.Closed &&
+      proposal.status !== StatusEnum.Closed &&
       'choices' in proposal &&
       'votes' in proposal
     ) {
@@ -190,11 +202,11 @@ export const makeProposalExecutedOrClosed: WebhookMaker<WasmStateEvent> = (
     const daoUrl = config.daoDaoBase + `/dao/${daoAddress}`
 
     const type =
-      event.valueJson.status === StatusEnum.Executed
+      proposal.status === StatusEnum.Executed
         ? 'proposal_executed'
-        : event.valueJson.status === StatusEnum.ExecutionFailed
+        : proposal.status === StatusEnum.ExecutionFailed
         ? 'proposal_execution_failed'
-        : event.valueJson.status === StatusEnum.Closed
+        : proposal.status === StatusEnum.Closed
         ? 'proposal_closed'
         : ''
     if (!type) {
@@ -205,8 +217,8 @@ export const makeProposalExecutedOrClosed: WebhookMaker<WasmStateEvent> = (
       type,
       apiKey: config.telegramNotifierApiKey,
       daoName: daoConfig.name,
-      proposalTitle: event.valueJson.title,
-      proposalDescription: event.valueJson.description,
+      proposalTitle: proposal.title,
+      proposalDescription: proposal.description,
       proposalId,
       daoUrl,
       url: daoUrl + `/proposals/${proposalId}`,

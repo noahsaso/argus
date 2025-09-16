@@ -1,4 +1,4 @@
-import { WasmStateEvent } from '@/db'
+import { Extraction, WasmStateEvent } from '@/db'
 import {
   activeProposalModules,
   config as daoCoreConfig,
@@ -7,13 +7,14 @@ import {
   dao as daoPreProposeBaseDao,
   proposalModule as daoPreProposeBaseProposalModule,
 } from '@/formulas/formulas/contract/prePropose/daoPreProposeBase'
-import { MultipleChoiceProposal } from '@/formulas/formulas/contract/proposal/daoProposalMultiple/types'
-import { SingleChoiceProposal } from '@/formulas/formulas/contract/proposal/daoProposalSingle/types'
 import { StatusEnum } from '@/formulas/formulas/contract/proposal/types'
 import { WebhookMaker, WebhookType } from '@/types'
 import { dbKeyForKeys, dbKeyToKeys } from '@/utils'
 
-import { getDaoAddressForProposalModule } from '../../utils'
+import {
+  getDaoAddressForProposalModule,
+  getProposalFromModel,
+} from '../../utils'
 
 const PROPOSAL_CODE_IDS_KEYS = ['dao-proposal-single', 'dao-proposal-multiple']
 const PRE_PROPOSE_APPROVAL_PROPOSAL_CODE_IDS_KEYS = [
@@ -29,18 +30,21 @@ const KEY_PREFIX_PENDING_PROPOSALS = dbKeyForKeys('pending_proposals', '')
 const KEY_PREFIX_COMPLETED_PROPOSALS = dbKeyForKeys('completed_proposals', '')
 
 // Fire webhook when a proposal is created.
-export const makeInboxProposalCreated: WebhookMaker<WasmStateEvent> = (
-  config,
-  state
-) => ({
+export const makeInboxProposalCreated: WebhookMaker<
+  WasmStateEvent | Extraction
+> = (config, state) => ({
   filter: {
-    EventType: WasmStateEvent,
+    EventType: [WasmStateEvent, Extraction],
     codeIdsKeys: PROPOSAL_CODE_IDS_KEYS,
     matches: (event) =>
-      // Starts with proposals or proposals_v2.
-      (event.key.startsWith(KEY_PREFIX_PROPOSALS) ||
-        event.key.startsWith(KEY_PREFIX_PROPOSALS_V2)) &&
-      event.valueJson.status === StatusEnum.Open,
+      (event instanceof WasmStateEvent &&
+        // Starts with proposals or proposals_v2.
+        (event.key.startsWith(KEY_PREFIX_PROPOSALS) ||
+          event.key.startsWith(KEY_PREFIX_PROPOSALS_V2)) &&
+        event.valueJson.status === StatusEnum.Open) ||
+      (event instanceof Extraction &&
+        event.name.startsWith('proposal:') &&
+        event.data.status === StatusEnum.Open),
   },
   endpoint: {
     type: WebhookType.Url,
@@ -82,11 +86,10 @@ export const makeInboxProposalCreated: WebhookMaker<WasmStateEvent> = (
       return
     }
 
-    // "proposals"|"proposals_v2", proposalNum
-    const [, proposalNum] = dbKeyToKeys(event.key, [false, true])
-    const proposalId = `${proposalModule.prefix}${proposalNum}`
-    const proposal: SingleChoiceProposal | MultipleChoiceProposal =
-      event.valueJson
+    const { proposalId, proposal } = getProposalFromModel(
+      proposalModule.prefix,
+      event
+    )
 
     return {
       chainId: state.chainId,
@@ -106,19 +109,23 @@ export const makeInboxProposalCreated: WebhookMaker<WasmStateEvent> = (
 })
 
 // Fire webhook when a proposal is executed.
-export const makeInboxProposalExecuted: WebhookMaker<WasmStateEvent> = (
-  config,
-  state
-) => ({
+export const makeInboxProposalExecuted: WebhookMaker<
+  WasmStateEvent | Extraction
+> = (config, state) => ({
   filter: {
-    EventType: WasmStateEvent,
+    EventType: [WasmStateEvent, Extraction],
     codeIdsKeys: PROPOSAL_CODE_IDS_KEYS,
     matches: (event) =>
-      // Starts with proposals or proposals_v2.
-      (event.key.startsWith(KEY_PREFIX_PROPOSALS) ||
-        event.key.startsWith(KEY_PREFIX_PROPOSALS_V2)) &&
-      (event.valueJson.status === StatusEnum.Executed ||
-        event.valueJson.status === StatusEnum.ExecutionFailed),
+      (event instanceof WasmStateEvent &&
+        // Starts with proposals or proposals_v2.
+        (event.key.startsWith(KEY_PREFIX_PROPOSALS) ||
+          event.key.startsWith(KEY_PREFIX_PROPOSALS_V2)) &&
+        (event.valueJson.status === StatusEnum.Executed ||
+          event.valueJson.status === StatusEnum.ExecutionFailed)) ||
+      (event instanceof Extraction &&
+        event.name.startsWith('proposal:') &&
+        (event.data.status === StatusEnum.Executed ||
+          event.data.status === StatusEnum.ExecutionFailed)),
   },
   endpoint: {
     type: WebhookType.Url,
@@ -130,11 +137,17 @@ export const makeInboxProposalExecuted: WebhookMaker<WasmStateEvent> = (
   },
   getValue: async (event, getLastEvent, env) => {
     // Only fire the webhook if the last event was not executed.
-    const lastEvent = await getLastEvent()
+    const lastEventData = await getLastEvent().then(
+      (lastEvent) =>
+        lastEvent &&
+        (lastEvent instanceof WasmStateEvent
+          ? lastEvent.valueJson
+          : lastEvent.data)
+    )
     if (
-      lastEvent &&
-      (lastEvent.valueJson.status === StatusEnum.Executed ||
-        lastEvent.valueJson.status === StatusEnum.ExecutionFailed)
+      lastEventData &&
+      (lastEventData.status === StatusEnum.Executed ||
+        lastEventData.status === StatusEnum.ExecutionFailed)
     ) {
       return
     }
@@ -165,11 +178,10 @@ export const makeInboxProposalExecuted: WebhookMaker<WasmStateEvent> = (
       return
     }
 
-    // "proposals"|"proposals_v2", proposalNum
-    const [, proposalNum] = dbKeyToKeys(event.key, [false, true])
-    const proposalId = `${proposalModule.prefix}${proposalNum}`
-    const proposal: SingleChoiceProposal | MultipleChoiceProposal =
-      event.valueJson
+    const { proposalId, proposal } = getProposalFromModel(
+      proposalModule.prefix,
+      event
+    )
 
     // Include winning option if multiple choice proposal.
     let winningOption: string | undefined
@@ -195,7 +207,7 @@ export const makeInboxProposalExecuted: WebhookMaker<WasmStateEvent> = (
         proposalTitle: proposal.title,
         // Whether or not this is an approver-created proposal.
         fromApprover: proposalModule.info?.contract === APPROVER_CONTRACT_NAME,
-        failed: event.valueJson.status === StatusEnum.ExecutionFailed,
+        failed: proposal.status === StatusEnum.ExecutionFailed,
         winningOption,
       },
     }
@@ -203,18 +215,21 @@ export const makeInboxProposalExecuted: WebhookMaker<WasmStateEvent> = (
 })
 
 // Fire webhook when a proposal is closed.
-export const makeInboxProposalClosed: WebhookMaker<WasmStateEvent> = (
-  config,
-  state
-) => ({
+export const makeInboxProposalClosed: WebhookMaker<
+  WasmStateEvent | Extraction
+> = (config, state) => ({
   filter: {
-    EventType: WasmStateEvent,
+    EventType: [WasmStateEvent, Extraction],
     codeIdsKeys: PROPOSAL_CODE_IDS_KEYS,
     matches: (event) =>
-      // Starts with proposals or proposals_v2.
-      (event.key.startsWith(KEY_PREFIX_PROPOSALS) ||
-        event.key.startsWith(KEY_PREFIX_PROPOSALS_V2)) &&
-      event.valueJson.status === StatusEnum.Closed,
+      (event instanceof WasmStateEvent &&
+        // Starts with proposals or proposals_v2.
+        (event.key.startsWith(KEY_PREFIX_PROPOSALS) ||
+          event.key.startsWith(KEY_PREFIX_PROPOSALS_V2)) &&
+        event.valueJson.status === StatusEnum.Closed) ||
+      (event instanceof Extraction &&
+        event.name.startsWith('proposal:') &&
+        event.data.status === StatusEnum.Closed),
   },
   endpoint: {
     type: WebhookType.Url,
@@ -226,8 +241,14 @@ export const makeInboxProposalClosed: WebhookMaker<WasmStateEvent> = (
   },
   getValue: async (event, getLastEvent, env) => {
     // Only fire the webhook if the last event was not closed.
-    const lastEvent = await getLastEvent()
-    if (lastEvent && lastEvent.valueJson.status === StatusEnum.Closed) {
+    const lastEventData = await getLastEvent().then(
+      (lastEvent) =>
+        lastEvent &&
+        (lastEvent instanceof WasmStateEvent
+          ? lastEvent.valueJson
+          : lastEvent.data)
+    )
+    if (lastEventData?.status === StatusEnum.Closed) {
       return
     }
 
@@ -257,11 +278,10 @@ export const makeInboxProposalClosed: WebhookMaker<WasmStateEvent> = (
       return
     }
 
-    // "proposals"|"proposals_v2", proposalNum
-    const [, proposalNum] = dbKeyToKeys(event.key, [false, true])
-    const proposalId = `${proposalModule.prefix}${proposalNum}`
-    const proposal: SingleChoiceProposal | MultipleChoiceProposal =
-      event.valueJson
+    const { proposalId, proposal } = getProposalFromModel(
+      proposalModule.prefix,
+      event
+    )
 
     return {
       chainId: state.chainId,
