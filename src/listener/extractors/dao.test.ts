@@ -159,7 +159,7 @@ describe('DAO Extractor', () => {
       )
       expect(
         mockAutoCosmWasmClient.client!.queryContractSmart
-      ).toHaveBeenCalledTimes(2)
+      ).toHaveBeenCalledTimes(3)
       expect(
         mockAutoCosmWasmClient.client!.queryContractSmart
       ).toHaveBeenCalledWith('juno1dao123contract456', { info: {} })
@@ -270,7 +270,7 @@ describe('DAO Extractor', () => {
       )
       expect(
         mockAutoCosmWasmClient.client!.queryContractSmart
-      ).toHaveBeenCalledTimes(2)
+      ).toHaveBeenCalledTimes(3)
       expect(
         mockAutoCosmWasmClient.client!.queryContractSmart
       ).toHaveBeenCalledWith('juno1dao123contract456', { info: {} })
@@ -281,7 +281,7 @@ describe('DAO Extractor', () => {
         mockAutoCosmWasmClient.client!.queryContractSmart
       ).toHaveBeenCalledWith('juno1dao123contract456', { config: {} })
 
-      expect(result).toHaveLength(2)
+      expect(result).toHaveLength(3)
 
       // Check info extraction
       const infoExtraction = result.find((e) => e.name === 'info')
@@ -450,6 +450,17 @@ describe('DAO Extractor', () => {
         {
           id: '3',
           address: 'juno1dao123contract456',
+          name: 'dao-dao-core/config',
+          blockHeight: '1000',
+          blockTimeUnixMs: '1640995200000',
+          txHash: 'test-hash',
+          data: mockConfig,
+          createdAt: expect.any(Date),
+          updatedAt: expect.any(Date),
+        },
+        {
+          id: '4',
+          address: 'juno1dao123contract456',
           name: 'proposalModule:juno1proposal123',
           blockHeight: '1000',
           blockTimeUnixMs: '1640995200000',
@@ -459,7 +470,7 @@ describe('DAO Extractor', () => {
           updatedAt: expect.any(Date),
         },
         {
-          id: '4',
+          id: '5',
           address: 'juno1dao123contract456',
           name: 'proposalModule:juno1proposal456',
           blockHeight: '1000',
