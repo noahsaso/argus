@@ -322,13 +322,29 @@ export const listItems: ContractFormula<[string, string][]> = {
   docs: {
     description: 'retrieves all items stored in the DAO',
   },
-  compute: async ({ contractAddress, getTransformationMap, getMap }) =>
-    Object.entries(
+  compute: async ({
+    contractAddress,
+    getTransformationMap,
+    getMap,
+    getExtraction,
+  }) => {
+    const items =
       (await getTransformationMap<string>(contractAddress, 'item')) ??
-        // Fallback to events.
-        (await getMap<string>(contractAddress, 'items')) ??
-        {}
-    ),
+      // Fallback to events.
+      (await getMap<string>(contractAddress, 'items'))
+
+    if (items) return Object.entries(items)
+    else {
+      const extraction = await getExtraction(
+        contractAddress,
+        'dao-dao-core/list_items'
+      )
+      if (extraction) {
+        return extraction.data as [string, string][]
+      }
+    }
+    return []
+  },
 }
 
 export const cw20List: ContractFormula<string[]> = {

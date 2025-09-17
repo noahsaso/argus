@@ -37,7 +37,8 @@
     "cw4-group": [178],
     "polytone-note": [],
     "polytone-voice": [],
-    "valence-account": []
+    "valence-account": [],
+    "dao-rbam": []
   },
   "daoDaoBase": "https://testnet.daodao.zone",
   "discordNotifierApiKey": "key",
@@ -45,5 +46,7 @@
   "inboxSecret": "secret",
   "notifierSecret": "secret",
   "websocketsSecret": "secret",
-  "accountsJwtSecret": "secret"
+  "accountsJwtSecret": "secret",
+  "rbamWebhooksBaseUrl": "",
+  "rbamWebhookSecret": ""
 }

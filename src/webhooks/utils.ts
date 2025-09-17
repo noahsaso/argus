@@ -32,7 +32,6 @@ export const getDaoAddressForProposalModule = async (
   ) {
     daoAddress = await daoProposalMultipleDao.compute(env)
   }
-
   return daoAddress
 }
 
