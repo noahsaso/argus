@@ -13,136 +13,139 @@ import {
 import { WebhookMaker, WebhookType } from '@/types'
 
 // Emits when a DAO with RBAM is created or updated.
-export const daoWithRBAM: WebhookMaker<Extraction> = (config) => ({
-  filter: {
-    EventType: Extraction,
-    matches: (event) => event.name === 'dao-dao-core/dump_state',
-  },
-  endpoint: () => ({
-    type: WebhookType.Url,
-    url: `${config.rbamWebhooksBaseUrl}/dao`,
-    method: 'POST',
-    headers: {
-      'X-API-Key': config.rbamWebhookSecret,
-    },
-  }),
-  getValue: async (event, getLastEvent, env) => {
-    const daoAddress = event.address
-    const data = event.data as DumpState
-    const proposalMods = data.proposal_modules?.filter(
-      (module) => module.status === 'enabled'
-    )
+export const daoWithRBAM: WebhookMaker<Extraction> = (config) =>
+  config.rbamWebhookBaseUrl && config.rbamWebhookSecret
+    ? {
+        filter: {
+          EventType: Extraction,
+          matches: (event) => event.name === 'dao-dao-core/dump_state',
+        },
+        endpoint: () => ({
+          type: WebhookType.Url,
+          url: `${config.rbamWebhookBaseUrl}/dao`,
+          method: 'POST',
+          headers: {
+            'X-API-Key': config.rbamWebhookSecret,
+          },
+        }),
+        getValue: async (event, getLastEvent, env) => {
+          const daoAddress = event.address
+          const data = event.data as DumpState
+          const proposalMods = data.proposal_modules?.filter(
+            (module) => module.status === 'enabled'
+          )
 
-    if (!proposalMods || proposalMods.length === 0) return
+          if (!proposalMods || proposalMods.length === 0) return
 
-    const proposalModsInfo = await Promise.all(
-      proposalMods.map(
-        async (module) =>
-          await info.compute({ ...env, contractAddress: module.address })
-      )
-    )
+          const proposalModsInfo = await Promise.all(
+            proposalMods.map(
+              async (module) =>
+                await info.compute({ ...env, contractAddress: module.address })
+            )
+          )
 
-    // Check if any proposal module is RBAM
-    const rbamMod = proposalModsInfo.filter((info) =>
-      info.contract.includes('dao-rbam')
-    )
+          // Check if any proposal module is RBAM
+          const rbamMod = proposalModsInfo.filter((info) =>
+            info.contract.includes('dao-rbam')
+          )
 
-    if (rbamMod.length === 0) return
+          if (rbamMod.length === 0) return
 
-    // Retrieve items
-    const items = await listItems.compute({
-      ...env,
-      contractAddress: daoAddress,
-    })
+          // Retrieve items
+          const items = await listItems.compute({
+            ...env,
+            contractAddress: daoAddress,
+          })
 
-    return {
-      dao: daoAddress,
-      name: data.config?.name,
-      description: data.config?.description,
-      image: data.config?.image_url,
-      ...Object.fromEntries(items),
-    }
-  },
-})
+          return {
+            dao: daoAddress,
+            name: data.config?.name,
+            description: data.config?.description,
+            image: data.config?.image_url,
+            ...Object.fromEntries(items),
+          }
+        },
+      }
+    : null
 
 // Emits when assignments change.
-export const makeRbamAssignmentChanged: WebhookMaker<Extraction> = (
-  config
-) => ({
-  filter: {
-    EventType: Extraction,
-    matches: (event) => event.name === 'dao-rbam/list_assignments',
-  },
+export const makeRbamAssignmentChanged: WebhookMaker<Extraction> = (config) =>
+  config.rbamWebhookBaseUrl && config.rbamWebhookSecret
+    ? {
+        filter: {
+          EventType: Extraction,
+          matches: (event) => event.name === 'dao-rbam/list_assignments',
+        },
+        endpoint: async () => {
+          return {
+            type: WebhookType.Url,
+            url: `${config.rbamWebhookBaseUrl}/assignments`,
+            method: 'POST',
+            headers: {
+              'X-API-Key': config.rbamWebhookSecret,
+            },
+          }
+        },
+        getValue: async (event, getLastEvent, env) => {
+          const rbamAddress = event.address
 
-  endpoint: async () => {
-    return {
-      type: WebhookType.Url,
-      url: `${config.rbamWebhooksBaseUrl}/assignments`,
-      method: 'POST',
-      headers: {
-        'X-API-Key': config.rbamWebhookSecret,
-      },
-    }
-  },
+          const daoAddress = await dao.compute({
+            ...env,
+            contractAddress: rbamAddress,
+          })
 
-  getValue: async (event, getLastEvent, env) => {
-    const rbamAddress = event.address
+          const lastEvent = await getLastEvent()
+          const lastAssignments: Assignment[] =
+            (lastEvent?.data as { assignments?: Assignment[] })?.assignments ??
+            []
 
-    const daoAddress = await dao.compute({
-      ...env,
-      contractAddress: rbamAddress,
-    })
+          const curAssignments: Assignment[] =
+            (event.data as { assignments?: Assignment[] }).assignments ?? []
 
-    const lastEvent = await getLastEvent()
-    const lastAssignments: Assignment[] =
-      (lastEvent?.data as { assignments?: Assignment[] })?.assignments ?? []
+          const curRoles: Role[] = await roles.compute({
+            ...env,
+            contractAddress: rbamAddress,
+          })
 
-    const curAssignments: Assignment[] =
-      (event.data as { assignments?: Assignment[] }).assignments ?? []
+          //  Diff assignments per role.
+          const cur = groupByRole(curAssignments)
+          const last = groupByRole(lastAssignments)
+          const roleIds = new Set<number>([...cur.keys(), ...last.keys()])
+          const roleNameById = new Map(curRoles.map((r) => [r.id, r.name]))
 
-    const curRoles: Role[] = await roles.compute({
-      ...env,
-      contractAddress: rbamAddress,
-    })
+          const changes = [] as Array<{
+            role_id: number
+            role_name: string
+            added: string[]
+            removed: string[]
+          }>
 
-    //  Diff assignments per role.
-    const cur = groupByRole(curAssignments)
-    const last = groupByRole(lastAssignments)
-    const roleIds = new Set<number>([...cur.keys(), ...last.keys()])
-    const roleNameById = new Map(curRoles.map((r) => [r.id, r.name]))
+          for (const roleId of roleIds) {
+            const now = cur.get(roleId) ?? new Set<string>()
+            const before = last.get(roleId) ?? new Set<string>()
+            const added = [...now].filter((a) => !before.has(a)).sort()
+            const removed = [...before].filter((a) => !now.has(a)).sort()
+            const roleName = roleNameById.get(roleId)
+            if (roleName && (added.length || removed.length)) {
+              changes.push({
+                role_id: roleId,
+                role_name: roleName,
+                added,
+                removed,
+              })
+            }
+          }
 
-    const changes = [] as Array<{
-      role_id: number
-      role_name: string
-      added: string[]
-      removed: string[]
-    }>
+          // Skip if no changes
+          if (changes.length === 0) return undefined
 
-    for (const roleId of roleIds) {
-      const now = cur.get(roleId) ?? new Set<string>()
-      const before = last.get(roleId) ?? new Set<string>()
-      const added = [...now].filter((a) => !before.has(a)).sort()
-      const removed = [...before].filter((a) => !now.has(a)).sort()
-      const roleName = roleNameById.get(roleId)
-      if (roleName && (added.length || removed.length)) {
-        changes.push({
-          role_id: roleId,
-          role_name: roleName,
-          added,
-          removed,
-        })
+          return {
+            dao: daoAddress,
+            changes,
+          }
+        },
       }
-    }
-
-    // Skip if no changes
-    if (changes.length === 0) return undefined
-
-    return {
-      dao: daoAddress,
-      changes,
-    }
-  },
-})
+    : null
 
 function groupByRole(list: Assignment[]) {
   const m = new Map<number, Set<string>>()
