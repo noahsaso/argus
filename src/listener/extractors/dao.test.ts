@@ -165,7 +165,7 @@ describe('DAO Extractor', () => {
       )
       expect(
         mockAutoCosmWasmClient.client!.queryContractSmart
-      ).toHaveBeenCalledTimes(3)
+      ).toHaveBeenCalledTimes(4)
       expect(
         mockAutoCosmWasmClient.client!.queryContractSmart
       ).toHaveBeenCalledWith('juno1dao123contract456', { info: {} })
@@ -177,7 +177,9 @@ describe('DAO Extractor', () => {
       ).toHaveBeenCalledWith('juno1dao123contract456', { config: {} })
       expect(
         mockAutoCosmWasmClient.client!.queryContractSmart
-      ).toHaveBeenCalledWith('juno1dao123contract456', { list_items: {} })
+      ).toHaveBeenCalledWith('juno1dao123contract456', {
+        list_items: { limit: 20 },
+      })
 
       expect(result).toHaveLength(6) // 1 info, 1 dump_state, 1 config, 1 list_items, 2 proposal modules
 
@@ -294,7 +296,7 @@ describe('DAO Extractor', () => {
       )
       expect(
         mockAutoCosmWasmClient.client!.queryContractSmart
-      ).toHaveBeenCalledTimes(3)
+      ).toHaveBeenCalledTimes(4)
       expect(
         mockAutoCosmWasmClient.client!.queryContractSmart
       ).toHaveBeenCalledWith('juno1dao123contract456', { info: {} })
@@ -306,9 +308,11 @@ describe('DAO Extractor', () => {
       ).toHaveBeenCalledWith('juno1dao123contract456', { config: {} })
       expect(
         mockAutoCosmWasmClient.client!.queryContractSmart
-      ).toHaveBeenCalledWith('juno1dao123contract456', { list_items: {} })
+      ).toHaveBeenCalledWith('juno1dao123contract456', {
+        list_items: { limit: 20 },
+      })
 
-      expect(result).toHaveLength(3)
+      expect(result).toHaveLength(4)
 
       // Check info extraction
       const infoExtraction = result.find((e) => e.name === 'info')
@@ -401,7 +405,7 @@ describe('DAO Extractor', () => {
 
       const result = (await extractor.extract(data)) as Extraction[]
 
-      expect(result).toHaveLength(10) // 5 extractions per contract
+      expect(result).toHaveLength(12) // 6 extractions per contract
 
       const addresses = result.map((r) => r.address)
       expect(addresses).toContain('juno1dao123contract456')
@@ -495,11 +499,11 @@ describe('DAO Extractor', () => {
         {
           id: '3',
           address: 'juno1dao123contract456',
-          name: 'dao-dao-core/list_items',
+          name: 'dao-dao-core/config',
           blockHeight: '1000',
           blockTimeUnixMs: '1640995200000',
           txHash: 'test-hash',
-          data: mockListItems,
+          data: mockConfig,
           createdAt: expect.any(Date),
           updatedAt: expect.any(Date),
         },

@@ -85,6 +85,25 @@ export class DaoExtractor extends Extractor {
       }),
     ])
 
+    // Paginate list_items
+    const limit = 20
+    let items: any[] = []
+    let startAfter: string | undefined
+    while (true) {
+      const itemsPage = await client.queryContractSmart(address, {
+        list_items: {
+          start_after: startAfter,
+          limit,
+        },
+      })
+      items.push(...itemsPage)
+      if (itemsPage.length < limit) {
+        break
+      }
+      startAfter =
+        itemsPage.length > 0 ? itemsPage[itemsPage.length - 1][0] : undefined
+    }
+
     const isV1 = info.version === '0.1.0'
 
     // Ensure contract exists in the DB.
@@ -121,11 +140,11 @@ export class DaoExtractor extends Extractor {
         name: 'dao-dao-core/config',
         data: config,
       },
-      // {
-      //   address: contract.address,
-      //   name: 'dao-dao-core/list_items',
-      //   data: items,
-      // },
+      {
+        address: contract.address,
+        name: 'dao-dao-core/list_items',
+        data: items,
+      },
       ...(saveProposalModules
         ? dumpState.proposal_modules.map((proposalModule: any) => ({
             address: contract.address,
