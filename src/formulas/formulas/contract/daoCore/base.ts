@@ -328,22 +328,22 @@ export const listItems: ContractFormula<[string, string][]> = {
     getMap,
     getExtraction,
   }) => {
+    // Default to extraction.
+    const extraction = await getExtraction(
+      contractAddress,
+      'dao-dao-core/list_items'
+    )
+    if (extraction) {
+      return extraction.data as [string, string][]
+    }
+
+    // Fallback to transformation and events.
     const items =
       (await getTransformationMap<string>(contractAddress, 'item')) ??
-      // Fallback to events.
-      (await getMap<string>(contractAddress, 'items'))
+      (await getMap<string>(contractAddress, 'items')) ??
+      {}
 
-    if (items) return Object.entries(items)
-    else {
-      const extraction = await getExtraction(
-        contractAddress,
-        'dao-dao-core/list_items'
-      )
-      if (extraction) {
-        return extraction.data as [string, string][]
-      }
-    }
-    return []
+    return Object.entries(items)
   },
 }
 
