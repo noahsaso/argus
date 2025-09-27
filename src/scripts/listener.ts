@@ -329,8 +329,7 @@ const main = async () => {
         `[${new Date().toISOString()}] Listener error for ${error.type} (${
           error.blockHeight
         }${error.txHash ? `/${error.txHash}` : ''}):`,
-        error,
-        error.cause
+        error
       )
       Sentry.captureException(error.cause, {
         tags: {
@@ -348,6 +347,8 @@ const main = async () => {
 
   // Close queue.
   ExtractQueue.close()
+
+  console.log(`[${new Date().toISOString()}] Listener closed.`)
 
   process.exit(0)
 }

@@ -2,9 +2,9 @@
   "ignoreApiKey": true,
   "home": "./fake",
   "localRpc": "http://localhost:26657",
-  "remoteRpc": "https://juno-rpc.polkachu.com",
-  "bech32Prefix": "juno",
-  "chainId": "juno-1",
+  "remoteRpc": "https://rpc-lb.neutron.org",
+  "bech32Prefix": "neutron",
+  "chainId": "neutron-1",
   "redis": {
     "host": "redis"
   },

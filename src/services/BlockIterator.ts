@@ -271,13 +271,15 @@ export class BlockIterator {
       this.fetchHeight++
     }
 
+    // Wait for any remaining promises, to ensure the last block is processed
+    // and items are buffered.
+    await Promise.allSettled(promises)
+
+    // Stop fetching.
     this.fetching = false
 
     // Stop tracking the latest block height.
     this.stopTrackingLatestBlockHeight()
-
-    // Wait for any remaining promises
-    await Promise.allSettled(promises)
   }
 
   /**
@@ -309,16 +311,13 @@ export class BlockIterator {
                 txHash = toHex(sha256(rawTx)).toUpperCase()
                 const tx = await retry(
                   5,
-                  async (_, bail) => {
-                    if (!this.autoCosmWasmClient.client) {
-                      await this.autoCosmWasmClient.update()
-                      if (!this.autoCosmWasmClient.client) {
-                        bail('Client is undefined')
-                        return
-                      }
-                    }
-                    return this.autoCosmWasmClient.client.getTx(txHash!)
-                  },
+                  async (_, bail) =>
+                    this.autoCosmWasmClient
+                      .getValidClient()
+                      .catch((err) => {
+                        throw bail(err)
+                      })
+                      .then((client) => client.getTx(txHash!)),
                   500
                 )
                 if (!tx) {
