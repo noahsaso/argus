@@ -82,6 +82,13 @@ export class BlockIterator {
   public readonly bufferSize: number
 
   /**
+   * Whether or not to throw errors when a block/TX error is encountered.
+   *
+   * Default: true.
+   */
+  public readonly throwErrors: boolean = true
+
+  /**
    * Whether the fetcher is currently running.
    */
   private fetching: boolean = false
@@ -118,18 +125,21 @@ export class BlockIterator {
     startHeight = 0,
     endHeight,
     bufferSize = 10,
+    throwErrors = true,
   }: {
     rpcUrl: string
     autoCosmWasmClient: AutoCosmWasmClient
     startHeight?: number
     endHeight?: number
     bufferSize?: number
+    throwErrors?: boolean
   }) {
     this.rpcUrl = rpcUrl
     this.autoCosmWasmClient = autoCosmWasmClient
     this._startHeight = startHeight
     this.endHeight = endHeight
     this.bufferSize = bufferSize
+    this.throwErrors = throwErrors
   }
 
   get startHeight() {
@@ -185,42 +195,53 @@ export class BlockIterator {
     }
 
     // Start fetching blocks in parallel.
-    this.fetching = true
     this.startFetching()
 
-    // Process buffered items sequentially until the fetcher stops and the
-    // buffer is empty.
-    this.currentHeight = this.startHeight
-    while (this.fetching || this.buffer.size > 0) {
-      const item = this.buffer.get(this.currentHeight)
+    try {
+      // Process buffered items sequentially until the fetcher stops and the
+      // buffer is empty.
+      this.currentHeight = this.startHeight
+      while (this.fetching || this.buffer.size > 0) {
+        const item = this.buffer.get(this.currentHeight)
 
-      // Wait a bit and retry.
-      if (!item) {
-        await new Promise((resolve) => setTimeout(resolve, 10))
-        continue
-      }
+        // Wait a bit and retry.
+        if (!item) {
+          await new Promise((resolve) => setTimeout(resolve, 10))
+          continue
+        }
 
-      // If we got the item, delete it from the buffer.
-      this.buffer.delete(this.currentHeight)
+        // If we got the item, delete it from the buffer.
+        this.buffer.delete(this.currentHeight)
 
-      // Emit block-level errors.
-      if (item instanceof BlockIteratorError) {
-        await onError?.(item)
-      } else {
-        // Emit block data.
-        await onBlock?.(item.block)
+        // Emit block-level errors.
+        if (item instanceof BlockIteratorError) {
+          await onError?.(item)
 
-        // Emit successful transactions and errors in order.
-        for (const tx of item.txs) {
-          if (tx instanceof BlockIteratorError) {
-            await onError?.(tx)
-          } else {
-            await onTx?.(tx, item.block)
+          if (this.throwErrors) {
+            throw item
+          }
+        } else {
+          // Emit block data.
+          await onBlock?.(item.block)
+
+          // Emit successful transactions and errors in order.
+          for (const tx of item.txs) {
+            if (tx instanceof BlockIteratorError) {
+              await onError?.(tx)
+
+              if (this.throwErrors) {
+                throw tx
+              }
+            } else {
+              await onTx?.(tx, item.block)
+            }
           }
         }
-      }
 
-      this.currentHeight++
+        this.currentHeight++
+      }
+    } finally {
+      this.stopFetching()
     }
   }
 
@@ -228,8 +249,9 @@ export class BlockIterator {
    * Stop the fetcher, letting the iterator finish. The `iterate` function will
    * resolve once buffer is empty and everything has been processed.
    */
-  stopIterating() {
+  stopFetching() {
     this.fetching = false
+    this.stopTrackingLatestBlockHeight()
   }
 
   /**
@@ -276,10 +298,7 @@ export class BlockIterator {
     await Promise.allSettled(promises)
 
     // Stop fetching.
-    this.fetching = false
-
-    // Stop tracking the latest block height.
-    this.stopTrackingLatestBlockHeight()
+    this.stopFetching()
   }
 
   /**
@@ -289,7 +308,7 @@ export class BlockIterator {
     try {
       // Fetch the block first.
       const block = await retry(
-        5,
+        20,
         async () => {
           const client = await this.autoCosmWasmClient.getValidClient()
           return client.getBlock(height)
@@ -310,7 +329,7 @@ export class BlockIterator {
               try {
                 txHash = toHex(sha256(rawTx)).toUpperCase()
                 const tx = await retry(
-                  5,
+                  20,
                   async (_, bail) =>
                     this.autoCosmWasmClient
                       .getValidClient()

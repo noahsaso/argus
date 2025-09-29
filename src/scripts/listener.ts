@@ -111,14 +111,14 @@ const main = async () => {
 
     // Stop services.
     WasmCodeService.instance.stopUpdater()
-    blockIterator.stopIterating()
+    blockIterator.stopFetching()
   })
   process.on('SIGTERM', async () => {
     console.log(`\n[${new Date().toISOString()}] Shutting down...`)
 
     // Stop services.
     WasmCodeService.instance.stopUpdater()
-    blockIterator.stopIterating()
+    blockIterator.stopFetching()
   })
 
   // Metrics object to share between health endpoint and block processor
@@ -182,173 +182,176 @@ const main = async () => {
 
   // Start iterating. This will resolve once the iterator is done (due to SIGINT
   // or SIGTERM).
-  await blockIterator.iterate({
-    onBlock: async ({ header: { chainId, height, time } }) => {
-      const currentTime = Date.now()
-      metrics.blocksProcessed++
-      metrics.currentBlockHeight = Number(height)
-      metrics.lastUpdateTime = currentTime
+  try {
+    await blockIterator.iterate({
+      onBlock: async ({ header: { chainId, height, time } }) => {
+        const currentTime = Date.now()
+        metrics.blocksProcessed++
+        metrics.currentBlockHeight = Number(height)
+        metrics.lastUpdateTime = currentTime
 
-      // Add to rolling window
-      blockTimestamps.push(currentTime)
-      if (blockTimestamps.length > ROLLING_WINDOW_SIZE) {
-        blockTimestamps.shift()
-      }
+        // Add to rolling window
+        blockTimestamps.push(currentTime)
+        if (blockTimestamps.length > ROLLING_WINDOW_SIZE) {
+          blockTimestamps.shift()
+        }
 
-      // Calculate averages
-      const overallElapsedSeconds =
-        (currentTime - metrics.blockProcessingStartTime) / 1000
-      metrics.overallAverage = metrics.blocksProcessed / overallElapsedSeconds
+        // Calculate averages
+        const overallElapsedSeconds =
+          (currentTime - metrics.blockProcessingStartTime) / 1000
+        metrics.overallAverage = metrics.blocksProcessed / overallElapsedSeconds
 
-      if (blockTimestamps.length >= 2) {
-        const rollingElapsedSeconds = (currentTime - blockTimestamps[0]) / 1000
-        metrics.rollingAverage =
-          (blockTimestamps.length - 1) / rollingElapsedSeconds
-      }
+        if (blockTimestamps.length >= 2) {
+          const rollingElapsedSeconds =
+            (currentTime - blockTimestamps[0]) / 1000
+          metrics.rollingAverage =
+            (blockTimestamps.length - 1) / rollingElapsedSeconds
+        }
 
-      // Log metrics periodically
-      // if (currentTime - lastLogTime >= LOG_INTERVAL_MS) {
-      //   console.log(`[${new Date().toISOString()}] Block processing metrics:`)
-      //   console.log(`  - Current block: ${height}`)
-      //   console.log(`  - Blocks processed: ${metrics.blocksProcessed}`)
-      //   console.log(
-      //     `  - Overall average: ${metrics.overallAverage.toFixed(2)} blocks/sec`
-      //   )
-      //   console.log(
-      //     `  - Rolling average (${
-      //       blockTimestamps.length
-      //     } blocks): ${metrics.rollingAverage.toFixed(2)} blocks/sec`
-      //   )
-      //   lastLogTime = currentTime
-      // }
+        // Log metrics periodically
+        // if (currentTime - lastLogTime >= LOG_INTERVAL_MS) {
+        //   console.log(`[${new Date().toISOString()}] Block processing metrics:`)
+        //   console.log(`  - Current block: ${height}`)
+        //   console.log(`  - Blocks processed: ${metrics.blocksProcessed}`)
+        //   console.log(
+        //     `  - Overall average: ${metrics.overallAverage.toFixed(2)} blocks/sec`
+        //   )
+        //   console.log(
+        //     `  - Rolling average (${
+        //       blockTimestamps.length
+        //     } blocks): ${metrics.rollingAverage.toFixed(2)} blocks/sec`
+        //   )
+        //   lastLogTime = currentTime
+        // }
 
-      const latestBlockHeight = Number(height)
-      const latestBlockTimeUnixMs = Date.parse(time)
+        const latestBlockHeight = Number(height)
+        const latestBlockTimeUnixMs = Date.parse(time)
 
-      // Update state singleton with chain ID and latest block, and create
-      // block.
-      await Promise.all([
-        State.updateSingleton({
-          chainId,
-          latestBlockHeight: Sequelize.fn(
-            'GREATEST',
-            Sequelize.col('latestBlockHeight'),
-            latestBlockHeight
-          ),
-          latestBlockTimeUnixMs: Sequelize.fn(
-            'GREATEST',
-            Sequelize.col('latestBlockTimeUnixMs'),
-            latestBlockTimeUnixMs
-          ),
-        }),
-        Block.createOne({
-          height: latestBlockHeight,
-          timeUnixMs: latestBlockTimeUnixMs,
-        }),
-      ])
-    },
-    onTx: async (
-      { hash, code, tx: rawTx, height, events },
-      { header: { time } }
-    ) => {
-      // Ignore unsuccessful TXs.
-      if (code !== 0) {
-        return
-      }
+        // Update state singleton with chain ID and latest block, and create
+        // block.
+        await Promise.all([
+          State.updateSingleton({
+            chainId,
+            latestBlockHeight: Sequelize.fn(
+              'GREATEST',
+              Sequelize.col('latestBlockHeight'),
+              latestBlockHeight
+            ),
+            latestBlockTimeUnixMs: Sequelize.fn(
+              'GREATEST',
+              Sequelize.col('latestBlockTimeUnixMs'),
+              latestBlockTimeUnixMs
+            ),
+          }),
+          Block.createOne({
+            height: latestBlockHeight,
+            timeUnixMs: latestBlockTimeUnixMs,
+          }),
+        ])
+      },
+      onTx: async (
+        { hash, code, tx: rawTx, height, events },
+        { header: { time } }
+      ) => {
+        // Ignore unsuccessful TXs.
+        if (code !== 0) {
+          return
+        }
 
-      let tx
-      try {
-        tx = Tx.decode(rawTx)
-      } catch (err) {
-        console.error('Error decoding TX', hash, err)
-        return
-      }
-
-      if (!tx.body) {
-        console.error('No body in TX', hash, tx)
-        return
-      }
-
-      // Attempt to decode each message, ignoring errors and returning the
-      // original message if it fails.
-      const messages = tx.body.messages.flatMap((message) => {
+        let tx
         try {
-          return decodeRawProtobufMsg(message)
-        } catch {
-          return message
+          tx = Tx.decode(rawTx)
+        } catch (err) {
+          console.error('Error decoding TX', hash, err)
+          return
         }
-      })
 
-      // Create input for extractors.
-      const input: ExtractableTxInput = {
-        hash,
-        tx,
-        messages,
-        events,
-      }
-
-      // Create extractor environment for queue.
-      const env: Pick<ExtractorEnv, 'txHash' | 'block'> = {
-        txHash: hash,
-        block: {
-          height: BigInt(height).toString(),
-          timeUnixMs: BigInt(Date.parse(time)).toString(),
-          timestamp: new Date(time).toISOString(),
-        },
-      }
-
-      // Set up extractors with environment.
-      const extractors = getExtractors()
-
-      // Match messages with extractors and add to queue.
-      for (const Extractor of extractors) {
-        const data = Extractor.match(input)
-
-        if (data.length > 0) {
-          await ExtractQueue.addBulk(
-            data.map((data) => ({
-              name: `${Extractor.type} (${data.source})`,
-              data: {
-                extractor: Extractor.type,
-                data,
-                env,
-              },
-            }))
-          )
-
-          console.log(
-            `[${new Date().toISOString()}] TX ${hash} at block ${height} sent to "${
-              Extractor.type
-            }" extractor.`
-          )
+        if (!tx.body) {
+          console.error('No body in TX', hash, tx)
+          return
         }
-      }
-    },
-    onError: (error) => {
-      console.error(
-        `[${new Date().toISOString()}] Listener error for ${error.type} (${
-          error.blockHeight
-        }${error.txHash ? `/${error.txHash}` : ''}):`,
-        error
-      )
-      Sentry.captureException(error.cause, {
-        tags: {
-          script: 'listener',
-          type: error.type,
-          blockHeight: error.blockHeight,
-          txHash: error.txHash,
-        },
-      })
-    },
-  })
 
-  // Close database connection.
-  await dataSequelize.close()
+        // Attempt to decode each message, ignoring errors and returning the
+        // original message if it fails.
+        const messages = tx.body.messages.flatMap((message) => {
+          try {
+            return decodeRawProtobufMsg(message)
+          } catch {
+            return message
+          }
+        })
 
-  // Close queue.
-  ExtractQueue.close()
+        // Create input for extractors.
+        const input: ExtractableTxInput = {
+          hash,
+          tx,
+          messages,
+          events,
+        }
 
-  console.log(`[${new Date().toISOString()}] Listener closed.`)
+        // Create extractor environment for queue.
+        const env: Pick<ExtractorEnv, 'txHash' | 'block'> = {
+          txHash: hash,
+          block: {
+            height: BigInt(height).toString(),
+            timeUnixMs: BigInt(Date.parse(time)).toString(),
+            timestamp: new Date(time).toISOString(),
+          },
+        }
+
+        // Set up extractors with environment.
+        const extractors = getExtractors()
+
+        // Match messages with extractors and add to queue.
+        for (const Extractor of extractors) {
+          const data = Extractor.match(input)
+
+          if (data.length > 0) {
+            await ExtractQueue.addBulk(
+              data.map((data) => ({
+                name: `${Extractor.type} (${data.source})`,
+                data: {
+                  extractor: Extractor.type,
+                  data,
+                  env,
+                },
+              }))
+            )
+
+            console.log(
+              `[${new Date().toISOString()}] TX ${hash} at block ${height} sent to "${
+                Extractor.type
+              }" extractor.`
+            )
+          }
+        }
+      },
+      onError: (error) => {
+        console.error(
+          `[${new Date().toISOString()}] Listener error for ${error.type} (${
+            error.blockHeight
+          }${error.txHash ? `/${error.txHash}` : ''}):`,
+          error
+        )
+        Sentry.captureException(error.cause, {
+          tags: {
+            script: 'listener',
+            type: error.type,
+            blockHeight: error.blockHeight,
+            txHash: error.txHash,
+          },
+        })
+      },
+    })
+  } finally {
+    // Close database connection.
+    await dataSequelize.close()
+
+    // Close queue.
+    ExtractQueue.close()
+
+    console.log(`[${new Date().toISOString()}] Listener halted.`)
+  }
 
   process.exit(0)
 }

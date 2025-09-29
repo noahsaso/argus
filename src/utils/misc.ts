@@ -13,6 +13,9 @@ export const bigIntMin = (...args: bigint[]) =>
  * @param callback Function to execute. It will be passed a `bail` function that
  * can be used to bail out of the retry loop.
  * @param delayMs Number of milliseconds to wait between attempts.
+ * @param rateLimitDelayMs Number of milliseconds to wait if the error is a rate
+ * limit / too many requests (429) error. Defaults to 10,000 (10s). Rate limits
+ * do not count towards the `tries` limit.
  * @returns Result of the callback.
  */
 export const retry = async <T extends unknown>(
@@ -21,7 +24,8 @@ export const retry = async <T extends unknown>(
     attempt: number,
     bail: (error?: Error | string) => void
   ) => T | Promise<T>,
-  delayMs?: number
+  delayMs?: number,
+  rateLimitDelayMs: number = 10_000
 ): Promise<T> => {
   let attempt = 1
 
@@ -34,6 +38,18 @@ export const retry = async <T extends unknown>(
     try {
       return await callback(attempt, bail)
     } catch (err) {
+      const message = (
+        err instanceof Error ? err.message : String(err)
+      ).toLowerCase()
+      const isRateLimit =
+        message.includes('429') ||
+        message.includes('too many requests') ||
+        message.includes('rate limit exceeded')
+      if (isRateLimit) {
+        await new Promise((resolve) => setTimeout(resolve, rateLimitDelayMs))
+        continue
+      }
+
       attempt++
       if (attempt > tries) {
         throw err

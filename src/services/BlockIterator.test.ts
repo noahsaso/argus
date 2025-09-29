@@ -423,7 +423,7 @@ describe('BlockIterator', () => {
       await sendBlockPastEndHeight()
 
       // Stop immediately
-      iterator.stopIterating()
+      iterator.stopFetching()
 
       await iteratePromise
 
