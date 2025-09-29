@@ -52,10 +52,13 @@ export type TxResult = {
   height: string // block height
   tx: string // base64-encoded transaction bytes
   result: {
-    data: string // base64-encoded response data bytes
-    gas_wanted: string // gas requested
-    gas_used: string // gas actually used
-    events: {
+    code?: number
+    log?: string
+    codespace?: string
+    data?: string // base64-encoded response data bytes
+    gas_wanted?: string // gas requested
+    gas_used?: string // gas actually used
+    events?: {
       type: string // event type/category
       attributes: {
         key: string // base64 or UTF-8 string

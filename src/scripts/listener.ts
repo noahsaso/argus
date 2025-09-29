@@ -1,3 +1,4 @@
+import { toBase64 } from '@cosmjs/encoding'
 import { Tx } from '@dao-dao/types/protobuf/codegen/cosmos/tx/v1beta1/tx'
 import { decodeRawProtobufMsg } from '@dao-dao/types/protobuf/utils'
 import * as Sentry from '@sentry/node'
@@ -262,7 +263,7 @@ const main = async () => {
         try {
           tx = Tx.decode(rawTx)
         } catch (err) {
-          console.error('Error decoding TX', hash, err)
+          console.error('Error decoding TX', hash, err, toBase64(rawTx))
           return
         }
 
