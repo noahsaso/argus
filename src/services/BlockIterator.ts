@@ -308,12 +308,12 @@ export class BlockIterator {
     try {
       // Fetch the block first.
       const block = await retry(
-        20,
+        30,
         async () => {
           const client = await this.autoCosmWasmClient.getValidClient()
           return client.getBlock(height)
         },
-        500
+        1_000
       )
 
       // Fetch transactions in parallel, batched 10 at a time.
@@ -329,7 +329,7 @@ export class BlockIterator {
               try {
                 txHash = toHex(sha256(rawTx)).toUpperCase()
                 const tx = await retry(
-                  20,
+                  30,
                   async (_, bail) =>
                     this.autoCosmWasmClient
                       .getValidClient()
@@ -337,7 +337,7 @@ export class BlockIterator {
                         throw bail(err)
                       })
                       .then((client) => client.getTx(txHash!)),
-                  500
+                  1_000
                 )
                 if (!tx) {
                   throw new Error(`Tx ${txHash} not found in block ${height}`)
