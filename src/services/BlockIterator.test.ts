@@ -284,7 +284,7 @@ describe('BlockIterator', () => {
 
       await sendBlockPastEndHeight()
 
-      await iteratePromise
+      await expect(iteratePromise).rejects.toThrow('Block fetch failed')
 
       expect(onError).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -322,7 +322,7 @@ describe('BlockIterator', () => {
 
       await sendBlockPastEndHeight()
 
-      await iteratePromise
+      await expect(iteratePromise).rejects.toThrow('Transaction fetch failed')
 
       // Block should still be processed
       expect(onBlock).toHaveBeenCalled()
