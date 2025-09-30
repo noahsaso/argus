@@ -139,7 +139,7 @@ export class BlockIterator {
     autoCosmWasmClient,
     startHeight = 0,
     endHeight,
-    bufferSize = 10,
+    bufferSize = 50,
     throwErrors = true,
   }: {
     rpcUrl: string
@@ -279,7 +279,7 @@ export class BlockIterator {
     // Start tracking the latest block height.
     await this.startTrackingLatestBlockHeight()
 
-    const promises: Promise<void>[] = []
+    const fetchingBlocks: Promise<void>[] = []
 
     while (
       this.fetching &&
@@ -291,18 +291,17 @@ export class BlockIterator {
         // Wait for the latest block height to be >= the fetch height.
         this.latestBlockHeight < this.fetchHeight
       ) {
-        await new Promise((resolve) => setTimeout(resolve, 10))
+        await new Promise((resolve) => setTimeout(resolve, 50))
         continue
       }
 
       // Fetch this block in parallel
-      const promise = this.fetchBlockData(this.fetchHeight)
-      promises.push(promise)
+      fetchingBlocks.push(this.fetchBlockData(this.fetchHeight))
 
       // Keep a reasonable number of concurrent requests
-      if (promises.length >= this.bufferSize) {
-        await Promise.allSettled(promises)
-        promises.length = 0
+      if (fetchingBlocks.length >= this.bufferSize) {
+        await Promise.allSettled(fetchingBlocks)
+        fetchingBlocks.length = 0
       }
 
       this.fetchHeight++
@@ -310,7 +309,7 @@ export class BlockIterator {
 
     // Wait for any remaining promises, to ensure the last block is processed
     // and items are buffered.
-    await Promise.allSettled(promises)
+    await Promise.allSettled(fetchingBlocks)
 
     // Stop fetching.
     this.stopFetching()
@@ -323,7 +322,7 @@ export class BlockIterator {
     try {
       // Fetch the block first.
       const block = await retry(
-        10,
+        30,
         async () => {
           const client = (await this.autoCosmWasmClient.getValidClient())[
             'forceGetCometClient'
