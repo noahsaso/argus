@@ -1,20 +1,29 @@
 import { sha256 } from '@cosmjs/crypto'
 import { toHex } from '@cosmjs/encoding'
-import { Block } from '@cosmjs/stargate'
-import { TxResponse } from '@dao-dao/types/protobuf/codegen/cosmos/base/abci/v1beta1/abci'
+import { BlockHeader, Event, fromTendermintEvent } from '@cosmjs/stargate'
+import { Tx } from '@dao-dao/types/protobuf/codegen/cosmos/tx/v1beta1/tx'
 import { Any } from '@dao-dao/types/protobuf/codegen/google/protobuf/any'
 
-import { AutoCosmWasmClient, batch, errorContains, retry } from '@/utils'
+import { AutoCosmWasmClient, batch, retry } from '@/utils'
 
 import { ChainWebSocketListener } from './ChainWebSocketListener'
 
-export type TxData = TxResponse & {
+export type TxData = {
+  height: number
+  hash: string
+  index: number
+  code: number
+  codespace?: string
+  log?: string
   messages: Any[]
+  events: Event[] | readonly Event[]
+  responseData?: Uint8Array
+  tx: Uint8Array
 }
 
 export interface BufferedBlockData {
   height: number
-  block: Block
+  block: BlockHeader
   txs: (TxData | BlockIteratorError)[]
 }
 
@@ -125,14 +134,6 @@ export class BlockIterator {
    */
   private latestBlockHeightInterval: NodeJS.Timeout | null = null
 
-  /**
-   * Whether or not to skip unparseable TXs. If set to false, will error on
-   * unparseable TXs.
-   *
-   * Defaults to true.
-   */
-  private skipUnparseableTx: boolean = true
-
   constructor({
     rpcUrl,
     autoCosmWasmClient,
@@ -140,7 +141,6 @@ export class BlockIterator {
     endHeight,
     bufferSize = 10,
     throwErrors = true,
-    skipUnparseableTx = true,
   }: {
     rpcUrl: string
     autoCosmWasmClient: AutoCosmWasmClient
@@ -148,7 +148,6 @@ export class BlockIterator {
     endHeight?: number
     bufferSize?: number
     throwErrors?: boolean
-    skipUnparseableTx?: boolean
   }) {
     this.rpcUrl = rpcUrl
     this.autoCosmWasmClient = autoCosmWasmClient
@@ -156,7 +155,6 @@ export class BlockIterator {
     this.endHeight = endHeight
     this.bufferSize = bufferSize
     this.throwErrors = throwErrors
-    this.skipUnparseableTx = skipUnparseableTx
   }
 
   get startHeight() {
@@ -171,8 +169,8 @@ export class BlockIterator {
     onTx,
     onError,
   }: {
-    onBlock?: (block: Block) => void | Promise<void>
-    onTx?: (tx: TxData, block: Block) => void | Promise<void>
+    onBlock?: (block: BlockHeader) => void | Promise<void>
+    onTx?: (tx: TxData, block: BlockHeader) => void | Promise<void>
     onError?: (error: BlockIteratorError) => void | Promise<void>
   }) {
     if (!onBlock && !onTx) {
@@ -326,74 +324,64 @@ export class BlockIterator {
       // Fetch the block first.
       const block = await retry(
         10,
-        () =>
-          this.autoCosmWasmClient
-            .getValidClient()
-            .then((client) => client.getBlock(height)),
+        async () => {
+          const client = (await this.autoCosmWasmClient.getValidClient())[
+            'forceGetCometClient'
+          ]()
+          const [{ block }, { results }] = await Promise.all([
+            client.block(height),
+            client.blockResults(height),
+          ])
+          return { ...block, results }
+        },
         1_000
       )
 
       // Fetch transactions in parallel, batched 10 at a time.
       const txs: (TxData | BlockIteratorError)[] = []
+      const batchSize = 10
       await batch({
         list: block.txs,
-        batchSize: 10,
+        batchSize,
         grouped: true,
-        task: async (rawTxs) => {
+        task: async (rawTxs, _, batchIndex) => {
           const batchTxs = (
             await Promise.all(
               rawTxs.map(
-                async (rawTx): Promise<TxData | BlockIteratorError | null> => {
+                async (
+                  rawTx,
+                  rawTxIndex
+                ): Promise<TxData | BlockIteratorError | null> => {
+                  const txIndex = batchIndex * batchSize + rawTxIndex
+
                   let txHash: string | undefined
                   try {
                     txHash = toHex(sha256(rawTx)).toUpperCase()
 
-                    const tx = await retry(
-                      10,
-                      (_, bail) =>
-                        this.autoCosmWasmClient
-                          .getValidClient()
-                          .then((client) =>
-                            client['forceGetQueryClient']().tx.getTx(txHash!)
-                          )
-                          .catch((err) => {
-                            if (errorContains(err, 'tx parse error')) {
-                              throw bail(err)
-                            } else {
-                              throw err
-                            }
-                          }),
-                      1_000
-                    )
+                    const txResult = block.results[txIndex]
+                    // Should never happen if TX index is correct.
+                    if (!txResult) {
+                      throw new Error(
+                        `TX ${txHash} (index ${txIndex}) not found in block ${height} results`
+                      )
+                    }
 
-                    if (!tx) {
-                      throw new Error(
-                        `Tx ${txHash} not found in block ${height}`
-                      )
-                    }
-                    if (!tx.tx?.body) {
-                      throw new Error(
-                        `Tx ${txHash} in block ${height} has no TX body`
-                      )
-                    }
-                    if (!tx.txResponse) {
-                      throw new Error(
-                        `Tx ${txHash} in block ${height} has no TX response`
-                      )
-                    }
+                    // Decode TX to get messages (unless TX parse error code 2).
+                    const tx = txResult.code !== 2 ? Tx.decode(rawTx) : null
 
                     return {
-                      ...tx.txResponse,
-                      messages: tx.tx.body.messages,
+                      height: block.header.height,
+                      hash: txHash,
+                      index: txIndex,
+                      code: txResult.code,
+                      codespace: txResult.codespace,
+                      log: txResult.log,
+                      messages: tx?.body?.messages ?? [],
+                      events: txResult.events.map(fromTendermintEvent),
+                      responseData: txResult.data,
+                      tx: rawTx,
                     }
                   } catch (cause) {
-                    if (
-                      errorContains(cause, 'tx parse error') &&
-                      this.skipUnparseableTx
-                    ) {
-                      return null
-                    }
-
                     return new BlockIteratorError(
                       BlockIteratorErrorType.Tx,
                       cause,
@@ -411,7 +399,15 @@ export class BlockIterator {
 
       // Buffer the block data with both successful TXs and errors.
       this.buffer.set(height, {
-        block,
+        block: {
+          version: {
+            app: block.header.version.app.toString(),
+            block: block.header.version.block.toString(),
+          },
+          chainId: block.header.chainId,
+          height: block.header.height,
+          time: block.header.time.toISOString(),
+        },
         txs,
         height,
       })
@@ -457,7 +453,12 @@ export class BlockIterator {
       if (!this.latestBlockHeightInterval) {
         this.latestBlockHeightInterval = setInterval(async () => {
           const client = await this.autoCosmWasmClient.getValidClient()
-          this.latestBlockHeight = await client.getHeight()
+          const height = await client.getHeight().catch(() => null)
+          if (!height) {
+            return
+          }
+
+          this.latestBlockHeight = height
 
           // Resolve if we receive a block and haven't resolved yet.
           if (!resolved) {

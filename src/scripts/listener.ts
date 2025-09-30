@@ -183,7 +183,7 @@ const main = async () => {
   // or SIGTERM).
   try {
     await blockIterator.iterate({
-      onBlock: async ({ header: { chainId, height, time } }) => {
+      onBlock: async ({ chainId, height, time }) => {
         const currentTime = Date.now()
         metrics.blocksProcessed++
         metrics.currentBlockHeight = Number(height)
@@ -249,8 +249,8 @@ const main = async () => {
         ])
       },
       onTx: async (
-        { txhash: hash, code, messages: rawMessages, height, events },
-        { header: { time } }
+        { hash, code, messages: rawMessages, height, events },
+        { time }
       ) => {
         // Ignore unsuccessful TXs.
         if (code !== 0) {
