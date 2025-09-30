@@ -222,7 +222,7 @@ describe('BlockIterator', () => {
       expect(iterator).toBeDefined()
       expect(iterator.startHeight).toBe(0)
       expect(iterator.endHeight).toBe(undefined)
-      expect(iterator.bufferSize).toBe(10)
+      expect(iterator.bufferSize).toBe(50)
     })
   })
 
