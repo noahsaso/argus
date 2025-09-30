@@ -10,7 +10,6 @@ describe('WasmEventDataSource', () => {
 
   const createMockExtractorInput = (events: Event[]): ExtractableTxInput => ({
     hash: 'test-hash',
-    tx: {} as any,
     messages: [],
     events,
   })

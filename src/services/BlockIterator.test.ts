@@ -1,20 +1,23 @@
 import { sha256 } from '@cosmjs/crypto'
 import { toHex } from '@cosmjs/encoding'
-import { Block, IndexedTx } from '@cosmjs/stargate'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { Block } from '@cosmjs/stargate'
+import { GetTxResponse } from '@dao-dao/types/protobuf/codegen/cosmos/tx/v1beta1/service'
+import { MockInstance, beforeEach, describe, expect, it, vi } from 'vitest'
 import WS from 'vitest-websocket-mock'
 
 import { AutoCosmWasmClient } from '@/utils'
+import * as utils from '@/utils'
 
-import { BlockIterator, BlockIteratorErrorType } from './BlockIterator'
+import { BlockIterator, BlockIteratorErrorType, TxData } from './BlockIterator'
 
 describe('BlockIterator', () => {
   let mockAutoCosmWasmClient: AutoCosmWasmClient
   let mockClient: any
+  let mockGetTx: MockInstance
   let blockIterator: BlockIterator
   let mockServer: WS
 
-  let txMap: Record<string, IndexedTx> = {}
+  let txMap: Record<string, GetTxResponse> = {}
 
   const createMockBlock = (height: number): Block => {
     const txs = [
@@ -24,7 +27,19 @@ describe('BlockIterator', () => {
     ]
 
     txs.forEach((tx) => {
-      txMap[tx.hash] = tx
+      txMap[tx.txhash] = {
+        tx: {
+          body: {
+            messages: tx.messages,
+            memo: '',
+            timeoutHeight: BigInt(0),
+            extensionOptions: [],
+            nonCriticalExtensionOptions: [],
+          },
+          signatures: [],
+        },
+        txResponse: tx,
+      }
     })
 
     return {
@@ -35,19 +50,26 @@ describe('BlockIterator', () => {
         height: height,
         time: new Date(1640995200000 + height * 1000).toISOString(),
       },
-      txs: txs.map(({ tx }) => tx),
+      txs: txs.map(({ tx }) => tx!.value),
     }
   }
 
-  const createMockTx = (height: number, index: number): IndexedTx => ({
-    height: height,
-    txIndex: index,
-    hash: toHex(sha256(new Uint8Array([height, index]))).toUpperCase(),
+  const createMockTx = (height: number, index: number): TxData => ({
+    height: BigInt(height),
+    txhash: toHex(sha256(new Uint8Array([height, index]))).toUpperCase(),
+    codespace: '',
     code: 0,
-    events: [],
+    data: '',
     rawLog: '',
-    tx: new Uint8Array([height, index]),
-    msgResponses: [],
+    logs: [],
+    info: '',
+    timestamp: new Date().toISOString(),
+    messages: [],
+    events: [],
+    tx: {
+      typeUrl: '/cosmos.tx.v1beta1.Tx',
+      value: new Uint8Array([height, index]),
+    },
     gasUsed: 100000n,
     gasWanted: 200000n,
   })
@@ -81,6 +103,15 @@ describe('BlockIterator', () => {
   beforeEach(() => {
     vi.clearAllMocks()
 
+    const originalRetry = utils.retry
+    // Never retry during tests.
+    vi.spyOn(utils, 'retry').mockImplementation((_, ...params) => {
+      return originalRetry(1, ...params)
+    })
+
+    mockGetTx = vi
+      .fn()
+      .mockImplementation((hash: string) => Promise.resolve(txMap[hash]))
     mockClient = {
       forceGetCometClient: vi.fn(() => ({
         status: vi.fn().mockResolvedValue({
@@ -89,15 +120,17 @@ describe('BlockIterator', () => {
           },
         }),
       })),
+      forceGetQueryClient: vi.fn(() => ({
+        tx: {
+          getTx: mockGetTx,
+        },
+      })),
       // Mock successful block and tx fetching
       getBlock: vi
         .fn()
         .mockImplementation((height: number) =>
           Promise.resolve(createMockBlock(height))
         ),
-      getTx: vi
-        .fn()
-        .mockImplementation((hash: string) => Promise.resolve(txMap[hash])),
       getHeight: vi.fn().mockResolvedValue(1000),
     }
 
@@ -233,8 +266,8 @@ describe('BlockIterator', () => {
         blockHeights.push(block.header.height)
       })
 
-      onTx.mockImplementation((tx: IndexedTx) => {
-        txHeights.push(tx.height)
+      onTx.mockImplementation((_: TxData, block: Block) => {
+        txHeights.push(block.header.height)
       })
 
       // Start processing
@@ -303,7 +336,7 @@ describe('BlockIterator', () => {
       const onError = vi.fn()
 
       // Mock failing tx fetch
-      mockClient.getTx.mockRejectedValue(new Error('Transaction fetch failed'))
+      mockGetTx.mockRejectedValue(new Error('Transaction fetch failed'))
 
       const iterator = new BlockIterator({
         rpcUrl: 'http://localhost:26657',
@@ -326,6 +359,7 @@ describe('BlockIterator', () => {
 
       // Block should still be processed
       expect(onBlock).toHaveBeenCalled()
+      expect(onTx).not.toHaveBeenCalled()
       expect(onError).toHaveBeenCalledWith(
         expect.objectContaining({
           type: BlockIteratorErrorType.Tx,
@@ -336,6 +370,39 @@ describe('BlockIterator', () => {
           txHash: expect.any(String),
         })
       )
+    })
+
+    it('should ignore transaction parse errors', async () => {
+      const onBlock = vi.fn()
+      const onTx = vi.fn()
+      const onError = vi.fn()
+
+      // Mock failing tx fetch
+      mockGetTx.mockRejectedValue(new Error('tx parse error'))
+
+      const iterator = new BlockIterator({
+        rpcUrl: 'http://localhost:26657',
+        autoCosmWasmClient: mockAutoCosmWasmClient,
+        startHeight: 100,
+        endHeight: 102,
+        bufferSize: 2,
+      })
+
+      // Start processing
+      await iterator.iterate({
+        onBlock,
+        onTx,
+        onError,
+      })
+
+      await sendBlockPastEndHeight()
+
+      // Block should still be processed
+      expect(onBlock).toHaveBeenCalled()
+      // OnTx should not be called because we skip unparseable TXs.
+      expect(onTx).not.toHaveBeenCalled()
+      // OnError should not be called because we skip unparseable TXs.
+      expect(onError).not.toHaveBeenCalled()
     })
 
     it('should retry when block height is too high', async () => {
@@ -404,7 +471,7 @@ describe('BlockIterator', () => {
     })
   })
 
-  describe('stopIterating', () => {
+  describe('stopFetching', () => {
     it('should stop the iterator', async () => {
       const onBlock = vi.fn()
 

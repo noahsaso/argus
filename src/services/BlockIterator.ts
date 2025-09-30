@@ -1,19 +1,24 @@
 import { sha256 } from '@cosmjs/crypto'
 import { toHex } from '@cosmjs/encoding'
-import { Block, IndexedTx } from '@cosmjs/stargate'
-import { Tx } from '@dao-dao/types/protobuf/codegen/cosmos/tx/v1beta1/tx'
+import { Block } from '@cosmjs/stargate'
+import { TxResponse } from '@dao-dao/types/protobuf/codegen/cosmos/base/abci/v1beta1/abci'
+import { Any } from '@dao-dao/types/protobuf/codegen/google/protobuf/any'
 
-import { AutoCosmWasmClient, batch, retry } from '@/utils'
+import { AutoCosmWasmClient, batch, errorMessageContains, retry } from '@/utils'
 
 import { ChainWebSocketListener } from './ChainWebSocketListener'
 
-interface BufferedBlockData {
-  height: number
-  block: Block
-  txs: (IndexedTx | BlockIteratorError)[]
+export type TxData = TxResponse & {
+  messages: Any[]
 }
 
-type BufferedItem = BufferedBlockData | BlockIteratorError
+export interface BufferedBlockData {
+  height: number
+  block: Block
+  txs: (TxData | BlockIteratorError)[]
+}
+
+export type BufferedItem = BufferedBlockData | BlockIteratorError
 
 export enum BlockIteratorErrorType {
   StartHeightTooLow = 'startHeightTooLow',
@@ -167,7 +172,7 @@ export class BlockIterator {
     onError,
   }: {
     onBlock?: (block: Block) => void | Promise<void>
-    onTx?: (tx: IndexedTx, block: Block) => void | Promise<void>
+    onTx?: (tx: TxData, block: Block) => void | Promise<void>
     onError?: (error: BlockIteratorError) => void | Promise<void>
   }) {
     if (!onBlock && !onTx) {
@@ -320,7 +325,7 @@ export class BlockIterator {
     try {
       // Fetch the block first.
       const block = await retry(
-        30,
+        10,
         async () => {
           const client = await this.autoCosmWasmClient.getValidClient()
           return client.getBlock(height)
@@ -329,7 +334,7 @@ export class BlockIterator {
       )
 
       // Fetch transactions in parallel, batched 10 at a time.
-      const txs: (IndexedTx | BlockIteratorError)[] = []
+      const txs: (TxData | BlockIteratorError)[] = []
       await batch({
         list: block.txs,
         batchSize: 10,
@@ -337,52 +342,72 @@ export class BlockIterator {
         task: async (rawTxs) => {
           const batchTxs = (
             await Promise.all(
-              rawTxs.map(async (rawTx) => {
-                let txHash: string | undefined
-                try {
-                  txHash = toHex(sha256(rawTx)).toUpperCase()
-
-                  // Attempt to decode the TX.
+              rawTxs.map(
+                async (rawTx): Promise<TxData | BlockIteratorError | null> => {
+                  let txHash: string | undefined
                   try {
-                    const decoded = Tx.decode(rawTx)
-                    if (!decoded.body) {
-                      throw new Error('No body in TX')
+                    txHash = toHex(sha256(rawTx)).toUpperCase()
+
+                    const tx = await retry(
+                      10,
+                      (_, bail) =>
+                        this.autoCosmWasmClient
+                          .getValidClient()
+                          .catch((err) => {
+                            throw bail(err)
+                          })
+                          .then((client) =>
+                            client['forceGetQueryClient']().tx.getTx(txHash!)
+                          )
+                          .catch((err) => {
+                            if (errorMessageContains(err, 'tx parse error')) {
+                              throw bail(err)
+                            } else {
+                              throw err
+                            }
+                          }),
+                      1_000
+                    )
+
+                    if (!tx) {
+                      throw new Error(
+                        `Tx ${txHash} not found in block ${height}`
+                      )
                     }
-                  } catch (err) {
-                    if (this.skipUnparseableTx) {
+                    if (!tx.tx?.body) {
+                      throw new Error(
+                        `Tx ${txHash} in block ${height} has no TX body`
+                      )
+                    }
+                    if (!tx.txResponse) {
+                      throw new Error(
+                        `Tx ${txHash} in block ${height} has no TX response`
+                      )
+                    }
+
+                    return {
+                      ...tx.txResponse,
+                      messages: tx.tx.body.messages,
+                    }
+                  } catch (cause) {
+                    if (
+                      errorMessageContains(cause, 'tx parse error') &&
+                      this.skipUnparseableTx
+                    ) {
                       return null
-                    } else {
-                      throw err
                     }
-                  }
 
-                  const tx = await retry(
-                    30,
-                    async (_, bail) =>
-                      this.autoCosmWasmClient
-                        .getValidClient()
-                        .catch((err) => {
-                          throw bail(err)
-                        })
-                        .then((client) => client.getTx(txHash!)),
-                    1_000
-                  )
-                  if (!tx) {
-                    throw new Error(`Tx ${txHash} not found in block ${height}`)
+                    return new BlockIteratorError(
+                      BlockIteratorErrorType.Tx,
+                      cause,
+                      height,
+                      txHash
+                    )
                   }
-
-                  return tx
-                } catch (cause) {
-                  return new BlockIteratorError(
-                    BlockIteratorErrorType.Tx,
-                    cause,
-                    height,
-                    txHash
-                  )
                 }
-              })
+              )
             )
-          ).filter((tx): tx is IndexedTx | BlockIteratorError => tx !== null)
+          ).filter((tx): tx is TxData | BlockIteratorError => tx !== null)
           txs.push(...batchTxs)
         },
       })

@@ -119,3 +119,14 @@ export const batch = async <T extends unknown>({
     }
   }
 }
+
+/**
+ * Whether or not the error object or message contains a substring.
+ * @param error Error object.
+ * @param substring Substring to check for.
+ * @returns Whether or not the error contains the substring.
+ */
+export const errorMessageContains = (error: unknown, substring: string) => {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.includes(substring)
+}

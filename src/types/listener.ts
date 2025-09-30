@@ -1,6 +1,5 @@
 import { Event } from '@cosmjs/stargate'
 import { DecodedStargateMsg } from '@dao-dao/types/chain'
-import { Tx } from '@dao-dao/types/protobuf/codegen/cosmos/tx/v1beta1/tx'
 
 import { AutoCosmWasmClient } from '@/utils'
 
@@ -13,7 +12,6 @@ import { SerializedBlock } from './misc'
  */
 export type ExtractableTxInput = {
   hash: string
-  tx: Tx
   messages: DecodedStargateMsg['stargate'][]
   events: readonly Event[]
 }

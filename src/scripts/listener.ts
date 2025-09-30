@@ -1,5 +1,3 @@
-import { toBase64 } from '@cosmjs/encoding'
-import { Tx } from '@dao-dao/types/protobuf/codegen/cosmos/tx/v1beta1/tx'
 import { decodeRawProtobufMsg } from '@dao-dao/types/protobuf/utils'
 import * as Sentry from '@sentry/node'
 import { Command } from 'commander'
@@ -251,7 +249,7 @@ const main = async () => {
         ])
       },
       onTx: async (
-        { hash, code, tx: rawTx, height, events },
+        { txhash: hash, code, messages: rawMessages, height, events },
         { header: { time } }
       ) => {
         // Ignore unsuccessful TXs.
@@ -259,22 +257,9 @@ const main = async () => {
           return
         }
 
-        let tx
-        try {
-          tx = Tx.decode(rawTx)
-        } catch (err) {
-          console.error('Error decoding TX', hash, err, toBase64(rawTx))
-          return
-        }
-
-        if (!tx.body) {
-          console.error('No body in TX', hash, tx)
-          return
-        }
-
         // Attempt to decode each message, ignoring errors and returning the
         // original message if it fails.
-        const messages = tx.body.messages.flatMap((message) => {
+        const messages = rawMessages.flatMap((message) => {
           try {
             return decodeRawProtobufMsg(message)
           } catch {
@@ -285,7 +270,6 @@ const main = async () => {
         // Create input for extractors.
         const input: ExtractableTxInput = {
           hash,
-          tx,
           messages,
           events,
         }
