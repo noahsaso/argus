@@ -279,37 +279,59 @@ export class BlockIterator {
     // Start tracking the latest block height.
     await this.startTrackingLatestBlockHeight()
 
-    const fetchingBlocks: Promise<void>[] = []
+    const fetchingBlocks = new Map<number, Promise<void>>()
+    const maxConcurrentRequests = this.bufferSize
 
-    while (
-      this.fetching &&
-      (!this.endHeight || this.fetchHeight <= this.endHeight)
-    ) {
-      if (
+    const tryStartNewRequest = () => {
+      while (
+        this.fetching &&
+        (!this.endHeight || this.fetchHeight <= this.endHeight) &&
         // Wait if buffer is full.
-        this.buffer.size >= this.bufferSize ||
+        this.buffer.size < this.bufferSize &&
         // Wait for the latest block height to be >= the fetch height.
-        this.latestBlockHeight < this.fetchHeight
+        this.latestBlockHeight >= this.fetchHeight &&
+        // Wait for the number of concurrent requests to be less than the buffer
+        // size.
+        fetchingBlocks.size < maxConcurrentRequests
       ) {
-        await new Promise((resolve) => setTimeout(resolve, 50))
-        continue
+        const height = this.fetchHeight
+        this.fetchHeight++
+
+        const promise = this.fetchBlockData(height).finally(() => {
+          fetchingBlocks.delete(height)
+          // Try to start another request when this one completes.
+          setImmediate(tryStartNewRequest)
+        })
+
+        fetchingBlocks.set(height, promise)
       }
-
-      // Fetch this block in parallel
-      fetchingBlocks.push(this.fetchBlockData(this.fetchHeight))
-
-      // Keep a reasonable number of concurrent requests
-      if (fetchingBlocks.length >= this.bufferSize) {
-        await Promise.allSettled(fetchingBlocks)
-        fetchingBlocks.length = 0
-      }
-
-      this.fetchHeight++
     }
 
-    // Wait for any remaining promises, to ensure the last block is processed
-    // and items are buffered.
-    await Promise.allSettled(fetchingBlocks)
+    // Start the first request.
+    tryStartNewRequest()
+
+    // Keep trying until we've reached the end height AND all promises are done
+    while (
+      fetchingBlocks.size > 0 ||
+      (this.fetching && (!this.endHeight || this.fetchHeight <= this.endHeight))
+    ) {
+      if (fetchingBlocks.size > 0) {
+        await Promise.race(fetchingBlocks.values()).catch(() => {})
+      }
+
+      // Try to start new requests after each completion
+      tryStartNewRequest()
+
+      // If no requests are active but we haven't reached the end, wait and retry
+      if (
+        fetchingBlocks.size === 0 &&
+        this.fetching &&
+        (!this.endHeight || this.fetchHeight <= this.endHeight)
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 100))
+        tryStartNewRequest()
+      }
+    }
 
     // Stop fetching.
     this.stopFetching()
