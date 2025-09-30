@@ -38,14 +38,9 @@ export const retry = async <T extends unknown>(
     try {
       return await callback(attempt, bail)
     } catch (err) {
-      const message = (
-        err instanceof Error ? err.message : String(err)
-      ).toLowerCase()
-      const isRateLimit =
-        message.includes('429') ||
-        message.includes('too many requests') ||
-        message.includes('rate limit exceeded')
-      if (isRateLimit) {
+      if (
+        errorContains(err, '429', 'too many requests', 'rate limit exceeded')
+      ) {
         await new Promise((resolve) => setTimeout(resolve, rateLimitDelayMs))
         continue
       }
@@ -121,12 +116,17 @@ export const batch = async <T extends unknown>({
 }
 
 /**
- * Whether or not the error object or message contains a substring.
+ * Whether or not the error object or message case-insensitive contains any of
+ * the substrings.
  * @param error Error object.
- * @param substring Substring to check for.
- * @returns Whether or not the error contains the substring.
+ * @param substrings Substrings to check for.
+ * @returns Whether or not the error contains any of the substrings.
  */
-export const errorMessageContains = (error: unknown, substring: string) => {
-  const message = error instanceof Error ? error.message : String(error)
-  return message.includes(substring)
+export const errorContains = (error: unknown, ...substrings: string[]) => {
+  const message = (
+    error instanceof Error ? error.message : String(error)
+  ).toLowerCase()
+  return substrings.some((substring) =>
+    message.includes(substring.toLowerCase())
+  )
 }

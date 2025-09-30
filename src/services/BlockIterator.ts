@@ -4,7 +4,7 @@ import { Block } from '@cosmjs/stargate'
 import { TxResponse } from '@dao-dao/types/protobuf/codegen/cosmos/base/abci/v1beta1/abci'
 import { Any } from '@dao-dao/types/protobuf/codegen/google/protobuf/any'
 
-import { AutoCosmWasmClient, batch, errorMessageContains, retry } from '@/utils'
+import { AutoCosmWasmClient, batch, errorContains, retry } from '@/utils'
 
 import { ChainWebSocketListener } from './ChainWebSocketListener'
 
@@ -326,10 +326,10 @@ export class BlockIterator {
       // Fetch the block first.
       const block = await retry(
         10,
-        async () => {
-          const client = await this.autoCosmWasmClient.getValidClient()
-          return client.getBlock(height)
-        },
+        () =>
+          this.autoCosmWasmClient
+            .getValidClient()
+            .then((client) => client.getBlock(height)),
         1_000
       )
 
@@ -353,14 +353,11 @@ export class BlockIterator {
                       (_, bail) =>
                         this.autoCosmWasmClient
                           .getValidClient()
-                          .catch((err) => {
-                            throw bail(err)
-                          })
                           .then((client) =>
                             client['forceGetQueryClient']().tx.getTx(txHash!)
                           )
                           .catch((err) => {
-                            if (errorMessageContains(err, 'tx parse error')) {
+                            if (errorContains(err, 'tx parse error')) {
                               throw bail(err)
                             } else {
                               throw err
@@ -391,7 +388,7 @@ export class BlockIterator {
                     }
                   } catch (cause) {
                     if (
-                      errorMessageContains(cause, 'tx parse error') &&
+                      errorContains(cause, 'tx parse error') &&
                       this.skipUnparseableTx
                     ) {
                       return null
@@ -467,7 +464,7 @@ export class BlockIterator {
             resolved = true
             resolve()
           }
-        }, 1_000)
+        }, 3_000)
       }
 
       // Attempt to connect to the websocket. If it fails on the first
