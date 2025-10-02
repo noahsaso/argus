@@ -88,7 +88,6 @@ export const makeRbamAssignmentChanged: WebhookMaker<Extraction> = (config) =>
         },
         getValue: async (event, getLastEvent, env) => {
           const rbamAddress = event.address
-
           const daoAddress = await dao.compute({
             ...env,
             contractAddress: rbamAddress,
@@ -96,11 +95,9 @@ export const makeRbamAssignmentChanged: WebhookMaker<Extraction> = (config) =>
 
           const lastEvent = await getLastEvent()
           const lastAssignments: Assignment[] =
-            (lastEvent?.data as { assignments?: Assignment[] })?.assignments ??
-            []
-
+            (lastEvent?.data as Assignment[]) ?? []
           const curAssignments: Assignment[] =
-            (event.data as { assignments?: Assignment[] }).assignments ?? []
+            (event.data as Assignment[]) ?? []
 
           const curRoles: Role[] = await roles.compute({
             ...env,
