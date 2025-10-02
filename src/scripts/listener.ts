@@ -86,7 +86,14 @@ const main = async () => {
   )
 
   // Set up meilisearch.
-  await setupMeilisearch()
+  await setupMeilisearch().catch((err) => {
+    console.error('Error setting up meilisearch', err)
+    Sentry.captureException(err, {
+      tags: {
+        script: 'listener',
+      },
+    })
+  })
 
   console.log(
     `[${new Date().toISOString()}] Connecting to ${config.remoteRpc}...`

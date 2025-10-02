@@ -18,7 +18,7 @@ export const setupMeilisearch = async () => {
     throw new Error('State not found.')
   }
 
-  const client = await loadMeilisearch()
+  const client = loadMeilisearch()
 
   // Ensure indexes exist and are up to date with their config.
   for (const {
