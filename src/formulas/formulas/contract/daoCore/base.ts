@@ -109,12 +109,13 @@ export const proposalModules: ContractFormula<ProposalModuleWithInfo[]> = {
     const proposalModules: ProposalModule[] = []
 
     const transformedMap =
-      (await getTransformationMap<ProposalModule>(
+      // Try extractions first.
+      (await getExtractionMap<ProposalModule>(
         contractAddress,
         'proposalModule'
       )) ||
-      // Fallback to extractions.
-      (await getExtractionMap<ProposalModule>(
+      // Fallback to transformations.
+      (await getTransformationMap<ProposalModule>(
         contractAddress,
         'proposalModule'
       ))
