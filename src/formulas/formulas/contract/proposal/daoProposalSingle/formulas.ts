@@ -645,22 +645,21 @@ const getProposal = async (
   env: ContractEnv,
   id: number
 ): Promise<{ proposal: SingleChoiceProposal; v2: boolean } | null> => {
-  let proposal: SingleChoiceProposal | undefined | null = (
-    await env.getTransformationMatch<SingleChoiceProposal>(
-      env.contractAddress,
-      `proposal:${id}`
-    )
-  )?.value
-
-  // Fallback to extraction.
-  if (!proposal) {
-    proposal = (
+  // Try extraction first.
+  let proposal: SingleChoiceProposal | undefined | null =
+    (
       await env.getExtraction<SingleChoiceProposal>(
         env.contractAddress,
         `proposal:${id}`
       )
-    )?.data
-  }
+    )?.data ||
+    // Fallback to transformation.
+    (
+      await env.getTransformationMatch<SingleChoiceProposal>(
+        env.contractAddress,
+        `proposal:${id}`
+      )
+    )?.value
 
   // Fallback to events.
   let v2 = false

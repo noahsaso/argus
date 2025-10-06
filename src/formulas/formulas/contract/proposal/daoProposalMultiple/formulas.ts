@@ -605,22 +605,23 @@ const getProposal = async (
   env: ContractEnv,
   id: number
 ): Promise<MultipleChoiceProposal | null> =>
-  (
-    await env.getTransformationMatch<MultipleChoiceProposal>(
-      env.contractAddress,
-      `proposal:${id}`
-    )
-  )?.value ??
-  // Fallback to extraction.
+  // Try extraction first.
   (
     await env.getExtraction<MultipleChoiceProposal>(
       env.contractAddress,
       `proposal:${id}`
     )
-  )?.data ??
+  )?.data ||
+  // Fallback to transformation.
+  (
+    await env.getTransformationMatch<MultipleChoiceProposal>(
+      env.contractAddress,
+      `proposal:${id}`
+    )
+  )?.value ||
   // Fallback to events.
   (await env.get<MultipleChoiceProposal>(env.contractAddress, 'proposals', id))
-    ?.valueJson ??
+    ?.valueJson ||
   null
 
 // https://github.com/DA0-DA0/dao-contracts/blob/fa567797e2f42e70296a2d6f889f341ff80f0695/contracts/proposal/dao-proposal-single/src/proposal.rs#L50
