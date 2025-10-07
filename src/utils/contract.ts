@@ -5,6 +5,7 @@ import {
   QueryContractInfoRequest,
   QueryContractInfoResponse,
 } from '@dao-dao/types/protobuf/codegen/cosmwasm/wasm/v1/query'
+import { ContractInfo } from '@dao-dao/types/protobuf/codegen/cosmwasm/wasm/v1/types'
 
 import { AutoCosmWasmClient } from './AutoCosmWasmClient'
 
@@ -44,15 +45,21 @@ export const getContractInfo = async ({
     ? (XionQueryContractInfoResponse as typeof QueryContractInfoResponse)
     : QueryContractInfoResponse
 
-  const { address: retrievedAddress, contractInfo } = responseDecoder.decode(
-    await rpcClient.request(
-      'cosmwasm.wasm.v1.Query',
-      'ContractInfo',
-      QueryContractInfoRequest.encode({
-        address,
-      }).finish()
-    )
+  const request = await rpcClient.request(
+    'cosmwasm.wasm.v1.Query',
+    'ContractInfo',
+    QueryContractInfoRequest.encode({
+      address,
+    }).finish()
   )
+
+  const { address: retrievedAddress, contractInfo } =
+    chainId === 'columbus-5'
+      ? {
+          address,
+          contractInfo: ContractInfo.decode(request),
+        }
+      : responseDecoder.decode(request)
 
   if (!contractInfo) {
     throw new Error(`No contract found at address "${address}"`)
