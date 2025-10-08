@@ -155,6 +155,7 @@ export const listProposals: ContractFormula<
   compute: async (env) => {
     const {
       contractAddress,
+      getExtractionMap,
       getTransformationMap,
       getMap,
       args: { limit, startAfter },
@@ -166,6 +167,12 @@ export const listProposals: ContractFormula<
       : -Infinity
 
     const proposals =
+      // Try extractions first.
+      (await getExtractionMap<MultipleChoiceProposal>(
+        contractAddress,
+        'proposal'
+      )) ??
+      // Fallback to transformations.
       (await getTransformationMap<MultipleChoiceProposal>(
         contractAddress,
         'proposal'
@@ -234,6 +241,7 @@ export const reverseProposals: ContractFormula<
   compute: async (env) => {
     const {
       contractAddress,
+      getExtractionMap,
       getTransformationMap,
       getMap,
       args: { limit, startBefore },
@@ -245,6 +253,12 @@ export const reverseProposals: ContractFormula<
       : Infinity
 
     const proposals =
+      // Try extractions first.
+      (await getExtractionMap<MultipleChoiceProposal>(
+        contractAddress,
+        'proposal'
+      )) ??
+      // Fallback to transformations.
       (await getTransformationMap<MultipleChoiceProposal>(
         contractAddress,
         'proposal'

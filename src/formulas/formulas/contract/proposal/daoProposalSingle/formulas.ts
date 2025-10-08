@@ -157,6 +157,7 @@ export const listProposals: ContractFormula<
   compute: async (env) => {
     const {
       contractAddress,
+      getExtractionMap,
       getTransformationMap,
       getMap,
       args: { limit, startAfter },
@@ -167,10 +168,17 @@ export const listProposals: ContractFormula<
       ? Math.max(0, Number(startAfter))
       : -Infinity
 
-    let proposals = await getTransformationMap<SingleChoiceProposal>(
-      contractAddress,
-      'proposal'
-    )
+    let proposals =
+      // Try extractions first.
+      (await getExtractionMap<SingleChoiceProposal>(
+        contractAddress,
+        'proposal'
+      )) ??
+      // Fallback to transformations.
+      (await getTransformationMap<SingleChoiceProposal>(
+        contractAddress,
+        'proposal'
+      ))
 
     // Fallback to events.
     let v2 = false
@@ -254,6 +262,7 @@ export const reverseProposals: ContractFormula<
   compute: async (env) => {
     const {
       contractAddress,
+      getExtractionMap,
       getTransformationMap,
       getMap,
       args: { limit, startBefore },
@@ -264,10 +273,16 @@ export const reverseProposals: ContractFormula<
       ? Math.max(0, Number(startBefore))
       : Infinity
 
-    let proposals = await getTransformationMap<SingleChoiceProposal>(
-      contractAddress,
-      'proposal'
-    )
+    let proposals =
+      (await getExtractionMap<SingleChoiceProposal>(
+        contractAddress,
+        'proposal'
+      )) ??
+      // Fallback to transformations.
+      (await getTransformationMap<SingleChoiceProposal>(
+        contractAddress,
+        'proposal'
+      ))
 
     // Fallback to events.
     let v2 = false
