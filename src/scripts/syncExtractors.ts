@@ -12,16 +12,23 @@ const main = async () => {
   )
   program.option(
     '-e, --extractors <extractors>',
-    'comma-separated list of extractors to sync, or `ALL` to sync all extractors'
+    'comma-separated list of extractors to sync, or `ALL` to sync all extractors',
+    (value) => value.split(','),
+    []
+  )
+  program.option(
+    '-f, --flags <flags>',
+    'comma-separated list of flags to pass to the extractors',
+    (value) => value.split(','),
+    []
   )
   program.parse()
-  const { config: _config, extractors: _extractors } = program.opts()
+  const { config: _config, extractors, flags } = program.opts()
 
   // Load config from specific config file.
   ConfigManager.load(_config)
 
-  const extractors = _extractors?.split(',')
-  if (!extractors?.length) {
+  if (!extractors.length) {
     throw new Error(
       'pass `-e` with a comma-separated list of extractors to sync, or `ALL` to sync all extractors'
     )
@@ -29,7 +36,7 @@ const main = async () => {
 
   const job = await SyncExtractorsQueue.add(
     `script_${Date.now()}`,
-    { extractors },
+    { extractors, flags },
     { attempts: 1 }
   )
 

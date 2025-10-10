@@ -342,19 +342,20 @@ export const vote: ContractFormula<
     }
 
     let voteCast =
-      (
-        await getTransformationMatch<VoteCast<Ballot>>(
-          contractAddress,
-          `voteCast:${voter}:${proposalId}`
-        )
-      )?.value ??
-      // Fallback to extraction.
+      // Try extraction first.
       (
         await getExtraction<VoteCast<Ballot>>(
           contractAddress,
           `voteCast:${voter}:${proposalId}`
         )
-      )?.data
+      )?.data ??
+      // Fallback to transformation.
+      (
+        await getTransformationMatch<VoteCast<Ballot>>(
+          contractAddress,
+          `voteCast:${voter}:${proposalId}`
+        )
+      )?.value
 
     // Falback to events.
     if (!voteCast) {
@@ -587,7 +588,7 @@ export const openProposals: ContractFormula<
     // Get votes for the given address for each open proposal. If no address,
     // don't filter by vote.
     const openProposalVotes = env.args.address
-      ? await Promise.all(
+      ? await Promise.allSettled(
           openProposals.map(({ id }) =>
             vote.compute({
               ...env,
@@ -605,7 +606,7 @@ export const openProposals: ContractFormula<
       env.args.address && openProposalVotes
         ? openProposals.map((proposal, index) => ({
             ...proposal,
-            voted: !!openProposalVotes[index],
+            voted: openProposalVotes[index].status === 'fulfilled',
           }))
         : openProposals
 

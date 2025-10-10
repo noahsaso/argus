@@ -183,7 +183,7 @@ export class ProposalExtractor extends Extractor {
               address: contract.address,
               name: `voteCast:${sender}:${proposalId}`,
               data: {
-                ...vote,
+                vote,
                 votedAt: this.env.block.timestamp,
               },
             },
@@ -205,11 +205,17 @@ export class ProposalExtractor extends Extractor {
 
   static async *sync({
     autoCosmWasmClient,
+    flags,
   }: ExtractorSyncEnv): AsyncGenerator<DataSourceData, void, undefined> {
     const client = autoCosmWasmClient.client
     if (!client) {
       throw new Error('CosmWasm client not connected')
     }
+
+    const noDaos = flags.includes('no_daos')
+    const noProposalModules = flags.includes('no_proposal_modules')
+    const noProposals = flags.includes('no_proposals')
+    const noVotes = flags.includes('no_votes')
 
     const daoDaoCoreCodeIds =
       WasmCodeService.instance.findWasmCodeIdsByKeys('dao-dao-core')
@@ -221,20 +227,22 @@ export class ProposalExtractor extends Extractor {
         continue
       }
 
-      yield* contracts.map((address) =>
-        WasmInstantiateOrMigrateDataSource.data({
-          type: 'instantiate',
-          address,
-          codeId,
-          codeIdsKeys: ['dao-dao-core'],
-        })
-      )
+      if (!noDaos) {
+        yield* contracts.map((address) =>
+          WasmInstantiateOrMigrateDataSource.data({
+            type: 'instantiate',
+            address,
+            codeId,
+            codeIdsKeys: ['dao-dao-core'],
+          })
+        )
+      }
 
       // Get the proposal modules for each DAO in batches of 10.
       for (let i = 0; i < contracts.length; i += 10) {
         const batchContracts = contracts.slice(i, i + 10)
 
-        const data = (
+        const proposalModules = (
           await Promise.all(
             batchContracts.map(
               async (
@@ -276,12 +284,14 @@ export class ProposalExtractor extends Extractor {
           )
         ).flat()
 
-        yield* data
+        if (!noProposalModules) {
+          yield* proposalModules
+        }
 
         // Yield all proposals and votes for each proposal module.
         for (const {
           data: { address: proposalModuleAddress, codeIdsKeys },
-        } of data) {
+        } of proposalModules) {
           // Ignore unless this is a dao-proposal-* contract.
           if (!codeIdsKeys.some((key) => key.startsWith('dao-proposal-'))) {
             continue
@@ -301,32 +311,34 @@ export class ProposalExtractor extends Extractor {
                 })
 
               // Yield all proposals.
-              yield* proposalsPage.map(({ id }: { id: number }) =>
-                WasmEventDataSource.data({
-                  address: proposalModuleAddress,
-                  key: 'action',
-                  value: 'propose',
-                  _attributes: [
-                    {
-                      key: 'action',
-                      value: 'propose',
-                    },
-                    {
-                      key: 'proposal_id',
-                      value: id.toString(),
-                    },
-                    {
-                      key: 'sender',
-                      value: 'placeholder',
-                    },
-                    {
-                      key: 'sender',
-                      // Only the presence of this key is needed for filtering.
-                      value: 'placeholder',
-                    },
-                  ],
-                })
-              )
+              if (!noProposals) {
+                yield* proposalsPage.map(({ id }: { id: number }) =>
+                  WasmEventDataSource.data({
+                    address: proposalModuleAddress,
+                    key: 'action',
+                    value: 'propose',
+                    _attributes: [
+                      {
+                        key: 'action',
+                        value: 'propose',
+                      },
+                      {
+                        key: 'proposal_id',
+                        value: id.toString(),
+                      },
+                      {
+                        key: 'sender',
+                        value: 'placeholder',
+                      },
+                      {
+                        key: 'sender',
+                        // Only the presence of this key is needed for filtering.
+                        value: 'placeholder',
+                      },
+                    ],
+                  })
+                )
+              }
 
               // Fetch voters for each proposal.
               for (const { id } of proposalsPage) {
@@ -344,34 +356,36 @@ export class ProposalExtractor extends Extractor {
                   )
 
                   // Yield all votes.
-                  yield* votesPage.map(({ voter }: { voter: string }) =>
-                    WasmEventDataSource.data({
-                      address: proposalModuleAddress,
-                      key: 'action',
-                      value: 'vote',
-                      _attributes: [
-                        {
-                          key: 'action',
-                          value: 'vote',
-                        },
-                        {
-                          key: 'proposal_id',
-                          value: id.toString(),
-                        },
-                        {
-                          key: 'sender',
-                          value: voter,
-                        },
-                        {
-                          key: 'position',
-                          // Only the presence of this key is needed for
-                          // filtering. The actual vote will be queried from the
-                          // contract.
-                          value: 'placeholder',
-                        },
-                      ],
-                    })
-                  )
+                  if (!noVotes) {
+                    yield* votesPage.map(({ voter }: { voter: string }) =>
+                      WasmEventDataSource.data({
+                        address: proposalModuleAddress,
+                        key: 'action',
+                        value: 'vote',
+                        _attributes: [
+                          {
+                            key: 'action',
+                            value: 'vote',
+                          },
+                          {
+                            key: 'proposal_id',
+                            value: id.toString(),
+                          },
+                          {
+                            key: 'sender',
+                            value: voter,
+                          },
+                          {
+                            key: 'position',
+                            // Only the presence of this key is needed for
+                            // filtering. The actual vote will be queried from the
+                            // contract.
+                            value: 'placeholder',
+                          },
+                        ],
+                      })
+                    )
+                  }
 
                   // Stop if there are no more votes.
                   if (votesPage.length < limit) {

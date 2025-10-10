@@ -33,6 +33,7 @@ export type ExtractorEnv = {
 export type ExtractorSyncEnv = {
   config: Config
   autoCosmWasmClient: AutoCosmWasmClient
+  flags: string[]
 }
 
 /**

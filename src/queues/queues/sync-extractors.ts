@@ -13,6 +13,10 @@ export type SyncExtractorsQueuePayload = {
    * Extractor names to sync, or ALL to sync all extractors.
    */
   extractors: string[]
+  /**
+   * Flags to pass to the extractors.
+   */
+  flags: string[]
 }
 
 export class SyncExtractorsQueue extends BaseQueue<SyncExtractorsQueuePayload> {
@@ -60,6 +64,7 @@ export class SyncExtractorsQueue extends BaseQueue<SyncExtractorsQueuePayload> {
     const env: ExtractorSyncEnv = {
       config: this.options.config,
       autoCosmWasmClient: this.autoCosmWasmClient,
+      flags: job.data.flags,
     }
 
     for (const Extractor of toSync) {
