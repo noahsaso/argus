@@ -311,7 +311,7 @@ describe('Proposal Extractor', () => {
       expect(voteExtraction).toBeDefined()
       expect(voteExtraction!.address).toBe('juno1proposal123')
       expect(voteExtraction!.data).toEqual({
-        ...mockVote,
+        vote: mockVote,
         votedAt: '2022-01-01T01:00:00Z',
       })
     })
@@ -709,6 +709,7 @@ describe('Proposal Extractor', () => {
         ProposalExtractor.sync!({
           config: extractor.env.config,
           autoCosmWasmClient: extractor.env.autoCosmWasmClient,
+          flags: [],
         })
       )
 
@@ -896,6 +897,7 @@ describe('Proposal Extractor', () => {
         ProposalExtractor.sync!({
           config: extractor.env.config,
           autoCosmWasmClient: extractor.env.autoCosmWasmClient,
+          flags: [],
         })
       )
 
@@ -923,6 +925,7 @@ describe('Proposal Extractor', () => {
           ProposalExtractor.sync!({
             config: extractor.env.config,
             autoCosmWasmClient: brokenAutoClient as any,
+            flags: [],
           })
         )
       ).rejects.toThrow('CosmWasm client not connected')

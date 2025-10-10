@@ -436,6 +436,7 @@ describe('DAO RBAM Extractor', () => {
         DaoRbamExtractor.sync!({
           config: extractor.env.config,
           autoCosmWasmClient: extractor.env.autoCosmWasmClient,
+          flags: [],
         })
       )
 

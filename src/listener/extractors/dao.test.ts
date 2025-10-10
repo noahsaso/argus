@@ -669,6 +669,7 @@ describe('DAO Extractor', () => {
         DaoExtractor.sync!({
           config: extractor.env.config,
           autoCosmWasmClient: extractor.env.autoCosmWasmClient,
+          flags: [],
         })
       )
 

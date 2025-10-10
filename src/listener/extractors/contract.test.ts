@@ -407,6 +407,7 @@ describe('Contracts Extractor', () => {
         ContractExtractor.sync!({
           config: extractor.env.config,
           autoCosmWasmClient: extractor.env.autoCosmWasmClient,
+          flags: [],
         })
       )
 
