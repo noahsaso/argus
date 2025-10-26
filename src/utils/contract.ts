@@ -5,7 +5,6 @@ import {
   QueryContractInfoRequest,
   QueryContractInfoResponse,
 } from '@dao-dao/types/protobuf/codegen/cosmwasm/wasm/v1/query'
-import { ContractInfo } from '@dao-dao/types/protobuf/codegen/cosmwasm/wasm/v1/types'
 
 import { AutoCosmWasmClient } from './AutoCosmWasmClient'
 
@@ -54,12 +53,7 @@ export const getContractInfo = async ({
   )
 
   const { address: retrievedAddress, contractInfo } =
-    chainId === 'columbus-5'
-      ? {
-          address,
-          contractInfo: ContractInfo.decode(request),
-        }
-      : responseDecoder.decode(request)
+    responseDecoder.decode(request)
 
   if (!contractInfo) {
     throw new Error(`No contract found at address "${address}"`)

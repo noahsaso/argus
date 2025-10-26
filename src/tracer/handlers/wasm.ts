@@ -58,12 +58,10 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
     )
   }
 
-  const isTerraClassic = chainId === 'columbus-5'
-
   // Terra Classic uses different prefixes:
   // https://github.com/classic-terra/wasmd/blob/v0.30.0-terra.3/x/wasm/types/keys.go#L31-L32
-  const CONTRACT_KEY_PREFIX = isTerraClassic ? 0x04 : 0x02
-  const CONTRACT_STORE_PREFIX = isTerraClassic ? 0x05 : 0x03
+  const CONTRACT_KEY_PREFIX = 0x04
+  const CONTRACT_STORE_PREFIX = 0x05
 
   // Get the contract state event allowlist.
   const stateEventAllowlist = CONTRACT_STATE_EVENT_KEY_ALLOWLIST[chainId]?.map(
@@ -159,12 +157,9 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
       return
     }
 
-    const contractByteLength = isTerraClassic
-      ? keyData[1]
-      : DEFAULT_CONTRACT_BYTE_LENGTH
+    const contractByteLength = DEFAULT_CONTRACT_BYTE_LENGTH
     // Start of contract address in the key, taking into account the prefix.
-    // Terra Classic has an additional byte for the contract length.
-    const contractAddressOffset = isTerraClassic ? 2 : 1
+    const contractAddressOffset = 1
 
     // Ignore keys that are too short to be a wasm key.
     if (keyData.length < contractAddressOffset + contractByteLength) {
