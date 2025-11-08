@@ -24,6 +24,7 @@
     "db:migrate:data": "MIGRATING_DB=true sequelize-cli db:migrate --env data",
     "db:migrate:accounts": "MIGRATING_DB=true sequelize-cli db:migrate --env accounts",
     "infisical:run": "infisical run --token $INFISICAL_TOKEN --projectId $INFISICAL_PROJECT_ID --env $INFISICAL_ENVIRONMENT --",
+    "infisical:renew": "sh infisical-renew.sh",
     "with-infisical": "dotenv -- npm run infisical:run --",
     "with-dotenv": "dotenv --",
     "clear-cache": "node dist/scripts/clearCache.js",

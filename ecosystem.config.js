@@ -95,14 +95,7 @@ module.exports = {
     {
       name: 'renew-infisical-token',
       script: 'npm',
-      args: [
-        'run',
-        'with-dotenv',
-        '--',
-        'bash',
-        '-c',
-        'npx @infisical/cli token renew $INFISICAL_TOKEN',
-      ],
+      args: ['run', 'infisical:renew'],
       // every day at midnight
       cron_restart: '0 0 * * *',
     },
