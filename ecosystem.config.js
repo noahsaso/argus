@@ -98,6 +98,7 @@ module.exports = {
       args: ['run', 'infisical:renew'],
       // every day at midnight
       cron_restart: '0 0 * * *',
+      autorestart: false,
     },
   ],
 }

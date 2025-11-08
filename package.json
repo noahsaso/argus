@@ -33,7 +33,7 @@
     "workers": "node dist/scripts/workers.js",
     "workers:export": "node dist/scripts/worker-export.js",
     "update-tracked-wasm-codes": "node dist/scripts/update-tracked-wasm-codes.js",
-    "trace:prod": "npm install && npm run build; pm2 delete all; npm run with-infisical -- npm run db:migrate:data && pm2 start ecosystem.config.js --only tracer,workers,workers-bg && pm2 save",
+    "trace:prod": "npm install && npm run build; pm2 delete all; npm run with-infisical -- npm run db:migrate:data && pm2 start ecosystem.config.js --only tracer,workers,workers-bg,renew-infisical-token && pm2 save",
     "listen:prod": "npm install && npm run build; pm2 delete all; npm run with-infisical -- npm run db:migrate:data && pm2 start ecosystem.config.js --only listener,workers,workers-bg && pm2 save",
     "account-webhooks": "node dist/scripts/accountWebhooks.js",
     "transform": "node dist/scripts/transform.js",
