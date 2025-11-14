@@ -9,7 +9,11 @@ import { Block, State, loadDb } from '@/db'
 import { getExtractors } from '@/listener'
 import { ExtractQueue } from '@/queues/queues'
 import { setupMeilisearch } from '@/search'
-import { BlockIterator, WasmCodeService } from '@/services'
+import {
+  BlockIterator,
+  BlockIteratorErrorType,
+  WasmCodeService,
+} from '@/services'
 import { DbType, ExtractableTxInput, ExtractorEnv } from '@/types'
 import { AutoCosmWasmClient } from '@/utils'
 
@@ -322,6 +326,14 @@ const main = async () => {
         }
       },
       onError: (error) => {
+        // Don't log/capture TX errors if we're ignoring them.
+        if (
+          config.ignoreListenerTxErrors &&
+          error.type === BlockIteratorErrorType.Tx
+        ) {
+          return
+        }
+
         console.error(
           `[${new Date().toISOString()}] Listener error for ${error.type} (${
             error.blockHeight
