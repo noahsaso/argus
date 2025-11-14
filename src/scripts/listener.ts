@@ -109,6 +109,9 @@ const main = async () => {
     rpcUrl: config.remoteRpc,
     autoCosmWasmClient,
     startHeight: Number(state.latestBlockHeight),
+    throwErrors: {
+      tx: !config.ignoreListenerTxErrors,
+    },
   })
 
   // Add shutdown signal handlers.

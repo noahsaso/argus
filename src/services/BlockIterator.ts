@@ -99,9 +99,15 @@ export class BlockIterator {
   /**
    * Whether or not to throw errors when a block/TX error is encountered.
    *
-   * Default: true.
+   * Default: true for block and tx.
    */
-  public readonly throwErrors: boolean = true
+  public readonly throwErrors: {
+    block: boolean
+    tx: boolean
+  } = {
+    block: true,
+    tx: true,
+  }
 
   /**
    * Whether the fetcher is currently running.
@@ -140,21 +146,24 @@ export class BlockIterator {
     startHeight = 0,
     endHeight,
     bufferSize = 50,
-    throwErrors = true,
+    throwErrors: { block = true, tx = true } = {},
   }: {
     rpcUrl: string
     autoCosmWasmClient: AutoCosmWasmClient
     startHeight?: number
     endHeight?: number
     bufferSize?: number
-    throwErrors?: boolean
+    throwErrors?: {
+      block?: boolean
+      tx?: boolean
+    }
   }) {
     this.rpcUrl = rpcUrl
     this.autoCosmWasmClient = autoCosmWasmClient
     this._startHeight = startHeight
     this.endHeight = endHeight
     this.bufferSize = bufferSize
-    this.throwErrors = throwErrors
+    this.throwErrors = { block, tx }
   }
 
   get startHeight() {
@@ -232,7 +241,7 @@ export class BlockIterator {
         if (item instanceof BlockIteratorError) {
           await onError?.(item)
 
-          if (this.throwErrors) {
+          if (this.throwErrors.block) {
             throw item
           }
         } else {
@@ -244,7 +253,7 @@ export class BlockIterator {
             if (tx instanceof BlockIteratorError) {
               await onError?.(tx)
 
-              if (this.throwErrors) {
+              if (this.throwErrors.tx) {
                 throw tx
               }
             } else {
