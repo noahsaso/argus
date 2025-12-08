@@ -472,6 +472,7 @@ export const listVotes: ContractFormula<
   },
   compute: async ({
     contractAddress,
+    getExtractions,
     getTransformationMatches,
     getMap,
     getDateKeyModified,
@@ -483,20 +484,35 @@ export const listVotes: ContractFormula<
 
     const limitNum = limit ? Math.max(0, Number(limit)) : Infinity
 
-    let votesCast = (
-      await getTransformationMatches<VoteCast<Ballot>>(
-        contractAddress,
-        `voteCast:*:${proposalId}`,
-        undefined,
-        undefined,
-        startAfter
-          ? {
-              [Op.gt]: `voteCast:${startAfter}:${proposalId}`,
-            }
-          : undefined,
-        limit ? limitNum : undefined
-      )
-    )?.map(({ value }) => value)
+    let votesCast =
+      // Try extractions first.
+      (
+        await getExtractions<VoteCast<Ballot>>(
+          contractAddress,
+          `voteCast:*:${proposalId}`,
+          undefined,
+          startAfter
+            ? {
+                [Op.gt]: `voteCast:${startAfter}:${proposalId}`,
+              }
+            : undefined,
+          limit ? limitNum : undefined
+        )
+      )?.map(({ data }) => data) ??
+      (
+        await getTransformationMatches<VoteCast<Ballot>>(
+          contractAddress,
+          `voteCast:*:${proposalId}`,
+          undefined,
+          undefined,
+          startAfter
+            ? {
+                [Op.gt]: `voteCast:${startAfter}:${proposalId}`,
+              }
+            : undefined,
+          limit ? limitNum : undefined
+        )
+      )?.map(({ value }) => value)
 
     // Fallback to events.
     if (!votesCast) {

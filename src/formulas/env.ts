@@ -34,6 +34,7 @@ import type {
   FormulaDateGetter,
   FormulaDateWithValueMatchGetter,
   FormulaExtractionGetter,
+  FormulaExtractionsGetter,
   FormulaGetter,
   FormulaMapGetter,
   FormulaPrefetch,
@@ -1818,6 +1819,105 @@ export const getEnv = ({
     return extraction
   }
 
+  const getExtractions: FormulaExtractionsGetter = async (
+    address,
+    nameLike,
+    where,
+    whereName,
+    limit
+  ) => {
+    const dependentKey = getDependentKey(
+      Extraction.dependentKeyNamespace,
+      address,
+      nameLike
+    )
+    dependentKeys?.push({
+      key: dependentKey,
+      prefix: false,
+    })
+
+    // Columns we need to include in the DISTINCT ON clause.
+    const distinctOn = [
+      'name',
+      // We only need to add address to the DISTINCT ON clause if it's
+      // not defined. If it's defined, all fetched rows will be for the same
+      // contract. Otherwise, we retrieve all contracts matching the name and
+      // need to make sure only one name per contract is returned.
+      ...(address ? [] : ['address']),
+    ]
+
+    // Check cache.
+    const cachedExtractions = cache.events[dependentKey]
+    let extractions =
+      // If undefined, we haven't tried to fetch them yet. If not undefined,
+      // either they exist or they don't (null).
+      cachedExtractions !== undefined
+        ? ((cachedExtractions ?? []) as Extraction[])
+        : await Extraction.findAll({
+            attributes: [
+              // DISTINCT ON is not directly supported by Sequelize, so we need
+              // to cast to unknown and back to string to insert this at the
+              // beginning of the query. This ensures we use the most recent
+              // version of the name for each contract.
+              Sequelize.literal(
+                `DISTINCT ON("${distinctOn.join('", "')}") ''`
+              ) as unknown as string,
+              // Include `id` so that Sequelize doesn't prepend it to the query
+              // before the DISTINCT ON, which must come first.
+              'id',
+              'name',
+              'address',
+              'blockHeight',
+              'blockTimeUnixMs',
+              'txHash',
+              'data',
+            ],
+            where: {
+              name: {
+                // Replace * with % for LIKE query.
+                [Op.like]: nameLike.replace(/\*/g, '%'),
+                ...whereName,
+              },
+              ...(address && {
+                address,
+              }),
+              ...(where && {
+                data: where,
+              }),
+              blockHeight: blockHeightFilter,
+            },
+            limit,
+            order: [
+              // Needs to be first so we can use DISTINCT ON.
+              ...distinctOn.map((key) => [key, 'ASC'] as [string, 'ASC']),
+              // Descending block height ensures we get the most recent
+              // extraction for the (address, name) pair.
+              ['blockHeight', 'DESC'],
+            ],
+          })
+
+    // Type-check. Should never happen assuming dependent key namespaces are
+    // unique across different event types.
+    if (extractions.some((extraction) => !(extraction instanceof Extraction))) {
+      throw new Error('Incorrect event type.')
+    }
+
+    // Cache extractions, null if nonexistent.
+    if (cachedExtractions === undefined) {
+      cache.events[dependentKey] = extractions.length ? extractions : null
+    }
+
+    // If no extractions found, return undefined.
+    if (!extractions.length) {
+      return undefined
+    }
+
+    // Call hook.
+    await onFetch?.(extractions)
+
+    return extractions
+  }
+
   const getExtractionMap: FormulaTransformationMapGetter = async (
     address,
     namePrefix
@@ -2131,6 +2231,7 @@ export const getEnv = ({
     getCommunityPoolBalances,
 
     getExtraction,
+    getExtractions,
     getExtractionMap,
     getDateFirstExtracted,
 

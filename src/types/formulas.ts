@@ -283,6 +283,17 @@ export type FormulaExtractionGetter = <T = any>(
   name: string
 ) => Promise<Extraction<T> | undefined>
 
+export type FormulaExtractionsGetter = <T = any>(
+  address: string | undefined,
+  nameLike: string,
+  // TODO(cache): figure out how this fits into the dependent key caching system
+  whereClause?: any,
+  // TODO(cache): figure out how this fits into the dependent key caching system
+  whereName?: any,
+  // TODO(cache): figure out how this fits into the dependent key caching system
+  limit?: number
+) => Promise<Extraction<T>[] | undefined>
+
 export type FormulaExtractionMapGetter = <V = any>(
   contractAddress: string,
   namePrefix: string
@@ -340,6 +351,7 @@ export type Env<Args extends Record<string, string> = {}> = {
   getProposalVoteCount: FormulaProposalVoteCountGetter
   getCommunityPoolBalances: FormulaCommunityPoolBalancesGetter
   getExtraction: FormulaExtractionGetter
+  getExtractions: FormulaExtractionsGetter
   getExtractionMap: FormulaExtractionMapGetter
   getDateFirstExtracted: FormulaDateFirstExtractedGetter
   getFeegrantAllowance: FormulaFeegrantAllowanceGetter
