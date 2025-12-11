@@ -38,7 +38,9 @@
     "polytone-note": [],
     "polytone-voice": [],
     "valence-account": [],
-    "dao-rbam": []
+    "dao-rbam": [],
+    "xion-asset": [],
+    "xion-marketplace": []
   },
   "daoDaoBase": "https://testnet.daodao.zone",
   "discordNotifierApiKey": "key",
