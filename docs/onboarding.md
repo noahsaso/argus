@@ -1,5 +1,13 @@
 # onboarding
 
+## intro
+
+hard part of a governance app is not the smart contracts—it's serving real time
+data fast enough to many people to make the app usable
+
+there are so many contracts and chains, in a single DAO, that there is a lot of
+scattered information to look up and aggregate
+
 ## why
 
 blockchain nodes are primarily designed for consensus and TX processing, not
