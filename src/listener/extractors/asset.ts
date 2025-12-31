@@ -28,23 +28,28 @@ export class AssetExtractor extends Extractor {
       type: 'instantiate',
       codeIdsKeys: CODE_IDS_KEYS,
     }),
-    // Track listing events (list, delist)
-    WasmEventDataSource.source('listing', {
+    // Track all known wasm events with action attribute
+    WasmEventDataSource.source('allEvents', {
       key: 'action',
-      value: ['list', 'delist'],
-      otherAttributes: ['id', 'collection', 'seller'],
-    }),
-    // Track reservation events (reserve, unreserve)
-    WasmEventDataSource.source('reservation', {
-      key: 'action',
-      value: ['reserve', 'unreserve'],
-      otherAttributes: ['id', 'collection'],
-    }),
-    // Track purchase events (buy)
-    WasmEventDataSource.source('purchase', {
-      key: 'action',
-      value: 'buy',
-      otherAttributes: ['id', 'seller', 'buyer'],
+      value: [
+        // CW721 standard actions (inherited from cw721-base)
+        'mint',
+        'burn',
+        'transfer_nft',
+        'send_nft',
+        'approve',
+        'revoke',
+        'approve_all',
+        'revoke_all',
+        // Asset contract custom actions (from contracts/asset/src/execute/)
+        'list',
+        'delist',
+        'reserve',
+        'unreserve',
+        'buy',
+        'set_collection_plugin',
+        'remove_collection_plugin',
+      ],
     }),
   ]
 
@@ -53,23 +58,11 @@ export class AssetExtractor extends Extractor {
     address,
   }) => this.saveConfig(address)
 
-  // Handler for listing events
-  protected listing: ExtractorHandler<WasmEventData> = ({
+  // Handler for ALL wasm events
+  protected allEvents: ExtractorHandler<WasmEventData> = ({
     address,
     attributes,
-  }) => this.saveListing(address, attributes)
-
-  // Handler for reservation events
-  protected reservation: ExtractorHandler<WasmEventData> = ({
-    address,
-    attributes,
-  }) => this.saveReservation(address, attributes)
-
-  // Handler for purchase events
-  protected purchase: ExtractorHandler<WasmEventData> = ({
-    address,
-    attributes,
-  }) => this.savePurchase(address, attributes)
+  }) => this.saveEvent(address, attributes)
 
   /**
    * Save contract config on instantiation
@@ -123,9 +116,9 @@ export class AssetExtractor extends Extractor {
   }
 
   /**
-   * Save listing data on list/delist events
+   * Save ALL wasm events from asset contracts
    */
-  private async saveListing(
+  private async saveEvent(
     address: string,
     attributes: Partial<Record<string, string[]>>
   ): Promise<ExtractorHandlerOutput[]> {
@@ -147,256 +140,33 @@ export class AssetExtractor extends Extractor {
     }
 
     const action = attributes.action?.[0]
-    const listingId = attributes.id?.[0]
-    const collection = attributes.collection?.[0]
-    const seller = attributes.seller?.[0]
-
-    if (!listingId) {
-      throw new Error('missing listing id')
-    }
-
-    const output: ExtractorHandlerOutput[] = []
-
-    if (action === 'list') {
-      const price = attributes.price?.[0]
-      const denom = attributes.denom?.[0]
-      const reservedUntil = attributes.reserved_until?.[0]
-
-      // Save the listing
-      output.push({
-        address,
-        name: `asset/listing:${listingId}`,
-        data: {
-          id: listingId,
-          collection,
-          price,
-          denom,
-          seller,
-          reservedUntil: reservedUntil !== 'none' ? reservedUntil : null,
-          status: 'active',
-          listedAt: this.env.block.timeUnixMs,
-          listedAtBlockHeight: this.env.block.height,
-        },
-      })
-
-      // Index by collection
-      if (collection) {
-        output.push({
-          address,
-          name: `asset/collection:${collection}:listing:${listingId}`,
-          data: {
-            listingId,
-            seller,
-            price,
-            denom,
-          },
-        })
-      }
-
-      // Index by seller
-      if (seller) {
-        output.push({
-          address,
-          name: `asset/seller:${seller}:listing:${listingId}`,
-          data: listingId,
-        })
-      }
-    } else if (action === 'delist') {
-      // Update listing status to delisted
-      output.push({
-        address,
-        name: `asset/listing:${listingId}`,
-        data: {
-          id: listingId,
-          collection,
-          seller,
-          status: 'delisted',
-          delistedAt: this.env.block.timeUnixMs,
-          delistedAtBlockHeight: this.env.block.height,
-        },
-      })
-    }
-
-    return output
-  }
-
-  /**
-   * Save reservation data on reserve/unreserve events
-   */
-  private async saveReservation(
-    address: string,
-    attributes: Partial<Record<string, string[]>>
-  ): Promise<ExtractorHandlerOutput[]> {
-    const client = this.env.autoCosmWasmClient.client
-    if (!client) {
-      throw new Error('CosmWasm client not connected')
-    }
-
-    const contract = await getContractInfo({ client, address })
-
-    // Only process if it's an asset contract
-    if (
-      !WasmCodeService.instance.matchesWasmCodeKeys(
-        contract.codeId,
-        ...CODE_IDS_KEYS
-      )
-    ) {
+    if (!action) {
       return []
     }
 
-    const action = attributes.action?.[0]
-    const listingId = attributes.id?.[0]
-    const collection = attributes.collection?.[0]
-    const reserver = attributes.reserver?.[0]
-
-    if (!listingId) {
-      throw new Error('missing listing id')
-    }
-
-    const output: ExtractorHandlerOutput[] = []
-
-    if (action === 'reserve') {
-      const reservedUntil = attributes.reserved_until?.[0]
-
-      output.push({
-        address,
-        name: `asset/reservation:${listingId}`,
-        data: {
-          listingId,
-          collection,
-          reserver,
-          reservedUntil,
-          status: 'reserved',
-          reservedAt: this.env.block.timeUnixMs,
-        },
-      })
-
-      // Index reservations by reserver
-      if (reserver) {
-        output.push({
-          address,
-          name: `asset/reserver:${reserver}:reservation:${listingId}`,
-          data: listingId,
-        })
+    // Convert attributes to a flat object (take first value of each key)
+    const flatAttributes: Record<string, string> = {}
+    for (const [key, values] of Object.entries(attributes)) {
+      if (values && values.length > 0) {
+        flatAttributes[key] = values[0]
       }
-    } else if (action === 'unreserve') {
-      const delisted = attributes.delisted?.[0]
+    }
 
-      output.push({
+    // Create extraction name based on action
+    const extractionName = `asset/${action}`
+
+    return [
+      {
         address,
-        name: `asset/reservation:${listingId}`,
+        name: extractionName,
         data: {
-          listingId,
-          collection,
-          reserver,
-          status: 'unreserved',
-          unreservedAt: this.env.block.timeUnixMs,
-          delistedAfter: delisted === 'true',
+          ...flatAttributes,
+          blockHeight: this.env.block.height,
+          blockTimeUnixMs: this.env.block.timeUnixMs,
+          txHash: this.env.txHash,
         },
-      })
-    }
-
-    return output
-  }
-
-  /**
-   * Save purchase data on buy events
-   */
-  private async savePurchase(
-    address: string,
-    attributes: Partial<Record<string, string[]>>
-  ): Promise<ExtractorHandlerOutput[]> {
-    const client = this.env.autoCosmWasmClient.client
-    if (!client) {
-      throw new Error('CosmWasm client not connected')
-    }
-
-    const contract = await getContractInfo({ client, address })
-
-    // Only process if it's an asset contract
-    if (
-      !WasmCodeService.instance.matchesWasmCodeKeys(
-        contract.codeId,
-        ...CODE_IDS_KEYS
-      )
-    ) {
-      return []
-    }
-
-    const listingId = attributes.id?.[0]
-    const price = attributes.price?.[0]
-    const denom = attributes.denom?.[0]
-    const seller = attributes.seller?.[0]
-    const buyer = attributes.buyer?.[0]
-
-    if (!listingId || !buyer) {
-      throw new Error('missing required purchase attributes')
-    }
-
-    const output: ExtractorHandlerOutput[] = []
-
-    // Generate unique sale ID
-    const saleId = `${listingId}:${this.env.block.height}`
-
-    // Record the sale
-    output.push({
-      address,
-      name: `asset/sale:${saleId}`,
-      data: {
-        listingId,
-        price,
-        denom,
-        seller,
-        buyer,
-        soldAt: this.env.block.timeUnixMs,
-        soldAtBlockHeight: this.env.block.height,
-        txHash: this.env.txHash,
       },
-    })
-
-    // Update listing status to sold
-    output.push({
-      address,
-      name: `asset/listing:${listingId}`,
-      data: {
-        id: listingId,
-        status: 'sold',
-        soldAt: this.env.block.timeUnixMs,
-        buyer,
-        price,
-        denom,
-      },
-    })
-
-    // Index sale by buyer
-    output.push({
-      address,
-      name: `asset/buyer:${buyer}:sale:${saleId}`,
-      data: {
-        saleId,
-        listingId,
-        price,
-        denom,
-        seller,
-      },
-    })
-
-    // Index sale by seller
-    if (seller) {
-      output.push({
-        address,
-        name: `asset/seller:${seller}:sale:${saleId}`,
-        data: {
-          saleId,
-          listingId,
-          price,
-          denom,
-          buyer,
-        },
-      })
-    }
-
-    return output
+    ]
   }
 
   /**
