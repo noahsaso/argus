@@ -189,8 +189,9 @@ export class MarketplaceExtractor extends Extractor {
       throw new Error('CosmWasm client not connected')
     }
 
-    const marketplaceCodeIds =
-      WasmCodeService.instance.findWasmCodeIdsByKeys(...CODE_IDS_KEYS)
+    const marketplaceCodeIds = WasmCodeService.instance.findWasmCodeIdsByKeys(
+      ...CODE_IDS_KEYS
+    )
 
     if (marketplaceCodeIds.length === 0) {
       return

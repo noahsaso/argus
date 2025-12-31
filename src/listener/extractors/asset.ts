@@ -180,8 +180,9 @@ export class AssetExtractor extends Extractor {
       throw new Error('CosmWasm client not connected')
     }
 
-    const assetCodeIds =
-      WasmCodeService.instance.findWasmCodeIdsByKeys(...CODE_IDS_KEYS)
+    const assetCodeIds = WasmCodeService.instance.findWasmCodeIdsByKeys(
+      ...CODE_IDS_KEYS
+    )
 
     if (assetCodeIds.length === 0) {
       return
