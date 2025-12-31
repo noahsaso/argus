@@ -6,11 +6,11 @@ There are three pieces: the indexer, the API, Meilisearch, and Soketi.
 
 ![diagram](./images/indexer.png)
 
-The indexer is composed of a blockchain node running the normal binary,
-represented in the diagram above as `node`, and an exporter process that runs
-alongside it. The exporter listens for state events and writes them to a
-PostgreSQL database. Each state write is formatted as a JSON object representing
-a state change and its metadata, such as the contract and block height.
+The indexer is composed of a blockchain node running the normal binary and
+exporter processes (tracer and workers) that run alongside it. The exporter
+listens for state events and writes them to a PostgreSQL database. Each state
+write is formatted as a JSON object representing a state change and its
+metadata, such as the contract and block height.
 
 Read the [exporter docs](./exporter.md) for more information on how the exporter
 works and what its responsibilities are.
