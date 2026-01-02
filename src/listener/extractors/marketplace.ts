@@ -69,12 +69,12 @@ export class MarketplaceExtractor extends Extractor {
    * Save marketplace config
    */
   private async saveConfig(address: string): Promise<ExtractorHandlerOutput[]> {
-    const client = this.env.autoCosmWasmClient.client
-    if (!client) {
-      throw new Error('CosmWasm client not connected')
-    }
+    const contract = await getContractInfo({
+      client: this.env.autoCosmWasmClient,
+      address,
+    })
 
-    const contract = await getContractInfo({ client, address })
+    const client = await this.env.autoCosmWasmClient.getValidClient()
 
     // Only process if it's a marketplace contract
     if (
@@ -131,12 +131,10 @@ export class MarketplaceExtractor extends Extractor {
     address: string,
     attributes: Partial<Record<string, string[]>>
   ): Promise<ExtractorHandlerOutput[]> {
-    const client = this.env.autoCosmWasmClient.client
-    if (!client) {
-      throw new Error('CosmWasm client not connected')
-    }
-
-    const contract = await getContractInfo({ client, address })
+    const contract = await getContractInfo({
+      client: this.env.autoCosmWasmClient,
+      address,
+    })
 
     // Only process if it's a marketplace contract
     if (
@@ -184,10 +182,7 @@ export class MarketplaceExtractor extends Extractor {
   static async *sync({
     autoCosmWasmClient,
   }: ExtractorSyncEnv): AsyncGenerator<DataSourceData, void, undefined> {
-    const client = autoCosmWasmClient.client
-    if (!client) {
-      throw new Error('CosmWasm client not connected')
-    }
+    const client = await autoCosmWasmClient.getValidClient()
 
     const marketplaceCodeIds = WasmCodeService.instance.findWasmCodeIdsByKeys(
       ...CODE_IDS_KEYS
