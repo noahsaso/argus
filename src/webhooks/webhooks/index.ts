@@ -10,6 +10,7 @@ import * as indexerCwReceipt from './indexerCwReceipt'
 import * as notify from './notify'
 import * as telegram from './telegram'
 import * as websockets from './websockets'
+import * as xion from './xion'
 
 let processedWebhooks: ProcessedWebhook<any, any>[] | undefined
 
@@ -25,6 +26,7 @@ export const getProcessedWebhooks = async (
         ...Object.values(indexerCwReceipt),
         ...Object.values(notify),
         ...Object.values(websockets),
+        ...Object.values(xion),
       ]
 
       const _webhooks: Webhook[] = [
