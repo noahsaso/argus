@@ -19,8 +19,8 @@ import { Extractor } from '../base'
 
 const CODE_IDS_KEYS = ['xion-marketplace']
 
-export class MarketplaceExtractor extends Extractor {
-  static type = 'marketplace'
+export class XionMarketplaceExtractor extends Extractor {
+  static type = 'xion-marketplace'
 
   static sources: ExtractorDataSource[] = [
     // Track contract instantiation
