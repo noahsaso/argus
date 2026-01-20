@@ -14,13 +14,13 @@ import {
   WasmEventDataSource,
   WasmInstantiateOrMigrateData,
   WasmInstantiateOrMigrateDataSource,
-} from '../sources'
-import { Extractor } from './base'
+} from '../../sources'
+import { Extractor } from '../base'
 
-const CODE_IDS_KEYS = ['xion-asset']
+const CODE_IDS_KEYS = ['xion-marketplace']
 
-export class AssetExtractor extends Extractor {
-  static type = 'asset'
+export class MarketplaceExtractor extends Extractor {
+  static type = 'marketplace'
 
   static sources: ExtractorDataSource[] = [
     // Track contract instantiation
@@ -32,23 +32,24 @@ export class AssetExtractor extends Extractor {
     WasmEventDataSource.source('allEvents', {
       key: 'action',
       value: [
-        // CW721 standard actions (inherited from cw721-base)
-        'mint',
-        'burn',
-        'transfer_nft',
-        'send_nft',
-        'approve',
-        'revoke',
-        'approve_all',
-        'revoke_all',
-        // Asset contract custom actions (from contracts/asset/src/execute/)
-        'list',
-        'delist',
-        'reserve',
-        'unreserve',
-        'buy',
-        'set_collection_plugin',
-        'remove_collection_plugin',
+        // Marketplace contract actions (from contracts/marketplace/src/execute.rs)
+        // Listing events
+        'list-item',
+        'cancel-listing',
+        // Sale events
+        'item-sold',
+        // Pending sale events (approval queue)
+        'pending-sale-created',
+        'sale-approved',
+        'sale-rejected',
+        // Offer events
+        'create-offer',
+        'cancel-offer',
+        // Collection offer events
+        'create-collection-offer',
+        'cancel-collection-offer',
+        // Config events
+        'update-config',
       ],
     }),
   ]
@@ -65,7 +66,7 @@ export class AssetExtractor extends Extractor {
   }) => this.saveEvent(address, attributes)
 
   /**
-   * Save contract config on instantiation
+   * Save marketplace config
    */
   private async saveConfig(address: string): Promise<ExtractorHandlerOutput[]> {
     const contract = await getContractInfo({
@@ -73,7 +74,9 @@ export class AssetExtractor extends Extractor {
       address,
     })
 
-    // Only process if it's an asset contract
+    const client = await this.env.autoCosmWasmClient.getValidClient()
+
+    // Only process if it's a marketplace contract
     if (
       !WasmCodeService.instance.matchesWasmCodeKeys(
         contract.codeId,
@@ -81,6 +84,14 @@ export class AssetExtractor extends Extractor {
       )
     ) {
       return []
+    }
+
+    // Query the config from the contract
+    let config
+    try {
+      config = await client.queryContractSmart(address, { config: {} })
+    } catch {
+      config = null
     }
 
     // Ensure contract exists in the DB
@@ -102,8 +113,8 @@ export class AssetExtractor extends Extractor {
     return [
       {
         address: contract.address,
-        name: 'asset/config',
-        data: {
+        name: 'marketplace/config',
+        data: config || {
           codeId: contract.codeId,
           admin: contract.admin,
           creator: contract.creator,
@@ -114,7 +125,7 @@ export class AssetExtractor extends Extractor {
   }
 
   /**
-   * Save ALL wasm events from asset contracts
+   * Save ALL wasm events from marketplace contracts
    */
   private async saveEvent(
     address: string,
@@ -125,7 +136,7 @@ export class AssetExtractor extends Extractor {
       address,
     })
 
-    // Only process if it's an asset contract
+    // Only process if it's a marketplace contract
     if (
       !WasmCodeService.instance.matchesWasmCodeKeys(
         contract.codeId,
@@ -149,7 +160,7 @@ export class AssetExtractor extends Extractor {
     }
 
     // Create extraction name based on action
-    const extractionName = `asset/${action}`
+    const extractionName = `marketplace/${action}`
 
     return [
       {
@@ -173,15 +184,15 @@ export class AssetExtractor extends Extractor {
   }: ExtractorSyncEnv): AsyncGenerator<DataSourceData, void, undefined> {
     const client = await autoCosmWasmClient.getValidClient()
 
-    const assetCodeIds = WasmCodeService.instance.findWasmCodeIdsByKeys(
+    const marketplaceCodeIds = WasmCodeService.instance.findWasmCodeIdsByKeys(
       ...CODE_IDS_KEYS
     )
 
-    if (assetCodeIds.length === 0) {
+    if (marketplaceCodeIds.length === 0) {
       return
     }
 
-    for (const codeId of assetCodeIds) {
+    for (const codeId of marketplaceCodeIds) {
       let contracts: readonly string[]
       try {
         contracts = await client.getContracts(codeId)
@@ -193,7 +204,7 @@ export class AssetExtractor extends Extractor {
         continue
       }
 
-      // Yield instantiate events for each contract
+      // Yield instantiate for each contract to get config
       yield* contracts.map((address) =>
         WasmInstantiateOrMigrateDataSource.data({
           type: 'instantiate',
@@ -203,66 +214,11 @@ export class AssetExtractor extends Extractor {
         })
       )
 
-      // Query all listings from each contract for backfill
-      for (const contractAddress of contracts) {
-        try {
-          // Paginate through all listings using the asset contract's query
-          const limit = 30
-          let startAfter: string | undefined
-
-          while (true) {
-            // Asset contract uses CW721 extension query format
-            const response = await client.queryContractSmart(contractAddress, {
-              extension: {
-                msg: {
-                  get_all_listings: {
-                    start_after: startAfter,
-                    limit,
-                  },
-                },
-              },
-            })
-
-            const listings = response?.listings || response || []
-
-            if (!Array.isArray(listings) || listings.length === 0) {
-              break
-            }
-
-            // Yield listing events for each listing
-            for (const listing of listings) {
-              yield WasmEventDataSource.data({
-                address: contractAddress,
-                key: 'action',
-                value: 'list',
-                _attributes: [
-                  { key: 'action', value: 'list' },
-                  { key: 'id', value: listing.id || listing.token_id },
-                  { key: 'collection', value: contractAddress },
-                  {
-                    key: 'price',
-                    value: listing.price?.amount || String(listing.price),
-                  },
-                  { key: 'denom', value: listing.price?.denom || '' },
-                  { key: 'seller', value: listing.seller },
-                  {
-                    key: 'reserved_until',
-                    value: listing.reserved?.reserved_until || 'none',
-                  },
-                ],
-              })
-            }
-
-            if (listings.length < limit) {
-              break
-            }
-
-            startAfter = listings[listings.length - 1]?.id
-          }
-        } catch {
-          // Ignore query errors for individual contracts
-        }
-      }
+      // Note: The marketplace contract has limited query methods.
+      // It only has individual query methods (Config, Listing, Offer, etc.)
+      // and no list methods to query all listings/offers.
+      // Historical backfill for listings/offers would need to come from
+      // event history via the RPC or from the asset contracts directly.
     }
   }
 }

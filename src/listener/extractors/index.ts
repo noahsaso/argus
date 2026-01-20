@@ -1,12 +1,11 @@
 import { ExtractorEnv } from '@/types'
 
-import { AssetExtractor } from './asset'
 import { ContractExtractor } from './contract'
 import { DaoExtractor } from './dao'
 import { DaoRbamExtractor } from './daoRbam'
-import { MarketplaceExtractor } from './marketplace'
 import { NftStakeUpdateExtractor } from './nftStakeUpdate'
 import { ProposalExtractor } from './proposal'
+import * as xionExtractors from './xion'
 
 export const getExtractors = () => [
   ContractExtractor,
@@ -14,8 +13,7 @@ export const getExtractors = () => [
   DaoRbamExtractor,
   ProposalExtractor,
   NftStakeUpdateExtractor,
-  AssetExtractor,
-  MarketplaceExtractor,
+  ...Object.values(xionExtractors),
   // Add more extractors here.
 ]
 
