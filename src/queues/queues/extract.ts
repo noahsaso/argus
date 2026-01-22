@@ -144,6 +144,7 @@ export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
         }
       } catch (err) {
         if (timeout !== null) {
+          // console.error(err)
           job.log(
             `${err instanceof Error ? err.name : 'Error'}: ${
               err instanceof Error ? err.message : err
