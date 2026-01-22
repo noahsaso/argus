@@ -1,3 +1,3 @@
 export * from './asset'
-export * from './coinflow'
+export * from './brale'
 export * from './marketplace'
