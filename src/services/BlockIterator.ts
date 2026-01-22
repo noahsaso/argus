@@ -196,6 +196,7 @@ export class BlockIterator {
     if (earliestBlockHeight === 0) {
       try {
         await client.getBlock(1)
+        earliestBlockHeight = 1
       } catch (error) {
         // {"code":-32603,"message":"Internal error","data":"height 10 is not available, lowest height is 9675000"}
         const data = error instanceof Error ? error.message : String(error)
@@ -208,6 +209,8 @@ export class BlockIterator {
             'Found correct earliest block height from error:',
             earliestBlockHeight
           )
+        } else {
+          throw error
         }
       }
     }
