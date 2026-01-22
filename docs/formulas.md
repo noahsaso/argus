@@ -56,6 +56,7 @@ an additional address property if the formula is not `generic`:
 
 ```ts
 type Env = {
+  chainId: string
   block: Block
   // If latest block is being used, this will be the current date. If fetching
   // at a specific block, this will be the date of that block.
@@ -63,6 +64,7 @@ type Env = {
   // Arguments may or may not be present.
   args: Record<string, string>
 
+  getBlock: FormulaBlockGetter
   get: FormulaGetter
   getMap: FormulaMapGetter
   getDateKeyModified: FormulaDateGetter
@@ -89,6 +91,13 @@ type Env = {
   getProposalVotes: FormulaProposalVotesGetter
   getProposalVoteCount: FormulaProposalVoteCountGetter
   getCommunityPoolBalances: FormulaCommunityPoolBalancesGetter
+  getExtraction: FormulaExtractionGetter
+  getExtractions: FormulaExtractionsGetter
+  getExtractionMap: FormulaExtractionMapGetter
+  getDateFirstExtracted: FormulaDateFirstExtractedGetter
+  getFeegrantAllowance: FormulaFeegrantAllowanceGetter
+  getFeegrantAllowances: FormulaFeegrantAllowancesGetter
+  hasFeegrantAllowance: FormulaFeegrantHasAllowanceGetter
 }
 ```
 
