@@ -187,9 +187,36 @@ export class BlockIterator {
     }
 
     const client = await this.autoCosmWasmClient.getValidClient()
-    const { earliestBlockHeight = 0 } = (
+    let { earliestBlockHeight = 0 } = (
       await client['forceGetCometClient']().status()
     ).syncInfo
+
+    // Sometimes earliest block height is incorrectly reported as 0 (xion). If
+    // so, try to find the earliest block height by forcing an error.
+    if (earliestBlockHeight === 0) {
+      try {
+        await client.getBlock(1)
+      } catch (error) {
+        // {"code":-32603,"message":"Internal error","data":"height 10 is not available, lowest height is 9675000"}
+        const data = error instanceof Error ? error.message : String(error)
+        const match = data.match(
+          /height 1 is not available, lowest height is (\d+)/
+        )
+        if (match && match.length > 1) {
+          earliestBlockHeight = Number(match[1])
+          console.debug(
+            'Found correct earliest block height from error:',
+            earliestBlockHeight
+          )
+        }
+      }
+    }
+
+    if (earliestBlockHeight === 0) {
+      throw new Error(
+        'Could not find earliest block height due to /status endpoint returning 0. This is likely due to a bug in the RPC endpoint.'
+      )
+    }
 
     // Start height cannot be before the earliest block height—use 10 blocks
     // after the earliest block height in case the earliest block gets pruned
