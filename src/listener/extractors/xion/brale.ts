@@ -12,19 +12,20 @@ import {
 } from '../../sources'
 import { Extractor } from '../base'
 
-export class XionCoinflowExtractor extends Extractor {
-  static type = 'xion-coinflow'
+export class XionBraleExtractor extends Extractor {
+  static type = 'xion-brale'
 
   static sources: ExtractorDataSource[] = [
     BankTransferEventDataSource.source('nativeTransfer', {
       recipient: {
         include: [
-          // Coinflow recipient addresses here...
+          // TODO: Add Brale custodial recipient addresses here
         ],
       },
       denom: {
         include: [
-          // Tracked denoms here (or delete the whole `denom` filter to track all)...
+          // TODO: Add tracked stablecoin denoms here (e.g., 'factory/xion1.../ausdc')
+          // Or delete the whole `denom` filter to track all denoms
         ],
       },
     }),
@@ -32,7 +33,7 @@ export class XionCoinflowExtractor extends Extractor {
       key: 'action',
       value: 'transfer',
       contractAddress: [
-        // Tracked cw20 contract addresses here...
+        // TODO: Add tracked cw20 stablecoin contract addresses here (if using CW20 tokens)
       ],
       otherAttributes: [
         // Ensure presence
@@ -43,7 +44,7 @@ export class XionCoinflowExtractor extends Extractor {
         {
           key: 'to',
           value: [
-            // Coinflow recipient addresses here...
+            // TODO: Add Brale custodial recipient addresses here (same as above)
           ],
         },
       ],
@@ -79,7 +80,7 @@ export class XionCoinflowExtractor extends Extractor {
     })
 
   /**
-   * Save contract config on instantiation
+   * Process transfer and create extraction
    */
   private async onTransfer({
     type,
@@ -96,8 +97,8 @@ export class XionCoinflowExtractor extends Extractor {
   }): Promise<ExtractorHandlerOutput[]> {
     return [
       {
-        address: sender,
-        name: `coinflow/transfer/${type}`,
+        address: recipient,
+        name: `brale/transfer/${type}`,
         data: {
           sender,
           recipient,

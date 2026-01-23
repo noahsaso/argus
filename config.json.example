@@ -50,5 +50,8 @@
   "websocketsSecret": "secret",
   "accountsJwtSecret": "secret",
   "rbamWebhookBaseUrl": "",
-  "rbamWebhookSecret": ""
+  "rbamWebhookSecret": "",
+  "braleWebhookUrl": "https://brale.example.com/webhook/xion/transfers",
+  "braleWebhookSecret": "env:BRALE_WEBHOOK_SECRET",
+  "braleChainId": "xion-mainnet-1"
 }
