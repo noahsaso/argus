@@ -40,7 +40,7 @@ type (
 func main() {
 	args := os.Args
 	if len(args) < 4 {
-		fmt.Println("Usage: dump <home_dir> <output> <store_name[:key_prefix_byte_value]> [address(es)]")
+		fmt.Println("Usage: dump <home_dir> <output> <store_name[:key_prefix_byte_value]> [s:address (very fast) OR address(es)]")
 		os.Exit(1)
 	}
 
@@ -64,17 +64,43 @@ func main() {
 	}
 
 	var addressesBech32Data [][]byte
+	var startKey []byte = nil
+	var endKey []byte = nil
 	if len(args) > 4 {
-		// split comma-separated list of addresses
-		addresses := strings.Split(args[4], ",")
-
-		for _, address := range addresses {
-			_, bech32Data, err := bech32.DecodeToBase256(address)
+		// start at exact contract state key
+		if args[4][0] == 's' && args[4][1] == ':' {
+			_, bech32Data, err := bech32.DecodeToBase256(args[4][2:])
 			if err != nil {
 				panic(err)
 			}
 
-			addressesBech32Data = append(addressesBech32Data, bech32Data)
+			// ContractStorePrefix (0x05) || contractAddressBytes || keyBytes
+			startKey = append(startKey, byte(0x05), byte(len(bech32Data)))
+			startKey = append(startKey, bech32Data...)
+
+			// endKey is the next key after the contract
+			endKey = append(startKey, byte(0x05), byte(len(bech32Data)))
+			// increment bech32Data by 1
+			for i := len(bech32Data) - 1; i >= 0; i-- {
+				if bech32Data[i] < 255 {
+					bech32Data[i]++
+					break
+				}
+				bech32Data[i] = 0
+			}
+			endKey = append(endKey, bech32Data...)
+		} else {
+			// split comma-separated list of addresses
+			addresses := strings.Split(args[4], ",")
+
+			for _, address := range addresses {
+				_, bech32Data, err := bech32.DecodeToBase256(address)
+				if err != nil {
+					panic(err)
+				}
+
+				addressesBech32Data = append(addressesBech32Data, bech32Data)
+			}
 		}
 	}
 
@@ -117,7 +143,7 @@ func main() {
 
 	fmt.Println("Iterating...")
 
-	iter := store.Iterator(nil, nil)
+	iter := store.Iterator(startKey, endKey)
 
 	// Dump all keys as write operations.
 	exported := 0
