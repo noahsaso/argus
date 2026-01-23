@@ -75,11 +75,11 @@ func main() {
 			}
 
 			// ContractStorePrefix (0x05) || contractAddressBytes || keyBytes
-			startKey = append(startKey, byte(0x05), byte(len(bech32Data)))
+			startKey = append(startKey, byte(0x05))
 			startKey = append(startKey, bech32Data...)
 
 			// endKey is the next key after the contract
-			endKey = append(startKey, byte(0x05), byte(len(bech32Data)))
+			endKey = append(startKey, byte(0x05))
 			// increment bech32Data by 1
 			for i := len(bech32Data) - 1; i >= 0; i-- {
 				if bech32Data[i] < 255 {
