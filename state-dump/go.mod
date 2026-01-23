@@ -2,7 +2,7 @@ module state_dump
 
 go 1.23.5
 
-toolchain go1.24.0
+toolchain go1.24.1
 
 // xion
 replace github.com/syndtr/goleveldb => github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
