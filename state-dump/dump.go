@@ -88,22 +88,38 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Validate mutually exclusive flags
+	if *keyPrefixStr != "" && (*startAddr != "" || *endAddr != "") {
+		fmt.Fprintln(os.Stderr, "Error: -prefix cannot be used with -start or -end")
+		flag.Usage()
+		os.Exit(1)
+	}
+
 	dataDir := filepath.Join(*homeDir, "data")
 
+	// Parse start/end keys for range iteration
+	var startKey []byte = nil
+	var endKey []byte = nil
+
 	// Parse key prefix as a number (supports both decimal and hex strings)
-	keyPrefix := []byte{}
+	// Use it for range iteration (much faster than post-filtering)
 	if *keyPrefixStr != "" {
 		keyPrefixInt, err := strconv.ParseInt(*keyPrefixStr, 0, 8)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error parsing key prefix: %v\n", err)
 			os.Exit(1)
 		}
-		keyPrefix = []byte{byte(keyPrefixInt)}
-	}
+		keyPrefix := byte(keyPrefixInt)
 
-	// Parse start/end keys for range iteration
-	var startKey []byte = nil
-	var endKey []byte = nil
+		// Set start key to the prefix
+		startKey = []byte{keyPrefix}
+
+		// Calculate end key by incrementing the prefix byte
+		if *autoEnd && keyPrefix < 255 {
+			endKey = []byte{keyPrefix + 1}
+		}
+		// If prefix is 255 and auto-end is enabled, endKey stays nil (iterate to end)
+	}
 
 	if *startAddr != "" {
 		_, bech32Data, err := bech32.DecodeToBase256(*startAddr)
@@ -186,9 +202,6 @@ func main() {
 	ms.MountStoreWithDB(storeKey, types.StoreTypeIAVL, nil)
 
 	fmt.Printf("Loading %s store...\n", *storeName)
-	if len(keyPrefix) > 0 {
-		fmt.Printf("Filtering by key prefix: %02x\n", keyPrefix)
-	}
 	if startKey != nil {
 		fmt.Printf("Start key: %x\n", startKey)
 	}
@@ -222,13 +235,6 @@ func main() {
 		processed++
 		if processed%25000 == 0 {
 			fmt.Printf("Processed %d keys\n", processed)
-		}
-
-		// Validate with key prefix if provided.
-		if len(keyPrefix) > 0 {
-			if !bytes.HasPrefix(key, keyPrefix) {
-				continue
-			}
 		}
 
 		// Make sure key is for the given address. Different stores have the address
