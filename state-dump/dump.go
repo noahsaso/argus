@@ -43,7 +43,7 @@ func main() {
 	homeDir := flag.String("home", "", "Home directory for chain data (required)")
 	output := flag.String("output", "", "Output file path (required)")
 	storeName := flag.String("store", "", "Store name (e.g., wasm, bank) (required)")
-	keyPrefixStr := flag.String("prefix", "", "Key prefix byte value (decimal or hex, e.g., 5 or 0x03)")
+	keyPrefixStr := flag.String("prefix", "", "Key prefix byte value (decimal or hex, e.g., 3 or 0x03)")
 	startAddr := flag.String("start", "", "Start address for range iteration (bech32 address)")
 	endAddr := flag.String("end", "", "End address for range iteration (bech32 address)")
 	autoEnd := flag.Bool("auto-end", true, "Auto-calculate end key from start address (set to false to iterate to end of store)")
