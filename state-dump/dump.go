@@ -3,12 +3,12 @@ package main
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"cosmossdk.io/log"
@@ -43,10 +43,11 @@ func main() {
 	homeDir := flag.String("home", "", "Home directory for chain data (required)")
 	output := flag.String("output", "", "Output file path (required)")
 	storeName := flag.String("store", "", "Store name (e.g., wasm, bank) (required)")
-	keyPrefixStr := flag.String("prefix", "", "Key prefix byte value (decimal or hex, e.g., 3 or 0x03)")
-	startAddr := flag.String("start", "", "Start address for range iteration (bech32 address)")
-	endAddr := flag.String("end", "", "End address for range iteration (bech32 address)")
-	autoEnd := flag.Bool("auto-end", true, "Auto-calculate end key from start address (set to false to iterate to end of store)")
+	startAddr := flag.String("start-addr", "", "Start address for range iteration (bech32 address)")
+	endAddr := flag.String("end-addr", "", "End address for range iteration (bech32 address)")
+	startPrefixHex := flag.String("start-prefix", "", "Start key as hex string (e.g., 03abcd)")
+	endPrefixHex := flag.String("end-prefix", "", "End key as hex string (e.g., 03abce)")
+	autoEnd := flag.Bool("auto-end", true, "Auto-calculate end key from start (set to false to iterate to end of store)")
 	addressesStr := flag.String("addresses", "", "Comma-separated list of bech32 addresses to filter by")
 
 	flag.Usage = func() {
@@ -57,16 +58,18 @@ func main() {
 		fmt.Fprintf(os.Stderr, "\nExamples:\n")
 		fmt.Fprintf(os.Stderr, "  # Dump entire wasm store\n")
 		fmt.Fprintf(os.Stderr, "  dump -home /path/to/.chain -output dump.json -store wasm\n\n")
-		fmt.Fprintf(os.Stderr, "  # Dump wasm store with key prefix\n")
-		fmt.Fprintf(os.Stderr, "  dump -home /path/to/.chain -output dump.json -store wasm -prefix 0x03\n\n")
 		fmt.Fprintf(os.Stderr, "  # Dump single contract state (fast range query)\n")
-		fmt.Fprintf(os.Stderr, "  dump -home /path/to/.chain -output dump.json -store wasm -start <contract_address>\n\n")
+		fmt.Fprintf(os.Stderr, "  dump -home /path/to/.chain -output dump.json -store wasm -start-addr <contract_address>\n\n")
 		fmt.Fprintf(os.Stderr, "  # Dump from start address to end of store (disable auto-end)\n")
-		fmt.Fprintf(os.Stderr, "  dump -home /path/to/.chain -output dump.json -store wasm -start <contract_address> -auto-end=false\n\n")
+		fmt.Fprintf(os.Stderr, "  dump -home /path/to/.chain -output dump.json -store wasm -start-addr <contract_address> -auto-end=false\n\n")
 		fmt.Fprintf(os.Stderr, "  # Dump specific addresses (filters all keys)\n")
 		fmt.Fprintf(os.Stderr, "  dump -home /path/to/.chain -output dump.json -store wasm -addresses addr1,addr2,addr3\n\n")
 		fmt.Fprintf(os.Stderr, "  # Combine range query with address filter\n")
-		fmt.Fprintf(os.Stderr, "  dump -home /path/to/.chain -output dump.json -store wasm -start <start_addr> -end <end_addr> -addresses addr1,addr2\n")
+		fmt.Fprintf(os.Stderr, "  dump -home /path/to/.chain -output dump.json -store wasm -start-addr <addr1> -end-addr <addr2> -addresses addr1,addr2\n\n")
+		fmt.Fprintf(os.Stderr, "  # Dump using hex prefix (auto-calculates end)\n")
+		fmt.Fprintf(os.Stderr, "  dump -home /path/to/.chain -output dump.json -store wasm -start-prefix 03\n\n")
+		fmt.Fprintf(os.Stderr, "  # Dump using explicit hex start/end range\n")
+		fmt.Fprintf(os.Stderr, "  dump -home /path/to/.chain -output dump.json -store wasm -start-prefix 03abcd -end-prefix 03abce\n")
 	}
 
 	flag.Parse()
@@ -89,8 +92,11 @@ func main() {
 	}
 
 	// Validate mutually exclusive flags
-	if *keyPrefixStr != "" && (*startAddr != "" || *endAddr != "") {
-		fmt.Fprintln(os.Stderr, "Error: -prefix cannot be used with -start or -end")
+	hasAddrRange := *startAddr != "" || *endAddr != ""
+	hasHexRange := *startPrefixHex != "" || *endPrefixHex != ""
+
+	if hasAddrRange && hasHexRange {
+		fmt.Fprintln(os.Stderr, "Error: -start-addr/-end-addr and -start-prefix/-end-prefix are mutually exclusive")
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -101,24 +107,42 @@ func main() {
 	var startKey []byte = nil
 	var endKey []byte = nil
 
-	// Parse key prefix as a number (supports both decimal and hex strings)
-	// Use it for range iteration (much faster than post-filtering)
-	if *keyPrefixStr != "" {
-		keyPrefixInt, err := strconv.ParseInt(*keyPrefixStr, 0, 8)
+	// Parse hex start/end prefixes
+	if *startPrefixHex != "" {
+		hexStr := strings.TrimPrefix(*startPrefixHex, "0x")
+		var err error
+		startKey, err = hex.DecodeString(hexStr)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error parsing key prefix: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Error decoding start-prefix hex: %v\n", err)
 			os.Exit(1)
 		}
-		keyPrefix := byte(keyPrefixInt)
 
-		// Set start key to the prefix
-		startKey = []byte{keyPrefix}
-
-		// Calculate end key by incrementing the prefix byte
-		if *autoEnd && keyPrefix < 255 {
-			endKey = []byte{keyPrefix + 1}
+		// If no end prefix specified and auto-end is enabled, calculate end key
+		if *endPrefixHex == "" && *autoEnd {
+			endKey = make([]byte, len(startKey))
+			copy(endKey, startKey)
+			for i := len(endKey) - 1; i >= 0; i-- {
+				if endKey[i] < 255 {
+					endKey[i]++
+					break
+				}
+				endKey[i] = 0
+				// If we've wrapped all bytes to 0, the end key should be nil (iterate to end)
+				if i == 0 {
+					endKey = nil
+				}
+			}
 		}
-		// If prefix is 255 and auto-end is enabled, endKey stays nil (iterate to end)
+	}
+
+	if *endPrefixHex != "" {
+		hexStr := strings.TrimPrefix(*endPrefixHex, "0x")
+		var err error
+		endKey, err = hex.DecodeString(hexStr)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error decoding end-prefix hex: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	if *startAddr != "" {
