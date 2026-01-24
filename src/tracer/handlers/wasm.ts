@@ -126,8 +126,6 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
   }
 
   const match: Handler<WasmExportData>['match'] = (trace) => {
-    // Format most wasm chains...
-    //
     //   wasm keys:
     //
     //     ContractStorePrefix || contractAddressBytes || keyBytes
@@ -136,17 +134,6 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
     //
     //     ContractKeyPrefix || contractAddressBytes
     //
-    // Terra Classic includes length prefixes:
-    // https://github.com/classic-terra/wasmd/blob/v0.30.0-terra.3/x/wasm/types/keys.go#L46-L60
-    //
-    //   wasm keys:
-    //
-    //     ContractStorePrefix || contractAddressLength || contractAddressBytes || keyBytes
-    //
-    //   contract info keys:
-    //
-    //     ContractKeyPrefix || contractAddressLength || contractAddressBytes
-
     const keyData = fromBase64(trace.key)
     if (
       keyData[0] !== CONTRACT_STORE_PREFIX &&
