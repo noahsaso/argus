@@ -43,7 +43,7 @@ func main() {
 	homeDir := flag.String("home", "", "Home directory for chain data (required)")
 	output := flag.String("output", "", "Output file path (required)")
 	storeName := flag.String("store", "", "Store name (e.g., wasm, bank) (required)")
-	keyPrefixStr := flag.String("prefix", "", "Key prefix byte value (decimal or hex, e.g., 5 or 0x05)")
+	keyPrefixStr := flag.String("prefix", "", "Key prefix byte value (decimal or hex, e.g., 5 or 0x03)")
 	startAddr := flag.String("start", "", "Start address for range iteration (bech32 address)")
 	endAddr := flag.String("end", "", "End address for range iteration (bech32 address)")
 	autoEnd := flag.Bool("auto-end", true, "Auto-calculate end key from start address (set to false to iterate to end of store)")
@@ -58,7 +58,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  # Dump entire wasm store\n")
 		fmt.Fprintf(os.Stderr, "  dump -home /path/to/.chain -output dump.json -store wasm\n\n")
 		fmt.Fprintf(os.Stderr, "  # Dump wasm store with key prefix\n")
-		fmt.Fprintf(os.Stderr, "  dump -home /path/to/.chain -output dump.json -store wasm -prefix 0x05\n\n")
+		fmt.Fprintf(os.Stderr, "  dump -home /path/to/.chain -output dump.json -store wasm -prefix 0x03\n\n")
 		fmt.Fprintf(os.Stderr, "  # Dump single contract state (fast range query)\n")
 		fmt.Fprintf(os.Stderr, "  dump -home /path/to/.chain -output dump.json -store wasm -start <contract_address>\n\n")
 		fmt.Fprintf(os.Stderr, "  # Dump from start address to end of store (disable auto-end)\n")
@@ -112,13 +112,13 @@ func main() {
 			os.Exit(1)
 		}
 
-		// ContractStorePrefix (0x05) || contractAddressBytes
-		startKey = append(startKey, byte(0x05))
+		// ContractStorePrefix (0x03) || contractAddressBytes
+		startKey = append(startKey, byte(0x03))
 		startKey = append(startKey, bech32Data...)
 
 		// If no end address specified and auto-end is enabled, calculate end key as next key after start address
 		if *endAddr == "" && *autoEnd {
-			endKey = append(endKey, byte(0x05))
+			endKey = append(endKey, byte(0x03))
 			// Copy and increment bech32Data by 1
 			incrementedData := make([]byte, len(bech32Data))
 			copy(incrementedData, bech32Data)
@@ -141,7 +141,7 @@ func main() {
 		}
 
 		endKey = nil // Reset in case it was set from start address
-		endKey = append(endKey, byte(0x05))
+		endKey = append(endKey, byte(0x03))
 		endKey = append(endKey, bech32Data...)
 	}
 

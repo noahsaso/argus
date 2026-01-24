@@ -58,10 +58,8 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
     )
   }
 
-  // Terra Classic uses different prefixes:
-  // https://github.com/classic-terra/wasmd/blob/v0.30.0-terra.3/x/wasm/types/keys.go#L31-L32
-  const CONTRACT_KEY_PREFIX = 0x04
-  const CONTRACT_STORE_PREFIX = 0x05
+  const CONTRACT_KEY_PREFIX = 0x02
+  const CONTRACT_STORE_PREFIX = 0x03
 
   // Get the contract state event allowlist.
   const stateEventAllowlist = CONTRACT_STATE_EVENT_KEY_ALLOWLIST[chainId]?.map(
