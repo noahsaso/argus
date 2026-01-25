@@ -41,12 +41,16 @@ if (config.sentryDsn) {
     // they are spam and waste our quota.
     ignoreErrors: ['BadRequestError'],
   })
-
-  // Add Sentry error handler.
-  app.on('error', (err, ctx) => {
-    captureSentryException(ctx, err)
-  })
 }
+
+app.on('error', (err, ctx) => {
+  console.error('Caught top-level error:', err)
+
+  // Sentry error handler.
+  if (config.sentryDsn) {
+    captureSentryException(ctx, err)
+  }
+})
 
 // Use CORS on all routes.
 app.use(cors())
