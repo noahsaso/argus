@@ -67,8 +67,8 @@ export const getBullWorker = <T extends unknown>(
     ...getBullMqConnection(),
     concurrency,
     removeOnComplete: {
-      // Keep last 10,000 successful jobs.
-      count: 10_000,
+      // Keep last 1,000 successful jobs.
+      count: 1_000,
     },
     // Keep last 30 days of failed jobs.
     removeOnFail: {
