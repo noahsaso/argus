@@ -264,6 +264,681 @@ describe('WasmEventDataSource', () => {
     })
   })
 
+  describe('otherAttributes with value matching', () => {
+    it('should match when otherAttribute has matching value (string)', () => {
+      const config: WasmEventDataSourceConfig = {
+        key: 'action',
+        value: 'transfer',
+        otherAttributes: [{ key: '_contract_address', value: 'juno1specific' }],
+      }
+      dataSource = new WasmEventDataSource(config)
+
+      const events: Event[] = [
+        {
+          type: 'wasm',
+          attributes: [
+            { key: '_contract_address', value: 'juno1specific' },
+            { key: 'action', value: 'transfer' },
+          ],
+        },
+      ]
+
+      const result = dataSource.match(createMockExtractorInput(events))
+      expect(result).toHaveLength(1)
+      expect(result[0].address).toBe('juno1specific')
+    })
+
+    it('should not match when otherAttribute value does not match', () => {
+      const config: WasmEventDataSourceConfig = {
+        key: 'action',
+        value: 'transfer',
+        otherAttributes: [{ key: '_contract_address', value: 'juno1specific' }],
+      }
+      dataSource = new WasmEventDataSource(config)
+
+      const events: Event[] = [
+        {
+          type: 'wasm',
+          attributes: [
+            { key: '_contract_address', value: 'juno1different' },
+            { key: 'action', value: 'transfer' },
+          ],
+        },
+      ]
+
+      const result = dataSource.match(createMockExtractorInput(events))
+      expect(result).toHaveLength(0)
+    })
+
+    it('should match when otherAttribute value is in array', () => {
+      const config: WasmEventDataSourceConfig = {
+        key: 'action',
+        value: 'transfer',
+        otherAttributes: [
+          { key: '_contract_address', value: ['juno1first', 'juno1second'] },
+        ],
+      }
+      dataSource = new WasmEventDataSource(config)
+
+      const events: Event[] = [
+        {
+          type: 'wasm',
+          attributes: [
+            { key: '_contract_address', value: 'juno1second' },
+            { key: 'action', value: 'transfer' },
+          ],
+        },
+      ]
+
+      const result = dataSource.match(createMockExtractorInput(events))
+      expect(result).toHaveLength(1)
+      expect(result[0].address).toBe('juno1second')
+    })
+
+    it('should not match when otherAttribute value is not in array', () => {
+      const config: WasmEventDataSourceConfig = {
+        key: 'action',
+        value: 'transfer',
+        otherAttributes: [
+          { key: '_contract_address', value: ['juno1first', 'juno1second'] },
+        ],
+      }
+      dataSource = new WasmEventDataSource(config)
+
+      const events: Event[] = [
+        {
+          type: 'wasm',
+          attributes: [
+            { key: '_contract_address', value: 'juno1third' },
+            { key: 'action', value: 'transfer' },
+          ],
+        },
+      ]
+
+      const result = dataSource.match(createMockExtractorInput(events))
+      expect(result).toHaveLength(0)
+    })
+
+    it('should match with mixed string and object otherAttributes', () => {
+      const config: WasmEventDataSourceConfig = {
+        key: 'action',
+        value: 'vote',
+        otherAttributes: [
+          'voter', // string - just check presence
+          { key: 'proposal_id', value: ['1', '2', '3'] }, // object - check value
+        ],
+      }
+      dataSource = new WasmEventDataSource(config)
+
+      const events: Event[] = [
+        {
+          type: 'wasm',
+          attributes: [
+            { key: '_contract_address', value: 'juno1contract123' },
+            { key: 'action', value: 'vote' },
+            { key: 'voter', value: 'juno1voter' },
+            { key: 'proposal_id', value: '2' },
+          ],
+        },
+      ]
+
+      const result = dataSource.match(createMockExtractorInput(events))
+      expect(result).toHaveLength(1)
+    })
+
+    it('should not match when mixed otherAttributes fail value check', () => {
+      const config: WasmEventDataSourceConfig = {
+        key: 'action',
+        value: 'vote',
+        otherAttributes: [
+          'voter',
+          { key: 'proposal_id', value: ['1', '2', '3'] },
+        ],
+      }
+      dataSource = new WasmEventDataSource(config)
+
+      const events: Event[] = [
+        {
+          type: 'wasm',
+          attributes: [
+            { key: '_contract_address', value: 'juno1contract123' },
+            { key: 'action', value: 'vote' },
+            { key: 'voter', value: 'juno1voter' },
+            { key: 'proposal_id', value: '999' }, // Not in allowed values
+          ],
+        },
+      ]
+
+      const result = dataSource.match(createMockExtractorInput(events))
+      expect(result).toHaveLength(0)
+    })
+
+    it('should not match when mixed otherAttributes fail presence check', () => {
+      const config: WasmEventDataSourceConfig = {
+        key: 'action',
+        value: 'vote',
+        otherAttributes: [
+          'voter',
+          { key: 'proposal_id', value: ['1', '2', '3'] },
+        ],
+      }
+      dataSource = new WasmEventDataSource(config)
+
+      const events: Event[] = [
+        {
+          type: 'wasm',
+          attributes: [
+            { key: '_contract_address', value: 'juno1contract123' },
+            { key: 'action', value: 'vote' },
+            // Missing 'voter' attribute
+            { key: 'proposal_id', value: '2' },
+          ],
+        },
+      ]
+
+      const result = dataSource.match(createMockExtractorInput(events))
+      expect(result).toHaveLength(0)
+    })
+  })
+
+  describe('isOurData with otherAttributes value matching', () => {
+    it('should return true when otherAttribute string key is present', () => {
+      const config: WasmEventDataSourceConfig = {
+        key: 'action',
+        value: 'transfer',
+        otherAttributes: ['sender'],
+      }
+      dataSource = new WasmEventDataSource(config)
+
+      const data = {
+        address: 'juno1contract123',
+        key: 'action',
+        value: 'transfer',
+        attributes: {
+          _contract_address: ['juno1contract123'],
+          action: ['transfer'],
+          sender: ['juno1sender'],
+        },
+        _attributes: [
+          { key: '_contract_address', value: 'juno1contract123' },
+          { key: 'action', value: 'transfer' },
+          { key: 'sender', value: 'juno1sender' },
+        ],
+      }
+
+      expect(dataSource.isOurData(data)).toBe(true)
+    })
+
+    it('should return false when otherAttribute string key is missing', () => {
+      const config: WasmEventDataSourceConfig = {
+        key: 'action',
+        value: 'transfer',
+        otherAttributes: ['sender'],
+      }
+      dataSource = new WasmEventDataSource(config)
+
+      const data = {
+        address: 'juno1contract123',
+        key: 'action',
+        value: 'transfer',
+        attributes: {
+          _contract_address: ['juno1contract123'],
+          action: ['transfer'],
+        },
+        _attributes: [
+          { key: '_contract_address', value: 'juno1contract123' },
+          { key: 'action', value: 'transfer' },
+        ],
+      }
+
+      expect(dataSource.isOurData(data)).toBe(false)
+    })
+
+    it('should return true when otherAttribute object value matches', () => {
+      const config: WasmEventDataSourceConfig = {
+        key: 'action',
+        value: 'transfer',
+        otherAttributes: [{ key: '_contract_address', value: 'juno1specific' }],
+      }
+      dataSource = new WasmEventDataSource(config)
+
+      const data = {
+        address: 'juno1specific',
+        key: 'action',
+        value: 'transfer',
+        attributes: {
+          _contract_address: ['juno1specific'],
+          action: ['transfer'],
+        },
+        _attributes: [
+          { key: '_contract_address', value: 'juno1specific' },
+          { key: 'action', value: 'transfer' },
+        ],
+      }
+
+      expect(dataSource.isOurData(data)).toBe(true)
+    })
+
+    it('should return false when otherAttribute object value does not match', () => {
+      const config: WasmEventDataSourceConfig = {
+        key: 'action',
+        value: 'transfer',
+        otherAttributes: [{ key: '_contract_address', value: 'juno1specific' }],
+      }
+      dataSource = new WasmEventDataSource(config)
+
+      const data = {
+        address: 'juno1different',
+        key: 'action',
+        value: 'transfer',
+        attributes: {
+          _contract_address: ['juno1different'],
+          action: ['transfer'],
+        },
+        _attributes: [
+          { key: '_contract_address', value: 'juno1different' },
+          { key: 'action', value: 'transfer' },
+        ],
+      }
+
+      expect(dataSource.isOurData(data)).toBe(false)
+    })
+
+    it('should return true when otherAttribute object value is in array', () => {
+      const config: WasmEventDataSourceConfig = {
+        key: 'action',
+        value: 'transfer',
+        otherAttributes: [
+          { key: '_contract_address', value: ['juno1first', 'juno1second'] },
+        ],
+      }
+      dataSource = new WasmEventDataSource(config)
+
+      const data = {
+        address: 'juno1second',
+        key: 'action',
+        value: 'transfer',
+        attributes: {
+          _contract_address: ['juno1second'],
+          action: ['transfer'],
+        },
+        _attributes: [
+          { key: '_contract_address', value: 'juno1second' },
+          { key: 'action', value: 'transfer' },
+        ],
+      }
+
+      expect(dataSource.isOurData(data)).toBe(true)
+    })
+
+    it('should return false when otherAttribute object value is not in array', () => {
+      const config: WasmEventDataSourceConfig = {
+        key: 'action',
+        value: 'transfer',
+        otherAttributes: [
+          { key: '_contract_address', value: ['juno1first', 'juno1second'] },
+        ],
+      }
+      dataSource = new WasmEventDataSource(config)
+
+      const data = {
+        address: 'juno1third',
+        key: 'action',
+        value: 'transfer',
+        attributes: {
+          _contract_address: ['juno1third'],
+          action: ['transfer'],
+        },
+        _attributes: [
+          { key: '_contract_address', value: 'juno1third' },
+          { key: 'action', value: 'transfer' },
+        ],
+      }
+
+      expect(dataSource.isOurData(data)).toBe(false)
+    })
+
+    it('should return true with mixed string and object otherAttributes', () => {
+      const config: WasmEventDataSourceConfig = {
+        key: 'action',
+        value: 'vote',
+        otherAttributes: [
+          'voter',
+          { key: 'proposal_id', value: ['1', '2', '3'] },
+        ],
+      }
+      dataSource = new WasmEventDataSource(config)
+
+      const data = {
+        address: 'juno1contract123',
+        key: 'action',
+        value: 'vote',
+        attributes: {
+          _contract_address: ['juno1contract123'],
+          action: ['vote'],
+          voter: ['juno1voter'],
+          proposal_id: ['2'],
+        },
+        _attributes: [
+          { key: '_contract_address', value: 'juno1contract123' },
+          { key: 'action', value: 'vote' },
+          { key: 'voter', value: 'juno1voter' },
+          { key: 'proposal_id', value: '2' },
+        ],
+      }
+
+      expect(dataSource.isOurData(data)).toBe(true)
+    })
+
+    it('should return false with mixed otherAttributes when value check fails', () => {
+      const config: WasmEventDataSourceConfig = {
+        key: 'action',
+        value: 'vote',
+        otherAttributes: [
+          'voter',
+          { key: 'proposal_id', value: ['1', '2', '3'] },
+        ],
+      }
+      dataSource = new WasmEventDataSource(config)
+
+      const data = {
+        address: 'juno1contract123',
+        key: 'action',
+        value: 'vote',
+        attributes: {
+          _contract_address: ['juno1contract123'],
+          action: ['vote'],
+          voter: ['juno1voter'],
+          proposal_id: ['999'],
+        },
+        _attributes: [
+          { key: '_contract_address', value: 'juno1contract123' },
+          { key: 'action', value: 'vote' },
+          { key: 'voter', value: 'juno1voter' },
+          { key: 'proposal_id', value: '999' },
+        ],
+      }
+
+      expect(dataSource.isOurData(data)).toBe(false)
+    })
+  })
+
+  describe('contractAddress filter', () => {
+    it('should match when contractAddress matches (string)', () => {
+      const config: WasmEventDataSourceConfig = {
+        key: 'action',
+        value: 'execute',
+        contractAddress: 'juno1specific',
+      }
+      dataSource = new WasmEventDataSource(config)
+
+      const events: Event[] = [
+        {
+          type: 'wasm',
+          attributes: [
+            { key: '_contract_address', value: 'juno1specific' },
+            { key: 'action', value: 'execute' },
+          ],
+        },
+      ]
+
+      const result = dataSource.match(createMockExtractorInput(events))
+      expect(result).toHaveLength(1)
+      expect(result[0].address).toBe('juno1specific')
+    })
+
+    it('should not match when contractAddress does not match', () => {
+      const config: WasmEventDataSourceConfig = {
+        key: 'action',
+        value: 'execute',
+        contractAddress: 'juno1specific',
+      }
+      dataSource = new WasmEventDataSource(config)
+
+      const events: Event[] = [
+        {
+          type: 'wasm',
+          attributes: [
+            { key: '_contract_address', value: 'juno1different' },
+            { key: 'action', value: 'execute' },
+          ],
+        },
+      ]
+
+      const result = dataSource.match(createMockExtractorInput(events))
+      expect(result).toHaveLength(0)
+    })
+
+    it('should match when contractAddress is in array', () => {
+      const config: WasmEventDataSourceConfig = {
+        key: 'action',
+        value: 'execute',
+        contractAddress: ['juno1first', 'juno1second', 'juno1third'],
+      }
+      dataSource = new WasmEventDataSource(config)
+
+      const events: Event[] = [
+        {
+          type: 'wasm',
+          attributes: [
+            { key: '_contract_address', value: 'juno1second' },
+            { key: 'action', value: 'execute' },
+          ],
+        },
+      ]
+
+      const result = dataSource.match(createMockExtractorInput(events))
+      expect(result).toHaveLength(1)
+      expect(result[0].address).toBe('juno1second')
+    })
+
+    it('should not match when contractAddress is not in array', () => {
+      const config: WasmEventDataSourceConfig = {
+        key: 'action',
+        value: 'execute',
+        contractAddress: ['juno1first', 'juno1second'],
+      }
+      dataSource = new WasmEventDataSource(config)
+
+      const events: Event[] = [
+        {
+          type: 'wasm',
+          attributes: [
+            { key: '_contract_address', value: 'juno1other' },
+            { key: 'action', value: 'execute' },
+          ],
+        },
+      ]
+
+      const result = dataSource.match(createMockExtractorInput(events))
+      expect(result).toHaveLength(0)
+    })
+
+    it('should filter multiple events by contractAddress', () => {
+      const config: WasmEventDataSourceConfig = {
+        key: 'action',
+        value: 'execute',
+        contractAddress: 'juno1allowed',
+      }
+      dataSource = new WasmEventDataSource(config)
+
+      const events: Event[] = [
+        {
+          type: 'wasm',
+          attributes: [
+            { key: '_contract_address', value: 'juno1allowed' },
+            { key: 'action', value: 'execute' },
+          ],
+        },
+        {
+          type: 'wasm',
+          attributes: [
+            { key: '_contract_address', value: 'juno1notallowed' },
+            { key: 'action', value: 'execute' },
+          ],
+        },
+        {
+          type: 'wasm',
+          attributes: [
+            { key: '_contract_address', value: 'juno1allowed' },
+            { key: 'action', value: 'execute' },
+          ],
+        },
+      ]
+
+      const result = dataSource.match(createMockExtractorInput(events))
+      expect(result).toHaveLength(2)
+      expect(result.every((r) => r.address === 'juno1allowed')).toBe(true)
+    })
+
+    it('should match all addresses when contractAddress is undefined', () => {
+      const config: WasmEventDataSourceConfig = {
+        key: 'action',
+        value: 'execute',
+      }
+      dataSource = new WasmEventDataSource(config)
+
+      const events: Event[] = [
+        {
+          type: 'wasm',
+          attributes: [
+            { key: '_contract_address', value: 'juno1any' },
+            { key: 'action', value: 'execute' },
+          ],
+        },
+      ]
+
+      const result = dataSource.match(createMockExtractorInput(events))
+      expect(result).toHaveLength(1)
+    })
+  })
+
+  describe('isOurData with contractAddress filter', () => {
+    it('should return true when contractAddress matches', () => {
+      const config: WasmEventDataSourceConfig = {
+        key: 'action',
+        value: 'execute',
+        contractAddress: 'juno1specific',
+      }
+      dataSource = new WasmEventDataSource(config)
+
+      const data = {
+        address: 'juno1specific',
+        key: 'action',
+        value: 'execute',
+        attributes: {
+          _contract_address: ['juno1specific'],
+          action: ['execute'],
+        },
+        _attributes: [
+          { key: '_contract_address', value: 'juno1specific' },
+          { key: 'action', value: 'execute' },
+        ],
+      }
+
+      expect(dataSource.isOurData(data)).toBe(true)
+    })
+
+    it('should return false when contractAddress does not match', () => {
+      const config: WasmEventDataSourceConfig = {
+        key: 'action',
+        value: 'execute',
+        contractAddress: 'juno1specific',
+      }
+      dataSource = new WasmEventDataSource(config)
+
+      const data = {
+        address: 'juno1different',
+        key: 'action',
+        value: 'execute',
+        attributes: {
+          _contract_address: ['juno1different'],
+          action: ['execute'],
+        },
+        _attributes: [
+          { key: '_contract_address', value: 'juno1different' },
+          { key: 'action', value: 'execute' },
+        ],
+      }
+
+      expect(dataSource.isOurData(data)).toBe(false)
+    })
+
+    it('should return true when contractAddress is in array', () => {
+      const config: WasmEventDataSourceConfig = {
+        key: 'action',
+        value: 'execute',
+        contractAddress: ['juno1first', 'juno1second'],
+      }
+      dataSource = new WasmEventDataSource(config)
+
+      const data = {
+        address: 'juno1second',
+        key: 'action',
+        value: 'execute',
+        attributes: {
+          _contract_address: ['juno1second'],
+          action: ['execute'],
+        },
+        _attributes: [
+          { key: '_contract_address', value: 'juno1second' },
+          { key: 'action', value: 'execute' },
+        ],
+      }
+
+      expect(dataSource.isOurData(data)).toBe(true)
+    })
+
+    it('should return false when contractAddress is not in array', () => {
+      const config: WasmEventDataSourceConfig = {
+        key: 'action',
+        value: 'execute',
+        contractAddress: ['juno1first', 'juno1second'],
+      }
+      dataSource = new WasmEventDataSource(config)
+
+      const data = {
+        address: 'juno1third',
+        key: 'action',
+        value: 'execute',
+        attributes: {
+          _contract_address: ['juno1third'],
+          action: ['execute'],
+        },
+        _attributes: [
+          { key: '_contract_address', value: 'juno1third' },
+          { key: 'action', value: 'execute' },
+        ],
+      }
+
+      expect(dataSource.isOurData(data)).toBe(false)
+    })
+
+    it('should return true for any address when contractAddress is undefined', () => {
+      const config: WasmEventDataSourceConfig = {
+        key: 'action',
+        value: 'execute',
+      }
+      dataSource = new WasmEventDataSource(config)
+
+      const data = {
+        address: 'juno1any',
+        key: 'action',
+        value: 'execute',
+        attributes: {
+          _contract_address: ['juno1any'],
+          action: ['execute'],
+        },
+        _attributes: [
+          { key: '_contract_address', value: 'juno1any' },
+          { key: 'action', value: 'execute' },
+        ],
+      }
+
+      expect(dataSource.isOurData(data)).toBe(true)
+    })
+  })
+
   describe('multiple events and matches', () => {
     beforeEach(() => {
       const config: WasmEventDataSourceConfig = {
