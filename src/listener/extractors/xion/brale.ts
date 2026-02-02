@@ -17,16 +17,11 @@ export class XionBraleExtractor extends Extractor {
 
   static sources: ExtractorDataSource[] = [
     BankTransferEventDataSource.source('nativeTransfer', {
-      recipient: {
-        include: [
-          // TODO: Add Brale custodial recipient addresses here
-        ],
-      },
       denom: {
-        include: [
-          // TODO: Add tracked stablecoin denoms here (e.g., 'factory/xion1.../ausdc')
-          // Or delete the whole `denom` filter to track all denoms
-        ],
+        include: ['factory/xion17grq736740r70awldugfs3mls3stu9haewctv2/sbc'],
+      },
+      recipient: {
+        include: ['xion1p6em2aklsy9q9jyuc9x8ykqpk24s3w6l4xu5r7'],
       },
     }),
     WasmEventDataSource.source('cw20Transfer', {

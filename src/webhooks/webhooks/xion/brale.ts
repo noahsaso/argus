@@ -38,7 +38,7 @@ export const makeXionBraleTransfer: WebhookMaker<Extraction> = (config) => {
       // Transform to Brale's expected format
       return {
         // TODO: Which should we default to?
-        chain: config.braleChainId || 'xion-mainnet-1',
+        chain: config.chainId || 'xion-mainnet-1',
         contract: event.data.denom,
         transaction_hash: event.txHash,
         from: event.data.sender,
