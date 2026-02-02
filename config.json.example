@@ -52,6 +52,5 @@
   "rbamWebhookBaseUrl": "",
   "rbamWebhookSecret": "",
   "braleWebhookUrl": "https://brale.example.com/webhook/xion/transfers",
-  "braleWebhookSecret": "env:BRALE_WEBHOOK_SECRET",
-  "braleChainId": "xion-mainnet-1"
+  "braleWebhookSecret": "env:BRALE_WEBHOOK_SECRET"
 }
