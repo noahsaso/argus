@@ -1,7 +1,7 @@
 import { ContractFormula } from '@/types'
 
-import { Authenticator } from './types/Account.types'
-import { Params } from './types/Treasury.types'
+import type { Authenticator } from '@burnt-labs/xion-types'
+import type { Params } from '@burnt-labs/xion-types'
 
 const AccountStorageKeys = {
   AUTHENTICATORS: 'authenticators',

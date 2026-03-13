@@ -1,9 +1,9 @@
-import {
-  Addr,
+import type {
+  TreasuryAddr as Addr,
   FeeConfig,
   GrantConfig,
   Params,
-} from '@/formulas/formulas/contract/xion/types/Treasury.types'
+} from '@burnt-labs/xion-types'
 import { ContractFormula } from '@/types'
 
 import { makeSimpleContractFormula } from '../../utils'
