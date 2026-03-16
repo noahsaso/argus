@@ -1,6 +1,6 @@
-import { ContractFormula } from '@/types'
-
 import type { Params } from '@burnt-labs/xion-types'
+
+import { ContractFormula } from '@/types'
 
 // Stored authenticator shape (on-chain representation, snake_case keys).
 // Not produced by ts-codegen since the contract query responses return Binary;

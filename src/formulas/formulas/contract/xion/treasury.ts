@@ -5,6 +5,7 @@ import type {
   Params,
 } from '@burnt-labs/xion-types'
 import type { OpenAPIV3_1 } from 'openapi-types'
+
 import { ContractFormula } from '@/types'
 
 import { makeSimpleContractFormula } from '../../utils'
@@ -13,9 +14,10 @@ import { makeSimpleContractFormula } from '../../utils'
 // The schema files are included in @burnt-labs/xion-types dist via the
 // package's copy script and kept in sync with the Rust contract via `cargo schema`.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const treasurySchema = require(
-  '@burnt-labs/xion-types/contracts/treasury/schema/raw/instantiate.json'
-) as { definitions: Record<string, OpenAPIV3_1.SchemaObject> }
+const treasurySchema =
+  require('@burnt-labs/xion-types/contracts/treasury/schema/raw/instantiate.json') as {
+    definitions: Record<string, OpenAPIV3_1.SchemaObject>
+  }
 
 // Resolve JSON Schema $ref references inline for OpenAPI v3.1 compatibility.
 function resolveRefs(
