@@ -1,7 +1,17 @@
 import { ContractFormula } from '@/types'
 
-import type { Authenticator } from '@burnt-labs/xion-types'
 import type { Params } from '@burnt-labs/xion-types'
+
+// Stored authenticator shape (on-chain representation, snake_case keys).
+// Not produced by ts-codegen since the contract query responses return Binary;
+// derived from the account contract's state serialization.
+type Authenticator =
+  | { secp256_k1: { pubkey: string } }
+  | { ed25519: { pubkey: string } }
+  | { eth_wallet: { address: string } }
+  | { jwt: { aud: string; sub: string } }
+  | { secp256_r1: { pubkey: string } }
+  | { passkey: { passkey: string; url: string } }
 
 const AccountStorageKeys = {
   AUTHENTICATORS: 'authenticators',

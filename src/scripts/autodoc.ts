@@ -134,6 +134,14 @@ const makeFormulaDoc = (
         responses: {
           '200': {
             description: 'success',
+            ...(formula.docs?.response && {
+              content: {
+                'application/json': {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  schema: formula.docs.response as any,
+                },
+              },
+            }),
           },
           ...((formula.docs?.args || []).length > 0 && {
             '400': {

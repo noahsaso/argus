@@ -418,6 +418,10 @@ export type Formula<R = any, E extends Env = Env> = {
      * Argument definitions.
      */
     args?: Omit<OpenAPIV3_1.ParameterObject, 'in'>[]
+    /**
+     * JSON Schema for the 200 response body. Used by autodoc to generate OpenAPI response schemas.
+     */
+    response?: OpenAPIV3_1.SchemaObject
   }
 }
 
