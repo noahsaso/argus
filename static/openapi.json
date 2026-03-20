@@ -12611,7 +12611,22 @@
         ],
         "responses": {
           "200": {
-            "description": "success"
+            "description": "success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "description": "A human readable address.\n\nIn Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.\n\nThis type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.\n\nThis type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -12645,7 +12660,156 @@
         ],
         "responses": {
           "200": {
-            "description": "success"
+            "description": "success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "grantConfigs",
+                    "params"
+                  ],
+                  "properties": {
+                    "grantConfigs": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "authorization",
+                          "description",
+                          "optional"
+                        ],
+                        "properties": {
+                          "authorization": {
+                            "type": "object",
+                            "required": [
+                              "type_url",
+                              "value"
+                            ],
+                            "properties": {
+                              "type_url": {
+                                "type": "string"
+                              },
+                              "value": {
+                                "description": "Binary is a wrapper around Vec<u8> to add base64 de/serialization with serde. It also adds some helper methods to help encode inline.\n\nThis is only needed as serde-json-{core,wasm} has a horrible encoding for Vec<u8>. See also <https://github.com/CosmWasm/cosmwasm/blob/main/docs/MESSAGE_TYPES.md>.",
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "optional": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "feeConfig": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "required": [
+                            "description"
+                          ],
+                          "properties": {
+                            "allowance": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "required": [
+                                    "type_url",
+                                    "value"
+                                  ],
+                                  "properties": {
+                                    "type_url": {
+                                      "type": "string"
+                                    },
+                                    "value": {
+                                      "description": "Binary is a wrapper around Vec<u8> to add base64 de/serialization with serde. It also adds some helper methods to help encode inline.\n\nThis is only needed as serde-json-{core,wasm} has a horrible encoding for Vec<u8>. See also <https://github.com/CosmWasm/cosmwasm/blob/main/docs/MESSAGE_TYPES.md>.",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "expiration": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ],
+                              "format": "uint32",
+                              "minimum": 0
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "admin": {
+                      "oneOf": [
+                        {
+                          "description": "A human readable address.\n\nIn Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.\n\nThis type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.\n\nThis type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "pendingAdmin": {
+                      "oneOf": [
+                        {
+                          "description": "A human readable address.\n\nIn Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.\n\nThis type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.\n\nThis type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "params": {
+                      "type": "object",
+                      "required": [
+                        "icon_url",
+                        "metadata",
+                        "redirect_url"
+                      ],
+                      "properties": {
+                        "icon_url": {
+                          "type": "string"
+                        },
+                        "metadata": {
+                          "type": "string"
+                        },
+                        "redirect_url": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "balances": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -12679,7 +12843,17 @@
         ],
         "responses": {
           "200": {
-            "description": "success"
+            "description": "success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -12713,7 +12887,62 @@
         ],
         "responses": {
           "200": {
-            "description": "success"
+            "description": "success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "description"
+                      ],
+                      "properties": {
+                        "allowance": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "required": [
+                                "type_url",
+                                "value"
+                              ],
+                              "properties": {
+                                "type_url": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "description": "Binary is a wrapper around Vec<u8> to add base64 de/serialization with serde. It also adds some helper methods to help encode inline.\n\nThis is only needed as serde-json-{core,wasm} has a horrible encoding for Vec<u8>. See also <https://github.com/CosmWasm/cosmwasm/blob/main/docs/MESSAGE_TYPES.md>.",
+                                  "type": "string"
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "expiration": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "format": "uint32",
+                          "minimum": 0
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -12747,7 +12976,48 @@
         ],
         "responses": {
           "200": {
-            "description": "success"
+            "description": "success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object",
+                    "required": [
+                      "authorization",
+                      "description",
+                      "optional"
+                    ],
+                    "properties": {
+                      "authorization": {
+                        "type": "object",
+                        "required": [
+                          "type_url",
+                          "value"
+                        ],
+                        "properties": {
+                          "type_url": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "description": "Binary is a wrapper around Vec<u8> to add base64 de/serialization with serde. It also adds some helper methods to help encode inline.\n\nThis is only needed as serde-json-{core,wasm} has a horrible encoding for Vec<u8>. See also <https://github.com/CosmWasm/cosmwasm/blob/main/docs/MESSAGE_TYPES.md>.",
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "optional": {
+                        "type": "boolean"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -12781,7 +13051,31 @@
         ],
         "responses": {
           "200": {
-            "description": "success"
+            "description": "success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "icon_url",
+                    "metadata",
+                    "redirect_url"
+                  ],
+                  "properties": {
+                    "icon_url": {
+                      "type": "string"
+                    },
+                    "metadata": {
+                      "type": "string"
+                    },
+                    "redirect_url": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
           }
         }
       }
@@ -12815,7 +13109,22 @@
         ],
         "responses": {
           "200": {
-            "description": "success"
+            "description": "success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "description": "A human readable address.\n\nIn Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.\n\nThis type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.\n\nThis type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
           }
         }
       }
