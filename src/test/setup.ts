@@ -4,7 +4,7 @@ import './mocks'
 import { afterAll, beforeAll, beforeEach, vi } from 'vitest'
 
 import { ConfigManager } from '@/config'
-import { closeDb, loadDb, setup } from '@/db'
+import { AccountDepositWebhookRegistration, closeDb, loadDb, setup } from '@/db'
 import { closeAllBullQueues } from '@/queues'
 import { setUpRouter } from '@/server/routes'
 import { app as testAccountApp } from '@/server/test/account/app'
@@ -82,6 +82,9 @@ afterAll(async () => {
       closeDb(),
       // Close bull queues after all tests.
       closeAllBullQueues(),
+      // Close any Redis subscriber opened by deposit webhook registration cache
+      // invalidation.
+      AccountDepositWebhookRegistration.closeActiveRegistrationsCacheSubscription(),
     ])
   }
 })

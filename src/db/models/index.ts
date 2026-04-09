@@ -1,5 +1,6 @@
 export * from './Account'
 export * from './AccountCodeIdSet'
+export * from './AccountDepositWebhookRegistration'
 export * from './AccountKey'
 export * from './AccountKeyCredit'
 export * from './AccountWebhook'

@@ -15,6 +15,7 @@ import {
 import { ConfigManager } from '@/config'
 
 import { AccountCodeIdSet } from './AccountCodeIdSet'
+import { AccountDepositWebhookRegistration } from './AccountDepositWebhookRegistration'
 import { AccountKey } from './AccountKey'
 import {
   AccountKeyCredit,
@@ -42,6 +43,9 @@ export class Account extends Model {
 
   @HasMany(() => AccountWebhook, 'accountPublicKey')
   declare webhooks: AccountWebhook[]
+
+  @HasMany(() => AccountDepositWebhookRegistration, 'accountPublicKey')
+  declare depositWebhookRegistrations: AccountDepositWebhookRegistration[]
 
   @HasMany(() => AccountCodeIdSet, 'accountPublicKey')
   declare codeIdSets: AccountCodeIdSet[]

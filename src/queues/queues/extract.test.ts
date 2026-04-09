@@ -2,7 +2,7 @@ import { Job } from 'bullmq'
 import { Mock, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ConfigManager } from '@/config'
-import { Extraction } from '@/db'
+import { AccountDepositWebhookRegistration, Extraction } from '@/db'
 import * as listenerModule from '@/listener'
 import * as search from '@/search'
 import { AutoCosmWasmClient } from '@/utils'
@@ -59,6 +59,10 @@ describe('ExtractQueue', () => {
     vi.spyOn(AutoCosmWasmClient.prototype, 'getValidClient').mockResolvedValue(
       {} as any
     )
+    vi.spyOn(
+      AccountDepositWebhookRegistration,
+      'ensureActiveRegistrationsCacheSubscription'
+    ).mockResolvedValue()
     vi.spyOn(utils, 'getContractInfo').mockImplementation(vi.fn())
 
     // Create extract queue

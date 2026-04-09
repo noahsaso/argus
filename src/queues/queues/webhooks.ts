@@ -27,6 +27,7 @@ export class WebhooksQueue extends BaseQueue<PendingWebhook> {
       case WebhookType.Url: {
         await axios(endpoint.url, {
           method: endpoint.method,
+          timeout: this.options.config.webhookTimeoutMs ?? 15000,
           // https://stackoverflow.com/a/74735197
           headers: {
             'Accept-Encoding': 'gzip,deflate,compress',

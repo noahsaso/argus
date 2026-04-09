@@ -1,0 +1,38 @@
+{
+  "home": "/tmp/argus-test-home",
+  "chainId": "localxion-1",
+  "localRpc": "http://xion:26657",
+  "remoteRpc": "http://xion:26657",
+  "bech32Prefix": "xion",
+  "webhookTimeoutMs": 5000,
+  "redis": {
+    "host": "redis",
+    "password": ""
+  },
+  "db": {
+    "data": {
+      "dialect": "postgres",
+      "host": "db",
+      "database": "test",
+      "username": "test",
+      "password": "test"
+    },
+    "accounts": {
+      "dialect": "postgres",
+      "host": "db",
+      "database": "test",
+      "username": "test",
+      "password": "test"
+    }
+  },
+  "payment": {
+    "cwReceiptAddress": "cwReceiptAddress",
+    "cwReceiptWebhookSecret": "cwReceiptWebhookSecret",
+    "nativeDenomAccepted": "uxion",
+    "creditScaleFactor": 1
+  },
+  "accountsJwtSecret": "accountsJwtSecret",
+  "codeIds": {
+    "dao-dao-core": [1]
+  }
+}

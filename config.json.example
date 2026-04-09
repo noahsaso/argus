@@ -1,4 +1,5 @@
 {
+  "chainId": "juno-testnet",
   "home": "~/.juno/indexer",
   "localRpc": "http://localhost:26657",
   "remoteRpc": "https://juno-testnet-rpc.polkachu.com",
@@ -48,6 +49,7 @@
   "inboxSecret": "secret",
   "notifierSecret": "secret",
   "websocketsSecret": "secret",
+  "webhookTimeoutMs": 15000,
   "accountsJwtSecret": "secret",
   "rbamWebhookBaseUrl": "",
   "rbamWebhookSecret": ""

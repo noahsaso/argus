@@ -2,7 +2,7 @@ import * as Sentry from '@sentry/node'
 import { Command } from 'commander'
 
 import { ConfigManager, testRedisConnection } from '@/config'
-import { State, loadDb } from '@/db'
+import { AccountDepositWebhookRegistration, State, loadDb } from '@/db'
 import { QueueOptions, queues } from '@/queues'
 import { WasmCodeService } from '@/services/wasm-codes'
 import { DbType } from '@/types'
@@ -102,8 +102,11 @@ const main = async () => {
         WasmCodeService.instance.stopUpdater()
 
         // Close DB connections.
-        await dataSequelize.close()
-        await accountsSequelize.close()
+        await Promise.all([
+          dataSequelize.close(),
+          accountsSequelize.close(),
+          AccountDepositWebhookRegistration.closeActiveRegistrationsCacheSubscription(),
+        ])
 
         // Exit.
         process.exit(0)

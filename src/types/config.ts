@@ -21,10 +21,12 @@ export type DB = { uri?: string } & Pick<
 >
 
 export type Config = {
+  chainId?: string
   home: string
   localRpc?: string
   remoteRpc: string
   bech32Prefix: string
+  webhookTimeoutMs?: number
   db: {
     data: DB
     accounts: DB

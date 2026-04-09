@@ -23,6 +23,11 @@ called with a HTTP request, while Soketi endpoints use the `soketi` config and a
 JS library to interact with it. If you are not using WebSockets, you can ignore
 Soketi and use URL endpoints only.
 
+URL webhooks are delivered with at-least-once semantics. BullMQ retries failed
+jobs up to 3 times with exponential backoff, and the queue worker applies an
+explicit HTTP timeout to each outbound request. Consumers should treat webhook
+payloads as retryable and use a deterministic idempotency key when available.
+
 ```ts
 type Webhook<
   Event extends DependableEventModel = DependableEventModel,
@@ -145,3 +150,126 @@ const makeIndexerCwReceiptPaid: WebhookMaker<WasmStateEvent> = (config) =>
       }
       ```
 ````
+
+## Deposit webhook
+
+The Xion deposit webhook integration emits normalized deposit detections as
+`Extraction` events and forwards them through the built-in webhook queue.
+Registrations are created per account through the authenticated account API, not
+through static indexer config.
+
+This is a deposit-detection webhook, not a generic balance-change feed. It only
+fires when the indexer observes a matching inbound native-bank or CW20 transfer
+into a watched wallet for an allowed asset.
+
+Create a registration with `POST /deposit-webhook-registrations`:
+
+```ts
+{
+  "description": "Sandbox deposit listener",
+  "endpointUrl": "https://partner.example/deposits",
+  "authHeader": "Authorization",
+  "authToken": "secret-token",
+  "watchedWallets": ["xion1..."],
+  "allowedNativeDenoms": ["uxion"],
+  "allowedCw20Contracts": ["xion1stablecoin..."],
+  "enabled": true
+}
+```
+
+Example:
+
+```sh
+curl -X POST https://daodaoindexer.burnt.com/deposit-webhook-registrations \
+  -H 'Authorization: Bearer <account-jwt>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "description": "Sandbox deposit listener",
+    "endpointUrl": "https://partner.example/deposits",
+    "authHeader": "Authorization",
+    "authToken": "secret-token",
+    "watchedWallets": ["xion1watchedwallet"],
+    "allowedNativeDenoms": ["uxion"],
+    "allowedCw20Contracts": ["xion1stablecoincontract"],
+    "enabled": true
+  }'
+```
+
+Each registration owns:
+
+- the destination webhook URL
+- optional auth header and token
+- one or more watched wallet addresses
+- one or more allowed native denoms and/or CW20 contract addresses
+
+When a matching deposit is detected, the indexer sends `POST` to the
+registration's `endpointUrl` with:
+
+- `Content-Type: application/json`
+- `Idempotency-Key: <deterministic-key>`
+- the configured auth header, if one was supplied
+
+Example native-asset payload:
+
+```json
+{
+  "idempotencyKey": "xion-mainnet-1:7:ABC123...:xion1watchedwallet:native:uxion:42000000:2:0",
+  "wallet": "xion1watchedwallet",
+  "recipient": "xion1watchedwallet",
+  "sender": "xion1senderwallet",
+  "amount": "42000000",
+  "assetType": "native",
+  "denom": "uxion",
+  "contractAddress": null,
+  "blockHeight": "1234567",
+  "blockTimeUnixMs": "1710000000000",
+  "txHash": "ABC123..."
+}
+```
+
+The `txHash` field is part of the stable deposit webhook payload contract and is
+intended to be used by downstream consumers for on-chain verification and
+idempotent ingest.
+
+Example CW20 payload:
+
+```json
+{
+  "idempotencyKey": "xion-mainnet-1:7:DEF456...:xion1watchedwallet:cw20:xion1stablecoincontract:1000000:4",
+  "wallet": "xion1watchedwallet",
+  "recipient": "xion1watchedwallet",
+  "sender": "xion1senderwallet",
+  "amount": "1000000",
+  "assetType": "cw20",
+  "denom": null,
+  "contractAddress": "xion1stablecoincontract",
+  "blockHeight": "1234568",
+  "blockTimeUnixMs": "1710000005000",
+  "txHash": "DEF456..."
+}
+```
+
+For bank multi-send events, `sender` may be `null` when multiple input wallets
+fund the same output and the provenance is ambiguous.
+
+The deposit webhook extractor uses `chainId` as part of the deterministic
+idempotency key. If `chainId` is omitted from config, it falls back to the
+connected RPC client chain ID.
+
+When `authHeader` is `Authorization`, the indexer automatically prefixes the
+token with `Bearer ` unless the token already includes it. Deposit webhook
+requests also include an `Idempotency-Key` header derived from the normalized
+deposit event. Consumers should treat the body plus `Idempotency-Key` and
+`txHash` as the canonical deposit-detection payload.
+
+Delivery is at-least-once. Failed webhook jobs are retried by BullMQ with
+exponential backoff, and duplicate delivery is possible. Consumers should treat
+the webhook as a retryable signal and make downstream ingestion idempotent.
+
+Operational guidance:
+
+- Return a `2xx` response as soon as the request is durably accepted.
+- Do on-chain verification asynchronously after acknowledgement.
+- Use `Idempotency-Key` and/or `txHash` to make ingestion idempotent.
+- Keep the endpoint fast. The queue worker applies an HTTP timeout to outbound
+  webhook delivery.

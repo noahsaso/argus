@@ -1,7 +1,7 @@
 import { Job, Queue } from 'bullmq'
 import { Sequelize } from 'sequelize'
 
-import { Block, State } from '@/db'
+import { AccountDepositWebhookRegistration, Block, State } from '@/db'
 import { getExtractorMap } from '@/listener'
 import { queueMeilisearchIndexUpdates } from '@/search'
 import { ExtractorEnv, ExtractorHandleableData } from '@/types'
@@ -38,6 +38,7 @@ export class ExtractQueue extends BaseQueue<ExtractQueuePayload> {
       this.options.config.remoteRpc
     )
     await this.autoCosmWasmClient.update()
+    await AccountDepositWebhookRegistration.ensureActiveRegistrationsCacheSubscription()
   }
 
   async process(job: Job<ExtractQueuePayload>) {

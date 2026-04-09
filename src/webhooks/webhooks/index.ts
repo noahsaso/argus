@@ -5,6 +5,7 @@ import { State, WasmStateEvent } from '@/db'
 import { WasmCodeService } from '@/services/wasm-codes'
 import { Config, ProcessedWebhook, Webhook, WebhookMaker } from '@/types'
 
+import * as depositWebhook from './depositWebhook'
 import * as discord from './discord'
 import * as indexerCwReceipt from './indexerCwReceipt'
 import * as notify from './notify'
@@ -20,6 +21,7 @@ export const getProcessedWebhooks = async (
     const processWebhooks = (config: Config) => {
       const webhookMakers: WebhookMaker<any, any>[] = [
         // Add webhook makers here.
+        ...Object.values(depositWebhook),
         ...Object.values(discord),
         ...Object.values(telegram),
         ...Object.values(indexerCwReceipt),

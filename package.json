@@ -9,6 +9,8 @@
     "format": "eslint . --fix",
     "test": "NODE_ENV=test node --nolazy --inspect=0.0.0.0:9227 ./node_modules/vitest/vitest.mjs --no-file-parallelism",
     "docker:test": "docker compose -f compose.test.yml up --exit-code-from test",
+    "test:deposit-webhook:e2e": "NODE_ENV=test DEPOSIT_WEBHOOK_E2E=true node --nolazy ./node_modules/vitest/vitest.mjs run src/test/e2e/depositWebhook.e2e.test.ts --config vitest.config.mts --no-file-parallelism",
+    "docker:test:deposit-webhook": "docker compose -f compose.test.deposit-webhook.yml up --exit-code-from test-deposit-webhook --no-attach db --no-attach redis --no-attach xion",
     "docker:test:dump": "docker compose -f compose.dump-test.yml up --exit-code-from test",
     "docker:test:computer": "docker compose -f compose.test.yml -f compose.test-computer.yml up --exit-code-from test",
     "coverage": "npm run test -- --coverage",

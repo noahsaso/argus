@@ -364,6 +364,179 @@ On error:
 }
 ```
 
+#### GET `/deposit-webhook-registrations`
+
+List deposit webhook registrations for the authenticated account.
+
+Response:
+
+```ts
+{
+  "registrations": {
+    "id": number
+    "description": string | null
+    "endpointUrl": string
+    "authHeader": string | null
+    "authToken": string | null
+    "watchedWallets": string[]
+    "allowedNativeDenoms": string[]
+    "allowedCw20Contracts": string[]
+    "enabled": boolean
+  }[]
+}
+```
+
+#### POST `/deposit-webhook-registrations`
+
+Create a new deposit webhook registration.
+
+This registers a deposit-detection listener for matching inbound transfers to
+the supplied watched wallets and asset filters. It is not a generic
+balance-change subscription.
+
+Request:
+
+```ts
+{
+  "description": string | null
+  "endpointUrl": string
+  "authHeader": string | null
+  "authToken": string | null
+  "watchedWallets": string[]
+  "allowedNativeDenoms": string[]
+  "allowedCw20Contracts": string[]
+  "enabled": boolean | undefined
+}
+```
+
+Response:
+
+```ts
+{
+  "registration": {
+    "id": number
+    "description": string | null
+    "endpointUrl": string
+    "authHeader": string | null
+    "authToken": string | null
+    "watchedWallets": string[]
+    "allowedNativeDenoms": string[]
+    "allowedCw20Contracts": string[]
+    "enabled": boolean
+  }
+}
+```
+
+Registered destinations receive the outbound deposit payload documented in
+[webhooks.md](./webhooks.md), including the stable `txHash` field for downstream
+on-chain verification.
+
+or error:
+
+```ts
+{
+  "error": string
+}
+```
+
+Example:
+
+```sh
+curl -X POST https://daodaoindexer.burnt.com/deposit-webhook-registrations \
+  -H 'Authorization: Bearer <account-jwt>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "description": "Production deposit listener",
+    "endpointUrl": "https://partner.example/deposits",
+    "authHeader": "Authorization",
+    "authToken": "secret-token",
+    "watchedWallets": ["xion1watchedwallet", "xion1secondwallet"],
+    "allowedNativeDenoms": ["uxion"],
+    "allowedCw20Contracts": ["xion1stablecoincontract"],
+    "enabled": true
+  }'
+```
+
+#### PATCH `/deposit-webhook-registrations/:id`
+
+Update an existing deposit webhook registration.
+
+Request:
+
+```ts
+{
+  "description": string | null | undefined
+  "endpointUrl": string | undefined
+  "authHeader": string | null | undefined
+  "authToken": string | null | undefined
+  "watchedWallets": string[] | undefined
+  "allowedNativeDenoms": string[] | undefined
+  "allowedCw20Contracts": string[] | undefined
+  "enabled": boolean | undefined
+}
+```
+
+Response:
+
+```ts
+{
+  "registration": {
+    "id": number
+    "description": string | null
+    "endpointUrl": string
+    "authHeader": string | null
+    "authToken": string | null
+    "watchedWallets": string[]
+    "allowedNativeDenoms": string[]
+    "allowedCw20Contracts": string[]
+    "enabled": boolean
+  }
+}
+```
+
+or error:
+
+```ts
+{
+  "error": string
+}
+```
+
+Example:
+
+```sh
+curl -X PATCH https://daodaoindexer.burnt.com/deposit-webhook-registrations/7 \
+  -H 'Authorization: Bearer <account-jwt>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "watchedWallets": ["xion1watchedwallet", "xion1thirdwallet"],
+    "allowedNativeDenoms": [],
+    "allowedCw20Contracts": ["xion1stablecoincontract"],
+    "enabled": true
+  }'
+```
+
+#### DELETE `/deposit-webhook-registrations/:id`
+
+Delete a deposit webhook registration.
+
+Empty response on success.
+
+On error:
+
+```ts
+{
+  "error": string
+}
+```
+
+Example:
+
+```sh
+curl -X DELETE https://daodaoindexer.burnt.com/deposit-webhook-registrations/7 \
+  -H 'Authorization: Bearer <account-jwt>'
+```
+
 #### GET `/webhooks`
 
 List webhooks.

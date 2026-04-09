@@ -1,0 +1,55 @@
+services:
+  test-deposit-webhook:
+    image: node:22-alpine
+    command: sh -c "npm install && npm run test:deposit-webhook:e2e"
+    working_dir: /usr/src/app
+    volumes:
+      - .:/usr/src/app
+    environment:
+      NODE_ENV: test
+      INTEGRATION_TESTS: true
+      DEPOSIT_WEBHOOK_E2E: true
+      CONFIG_FILE: xion-test.config.json
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      xion:
+        condition: service_healthy
+    tty: true
+
+  db:
+    image: timescale/timescaledb:2.18.1-pg17
+    environment:
+      POSTGRES_DB: test
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U test']
+      interval: 1s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli ping']
+      interval: 1s
+      timeout: 3s
+      retries: 20
+
+  xion:
+    build:
+      context: .
+      dockerfile: docker/xiond-local/Dockerfile
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'curl -fsS http://127.0.0.1:26657/status >/dev/null || exit 1',
+        ]
+      interval: 1s
+      timeout: 3s
+      retries: 40
+

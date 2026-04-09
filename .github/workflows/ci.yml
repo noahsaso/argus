@@ -22,3 +22,4 @@ jobs:
       - run: npm run lint
       - run: npm run build
       - run: npm run docker:test
+      - run: npm run docker:test:deposit-webhook
