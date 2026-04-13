@@ -2,6 +2,7 @@ import Router from '@koa/router'
 import Koa from 'koa'
 
 import { Config } from '@/types'
+import { version } from '@/version'
 
 import { accountRouter } from './account'
 import { setUpDocs } from './docs'
@@ -31,6 +32,7 @@ export const setUpRouter = async (
     ctx.status = 200
     ctx.body = {
       status: 'ok',
+      version,
       timestamp: new Date().toISOString(),
     }
   })

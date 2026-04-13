@@ -4,9 +4,11 @@ import { DefaultContext, DefaultState } from 'koa'
 import { State } from '@/db'
 import { SerializedBlock } from '@/types'
 import { serializeBlock } from '@/utils'
+import { version } from '@/version'
 
 type GetStatusResponse =
   | {
+      version: string
       chainId: string
       latestBlock: SerializedBlock
       lastStakingBlockHeightExported: string | null
@@ -35,6 +37,7 @@ export const getStatus: Router.Middleware<
 
   ctx.status = 200
   ctx.body = {
+    version,
     chainId: state.chainId,
     latestBlock: serializeBlock(state.latestBlock),
     lastStakingBlockHeightExported:
