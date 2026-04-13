@@ -79,3 +79,21 @@ jobs:
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
+
+  notify-ops:
+    needs: [build-and-push]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify ops of new release
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.OPS_REPO_PAT }}
+          repository: NoahSaso/intentional-design-ops
+          event-type: argus-fork-release
+          client-payload: >
+            {
+              "repo": "${{ github.repository }}",
+              "tag": "${{ github.ref_name }}",
+              "sha": "${{ github.sha }}"
+            }
