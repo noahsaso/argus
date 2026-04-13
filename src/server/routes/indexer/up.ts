@@ -4,6 +4,7 @@ import { DefaultContext, DefaultState } from 'koa'
 import { ConfigManager } from '@/config'
 import { State } from '@/db'
 import { getStargateClient } from '@/utils'
+import { version } from '@/version'
 
 type UpBlock = {
   height: number
@@ -13,6 +14,7 @@ type UpBlock = {
 
 type UpResponse =
   | {
+      version: string
       chainId: string
       remoteBlock: UpBlock
       localBlock: UpBlock | { error: string } | null
@@ -25,6 +27,7 @@ type UpResponse =
       }
     }
   | {
+      version: string
       error: string
     }
 
@@ -120,6 +123,7 @@ export const up: Router.Middleware<
   } catch (err) {
     ctx.status = 500
     ctx.body = {
+      version,
       error: err instanceof Error ? err.message : `${err}`,
     }
     return
@@ -156,6 +160,7 @@ export const up: Router.Middleware<
 
   ctx.status = caughtUp ? 200 : 412
   ctx.body = {
+    version,
     chainId: state.chainId,
     remoteBlock,
     localBlock,

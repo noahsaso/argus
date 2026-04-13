@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import { State } from '@/db'
 import { serializeBlock } from '@/utils'
+import { version } from '@/version'
 
 import { app } from './app'
 
@@ -16,6 +17,7 @@ describe('GET /status', () => {
       .expect(200)
       .expect('Content-Type', /json/)
       .expect({
+        version,
         chainId: state.chainId,
         latestBlock: serializeBlock(state.latestBlock),
         lastStakingBlockHeightExported:
