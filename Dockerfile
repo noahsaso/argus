@@ -13,6 +13,9 @@ COPY . .
 # Build the application
 RUN npm run build:only
 
+# Copy package.json to dist/ for version.ts to read at runtime
+RUN cp package.json dist/
+
 # Expose the API port
 EXPOSE 3420
 
