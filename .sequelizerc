@@ -5,8 +5,11 @@ const MIGRATING_DB = process.env.MIGRATING_DB === 'true'
 // so use the source files.
 const base = MIGRATING_DB ? 'dist' : 'src'
 
+// Which DB's migrations to use: 'data' (default) or 'accounts'.
+const migrationsDb = process.env.MIGRATIONS_DB || 'data'
+
 module.exports = {
   config: path.resolve('dist', 'db', 'config.js'),
   'models-path': path.resolve(base, 'db', 'models'),
-  'migrations-path': path.resolve(base, 'db', 'migrations'),
+  'migrations-path': path.resolve(base, 'db', 'migrations', migrationsDb),
 }
