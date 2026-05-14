@@ -103,14 +103,22 @@ export const createGetContractState = ({
     ])
     const blockHeight = BigInt(block.header.height).toString()
     const blockTimeUnixMs = Date.parse(block.header.time).toString()
-    const recovery = await recover({
-      address,
-      codeId: contractInfo.codeId,
-      blockHeight,
-      blockTimeUnixMs,
-      pageLimit,
-      fetchPage: fetchPage(client),
-    })
+    let recovery: Awaited<ReturnType<typeof recover>>
+    try {
+      recovery = await recover({
+        address,
+        codeId: contractInfo.codeId,
+        blockHeight,
+        blockTimeUnixMs,
+        pageLimit,
+        fetchPage: fetchPage(client),
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : `${err}`
+      ctx.status = 500
+      ctx.body = { error: message }
+      return
+    }
 
     ctx.status = 200
     ctx.body = {

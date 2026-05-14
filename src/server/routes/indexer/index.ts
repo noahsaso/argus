@@ -19,8 +19,8 @@ export const setUpIndexerRouter = async (root: Router) => {
   const aggregator = await loadAggregator()
   indexerRouter.get('/a/(.+)', aggregator)
 
-  // Live CosmWasm contract storage dump.
-  indexerRouter.get('/contract/:address/state', getContractState)
+  // Recover live CosmWasm contract storage through the events pipeline.
+  indexerRouter.post('/contract/:address/state/recover', getContractState)
 
   // Formula computer. This must be the last route since it's a catch-all.
   const computer = await loadComputer()

@@ -36,8 +36,8 @@
     }
   ],
   "paths": {
-    "/contract/{address}/state": {
-      "get": {
+    "/contract/{address}/state/recover": {
+      "post": {
         "tags": [
           "contract"
         ],

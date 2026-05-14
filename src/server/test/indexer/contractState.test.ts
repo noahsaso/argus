@@ -26,8 +26,8 @@ const disconnect = vi.fn()
 const makeApp = () => {
   const app = new Koa()
   const router = new Router()
-  router.get(
-    '/contract/:address/state',
+  router.post(
+    '/contract/:address/state/recover',
     createGetContractState({
       loadConfig,
       connect,
@@ -40,7 +40,7 @@ const makeApp = () => {
   return app
 }
 
-describe('GET /contract/:address/state', () => {
+describe('POST /contract/:address/state/recover', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     loadConfig.mockReturnValue(config)
@@ -62,7 +62,7 @@ describe('GET /contract/:address/state', () => {
 
   it('recovers live state through the events pipeline from remote RPC by default', async () => {
     await request(makeApp().callback())
-      .get(`/contract/${validAddress}/state`)
+      .post(`/contract/${validAddress}/state/recover`)
       .expect(200)
       .expect({
         chainId: 'juno-1',
@@ -88,18 +88,18 @@ describe('GET /contract/:address/state', () => {
   })
 
   it('disconnects the client when the state recovery fails', async () => {
-    recover.mockRejectedValueOnce(new Error('rpc down'))
+    recover.mockRejectedValueOnce(new Error('database down'))
 
     await request(makeApp().callback())
-      .get(`/contract/${validAddress}/state`)
-      .expect(502)
+      .post(`/contract/${validAddress}/state/recover`)
+      .expect(500)
 
     expect(disconnect).toHaveBeenCalledTimes(1)
   })
 
   it('rejects a wrong address prefix', async () => {
     await request(makeApp().callback())
-      .get(`/contract/${wrongPrefixAddress}/state`)
+      .post(`/contract/${wrongPrefixAddress}/state/recover`)
       .expect(400)
   })
 
@@ -110,15 +110,23 @@ describe('GET /contract/:address/state', () => {
     })
 
     await request(makeApp().callback())
-      .get(`/contract/${validAddress}/state?rpc=local`)
+      .post(`/contract/${validAddress}/state/recover?rpc=local`)
       .expect(400)
   })
 
-  it('maps RPC query failures to 502', async () => {
-    recover.mockRejectedValueOnce(new Error('rpc down'))
+  it('maps internal recovery failures to 500', async () => {
+    recover.mockRejectedValueOnce(new Error('database down'))
 
     await request(makeApp().callback())
-      .get(`/contract/${validAddress}/state`)
+      .post(`/contract/${validAddress}/state/recover`)
+      .expect(500)
+  })
+
+  it('maps RPC query failures to 502', async () => {
+    getContractInfo.mockRejectedValueOnce(new Error('rpc down'))
+
+    await request(makeApp().callback())
+      .post(`/contract/${validAddress}/state/recover`)
       .expect(502)
   })
 })

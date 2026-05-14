@@ -155,9 +155,9 @@ const makeFormulaDoc = (
 }
 
 const contractStateDumpDoc: [string, OpenAPIV3_1.PathItemObject] = [
-  '/contract/{address}/state',
+  '/contract/{address}/state/recover',
   {
-    get: {
+    post: {
       tags: [FormulaType.Contract],
       summary: 'Recover live contract state into the events pipeline',
       operationId: 'contract_state_recovery',
