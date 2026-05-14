@@ -5,12 +5,18 @@ import { dumpContractState } from './contract-state-dump'
 describe('dumpContractState', () => {
   it('base64 encodes all key/value entries', async () => {
     const fetchPage = vi.fn().mockResolvedValueOnce({
-      models: [{ key: Uint8Array.from([1, 2]), value: Uint8Array.from([3, 4]) }],
+      models: [
+        { key: Uint8Array.from([1, 2]), value: Uint8Array.from([3, 4]) },
+      ],
       nextKey: undefined,
     })
 
     await expect(
-      dumpContractState({ address: 'juno1contract', pageLimit: 1000, fetchPage })
+      dumpContractState({
+        address: 'juno1contract',
+        pageLimit: 1000,
+        fetchPage,
+      })
     ).resolves.toEqual({
       entries: [{ key: 'AQI=', value: 'AwQ=' }],
       count: 1,

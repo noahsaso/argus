@@ -174,7 +174,11 @@ const contractStateDumpDoc: [string, OpenAPIV3_1.PathItemObject] = [
           in: 'query',
           description: 'Configured RPC target to query',
           required: false,
-          schema: { type: 'string', enum: ['remote', 'local'], default: 'remote' },
+          schema: {
+            type: 'string',
+            enum: ['remote', 'local'],
+            default: 'remote',
+          },
         },
         {
           name: 'pageLimit',
@@ -209,7 +213,8 @@ const contractStateDumpDoc: [string, OpenAPIV3_1.PathItemObject] = [
                   blockTimeUnixMs: { type: 'string' },
                   count: {
                     type: 'integer',
-                    description: 'Number of live contract state entries recovered.',
+                    description:
+                      'Number of live contract state entries recovered.',
                   },
                   events: {
                     type: 'integer',
@@ -217,7 +222,8 @@ const contractStateDumpDoc: [string, OpenAPIV3_1.PathItemObject] = [
                   },
                   transformations: {
                     type: 'integer',
-                    description: 'Number of transformations created or updated.',
+                    description:
+                      'Number of transformations created or updated.',
                   },
                 },
               },
