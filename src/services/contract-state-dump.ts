@@ -32,8 +32,11 @@ export const fetchContractStatePage =
       QueryAllContractStateRequest.encode({
         address,
         pagination: {
-          key: nextKey,
+          key: nextKey ?? new Uint8Array(),
+          offset: 0n,
           limit: BigInt(pageLimit),
+          countTotal: false,
+          reverse: false,
         },
       }).finish()
     )

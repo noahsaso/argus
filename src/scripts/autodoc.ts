@@ -154,6 +154,79 @@ const makeFormulaDoc = (
   ]
 }
 
+const contractStateDumpDoc: [string, OpenAPIV3_1.PathItemObject] = [
+  '/contract/{address}/state',
+  {
+    get: {
+      tags: [FormulaType.Contract],
+      summary: 'Dump live contract state',
+      operationId: 'contract_state_dump',
+      parameters: [
+        {
+          name: 'address',
+          in: 'path',
+          description: 'CosmWasm contract address',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'rpc',
+          in: 'query',
+          description: 'Configured RPC target to query',
+          required: false,
+          schema: { type: 'string', enum: ['remote', 'local'], default: 'remote' },
+        },
+        {
+          name: 'pageLimit',
+          in: 'query',
+          description: 'Maximum entries to request per RPC page',
+          required: false,
+          schema: { type: 'integer', minimum: 1, maximum: 5000, default: 1000 },
+        },
+      ],
+      responses: {
+        '200': {
+          description: 'live contract state dump',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['chainId', 'contractAddress', 'rpc', 'count', 'entries'],
+                properties: {
+                  chainId: { type: 'string' },
+                  contractAddress: { type: 'string' },
+                  rpc: { type: 'string', enum: ['remote', 'local'] },
+                  count: { type: 'integer' },
+                  entries: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      required: ['key', 'value'],
+                      properties: {
+                        key: {
+                          type: 'string',
+                          description: 'Base64-encoded raw storage key.',
+                        },
+                        value: {
+                          type: 'string',
+                          description: 'Base64-encoded raw storage value.',
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        '400': { description: 'invalid address, rpc, or pageLimit' },
+        '404': { description: 'contract not found' },
+        '502': { description: 'RPC connection or query failed' },
+      },
+    },
+  },
+]
+
 const makeAggregatorDoc = (
   path: string,
   aggregator: Aggregator<any, any>
@@ -204,6 +277,7 @@ const makeAggregatorDoc = (
 }
 
 openapi.paths = {
+  [contractStateDumpDoc[0]]: contractStateDumpDoc[1],
   ...Object.fromEntries(
     Object.entries(flatten(contractFormulas)).map(
       ([path, formula]): [string, OpenAPIV3_1.PathItemObject] =>
