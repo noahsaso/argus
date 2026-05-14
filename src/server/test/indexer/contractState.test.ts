@@ -20,6 +20,7 @@ const loadConfig = vi.fn()
 const connect = vi.fn()
 const dump = vi.fn()
 const fetchPage = vi.fn()
+const disconnect = vi.fn()
 
 const makeApp = () => {
   const app = new Koa()
@@ -36,7 +37,10 @@ describe('GET /contract/:address/state', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     loadConfig.mockReturnValue(config)
-    connect.mockResolvedValue({ getChainId: vi.fn().mockResolvedValue('juno-1') })
+    connect.mockResolvedValue({
+      getChainId: vi.fn().mockResolvedValue('juno-1'),
+      disconnect,
+    })
     dump.mockResolvedValue({
       count: 1,
       entries: [{ key: 'AQ==', value: 'Ag==' }],
@@ -57,6 +61,17 @@ describe('GET /contract/:address/state', () => {
       })
 
     expect(connect).toHaveBeenCalledWith(config.remoteRpc)
+    expect(disconnect).toHaveBeenCalledTimes(1)
+  })
+
+  it('disconnects the client when the state query fails', async () => {
+    dump.mockRejectedValueOnce(new Error('rpc down'))
+
+    await request(makeApp().callback())
+      .get(`/contract/${validAddress}/state`)
+      .expect(502)
+
+    expect(disconnect).toHaveBeenCalledTimes(1)
   })
 
   it('rejects a wrong address prefix', async () => {

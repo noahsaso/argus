@@ -86,8 +86,10 @@ export const createGetContractState = ({
     return
   }
 
+  let client: Awaited<ReturnType<typeof connect>> | undefined
+
   try {
-    const client = await connect(rpcUrl)
+    client = await connect(rpcUrl)
     const [chainId, stateDump] = await Promise.all([
       client.getChainId(),
       dump({
@@ -108,6 +110,8 @@ export const createGetContractState = ({
     const message = err instanceof Error ? err.message : `${err}`
     ctx.status = /not found|no contract/i.test(message) ? 404 : 502
     ctx.body = { error: message }
+  } finally {
+    client?.disconnect()
   }
 }
 
