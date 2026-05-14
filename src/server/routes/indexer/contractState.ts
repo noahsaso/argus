@@ -4,10 +4,11 @@ import Router from '@koa/router'
 import { DefaultContext, DefaultState } from 'koa'
 
 import { ConfigManager } from '@/config'
+import { fetchContractStatePage } from '@/services/contract-state-dump'
 import {
-  dumpContractState,
-  fetchContractStatePage,
-} from '@/services/contract-state-dump'
+  getRecoveryContractInfo,
+  recoverContractState,
+} from '@/services/contract-state-recovery'
 import { Config } from '@/types'
 
 const DEFAULT_PAGE_LIMIT = 1000
@@ -20,16 +21,20 @@ type ContractStateResponse =
       chainId: string
       contractAddress: string
       rpc: RpcTarget
+      blockHeight: string
+      blockTimeUnixMs: string
       count: number
-      entries: { key: string; value: string }[]
+      events: number
+      transformations: number
     }
   | { error: string }
 
 type ContractStateDeps = {
   loadConfig: () => Config
   connect: typeof CosmWasmClient.connect
-  dump: typeof dumpContractState
+  recover: typeof recoverContractState
   fetchPage: typeof fetchContractStatePage
+  getContractInfo: typeof getRecoveryContractInfo
 }
 
 const getQueryString = (value: unknown): string | undefined =>
@@ -38,8 +43,9 @@ const getQueryString = (value: unknown): string | undefined =>
 export const createGetContractState = ({
   loadConfig,
   connect,
-  dump,
+  recover,
   fetchPage,
+  getContractInfo,
 }: ContractStateDeps): Router.Middleware<
   DefaultState,
   DefaultContext,
@@ -90,21 +96,30 @@ export const createGetContractState = ({
 
   try {
     client = await connect(rpcUrl)
-    const [chainId, stateDump] = await Promise.all([
+    const [chainId, contractInfo, block] = await Promise.all([
       client.getChainId(),
-      dump({
-        address,
-        pageLimit,
-        fetchPage: fetchPage(client),
-      }),
+      getContractInfo({ address, client }),
+      client.getBlock(),
     ])
+    const blockHeight = BigInt(block.header.height).toString()
+    const blockTimeUnixMs = Date.parse(block.header.time).toString()
+    const recovery = await recover({
+      address,
+      codeId: contractInfo.codeId,
+      blockHeight,
+      blockTimeUnixMs,
+      pageLimit,
+      fetchPage: fetchPage(client),
+    })
 
     ctx.status = 200
     ctx.body = {
       chainId,
       contractAddress: address,
       rpc,
-      ...stateDump,
+      blockHeight,
+      blockTimeUnixMs,
+      ...recovery,
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : `${err}`
@@ -118,6 +133,7 @@ export const createGetContractState = ({
 export const getContractState = createGetContractState({
   loadConfig: () => ConfigManager.load(),
   connect: CosmWasmClient.connect,
-  dump: dumpContractState,
+  recover: recoverContractState,
   fetchPage: fetchContractStatePage,
+  getContractInfo: getRecoveryContractInfo,
 })

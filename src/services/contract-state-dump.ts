@@ -8,13 +8,13 @@ import {
 export type ContractStateEntry = { key: string; value: string }
 export type ContractStateDump = { entries: ContractStateEntry[]; count: number }
 
-type RawModel = { key: Uint8Array; value: Uint8Array }
-type FetchPageArgs = {
+export type RawModel = { key: Uint8Array; value: Uint8Array }
+export type FetchPageArgs = {
   address: string
   pageLimit: number
   nextKey?: Uint8Array
 }
-type FetchPageResult = { models: RawModel[]; nextKey?: Uint8Array }
+export type FetchPageResult = { models: RawModel[]; nextKey?: Uint8Array }
 
 export const fetchContractStatePage =
   (client: CosmWasmClient) =>

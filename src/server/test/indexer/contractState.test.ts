@@ -18,8 +18,9 @@ const wrongPrefixAddress = toBech32('osmo', new Uint8Array(20).fill(1))
 
 const loadConfig = vi.fn()
 const connect = vi.fn()
-const dump = vi.fn()
+const recover = vi.fn()
 const fetchPage = vi.fn()
+const getContractInfo = vi.fn()
 const disconnect = vi.fn()
 
 const makeApp = () => {
@@ -27,7 +28,13 @@ const makeApp = () => {
   const router = new Router()
   router.get(
     '/contract/:address/state',
-    createGetContractState({ loadConfig, connect, dump, fetchPage })
+    createGetContractState({
+      loadConfig,
+      connect,
+      recover,
+      fetchPage,
+      getContractInfo,
+    })
   )
   app.use(router.routes()).use(router.allowedMethods())
   return app
@@ -39,16 +46,21 @@ describe('GET /contract/:address/state', () => {
     loadConfig.mockReturnValue(config)
     connect.mockResolvedValue({
       getChainId: vi.fn().mockResolvedValue('juno-1'),
+      getBlock: vi.fn().mockResolvedValue({
+        header: { height: 123n, time: '1970-01-01T00:07:36.000Z' },
+      }),
       disconnect,
     })
-    dump.mockResolvedValue({
+    getContractInfo.mockResolvedValue({ codeId: 7 })
+    recover.mockResolvedValue({
       count: 1,
-      entries: [{ key: 'AQ==', value: 'Ag==' }],
+      events: 1,
+      transformations: 1,
     })
     fetchPage.mockReturnValue(vi.fn())
   })
 
-  it('returns a live state dump from remote RPC by default', async () => {
+  it('recovers live state through the events pipeline from remote RPC by default', async () => {
     await request(makeApp().callback())
       .get(`/contract/${validAddress}/state`)
       .expect(200)
@@ -56,16 +68,27 @@ describe('GET /contract/:address/state', () => {
         chainId: 'juno-1',
         contractAddress: validAddress,
         rpc: 'remote',
+        blockHeight: '123',
+        blockTimeUnixMs: '456000',
         count: 1,
-        entries: [{ key: 'AQ==', value: 'Ag==' }],
+        events: 1,
+        transformations: 1,
       })
 
     expect(connect).toHaveBeenCalledWith(config.remoteRpc)
+    expect(recover).toHaveBeenCalledWith({
+      address: validAddress,
+      codeId: 7,
+      blockHeight: '123',
+      blockTimeUnixMs: '456000',
+      pageLimit: 1000,
+      fetchPage: expect.any(Function),
+    })
     expect(disconnect).toHaveBeenCalledTimes(1)
   })
 
-  it('disconnects the client when the state query fails', async () => {
-    dump.mockRejectedValueOnce(new Error('rpc down'))
+  it('disconnects the client when the state recovery fails', async () => {
+    recover.mockRejectedValueOnce(new Error('rpc down'))
 
     await request(makeApp().callback())
       .get(`/contract/${validAddress}/state`)
@@ -92,7 +115,7 @@ describe('GET /contract/:address/state', () => {
   })
 
   it('maps RPC query failures to 502', async () => {
-    dump.mockRejectedValueOnce(new Error('rpc down'))
+    recover.mockRejectedValueOnce(new Error('rpc down'))
 
     await request(makeApp().callback())
       .get(`/contract/${validAddress}/state`)

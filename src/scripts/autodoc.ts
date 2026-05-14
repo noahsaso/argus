@@ -159,8 +159,8 @@ const contractStateDumpDoc: [string, OpenAPIV3_1.PathItemObject] = [
   {
     get: {
       tags: [FormulaType.Contract],
-      summary: 'Dump live contract state',
-      operationId: 'contract_state_dump',
+      summary: 'Recover live contract state into the events pipeline',
+      operationId: 'contract_state_recovery',
       parameters: [
         {
           name: 'address',
@@ -186,33 +186,38 @@ const contractStateDumpDoc: [string, OpenAPIV3_1.PathItemObject] = [
       ],
       responses: {
         '200': {
-          description: 'live contract state dump',
+          description: 'live contract state recovery summary',
           content: {
             'application/json': {
               schema: {
                 type: 'object',
-                required: ['chainId', 'contractAddress', 'rpc', 'count', 'entries'],
+                required: [
+                  'chainId',
+                  'contractAddress',
+                  'rpc',
+                  'blockHeight',
+                  'blockTimeUnixMs',
+                  'count',
+                  'events',
+                  'transformations',
+                ],
                 properties: {
                   chainId: { type: 'string' },
                   contractAddress: { type: 'string' },
                   rpc: { type: 'string', enum: ['remote', 'local'] },
-                  count: { type: 'integer' },
-                  entries: {
-                    type: 'array',
-                    items: {
-                      type: 'object',
-                      required: ['key', 'value'],
-                      properties: {
-                        key: {
-                          type: 'string',
-                          description: 'Base64-encoded raw storage key.',
-                        },
-                        value: {
-                          type: 'string',
-                          description: 'Base64-encoded raw storage value.',
-                        },
-                      },
-                    },
+                  blockHeight: { type: 'string' },
+                  blockTimeUnixMs: { type: 'string' },
+                  count: {
+                    type: 'integer',
+                    description: 'Number of live contract state entries recovered.',
+                  },
+                  events: {
+                    type: 'integer',
+                    description: 'Number of WasmStateEvent records upserted.',
+                  },
+                  transformations: {
+                    type: 'integer',
+                    description: 'Number of transformations created or updated.',
                   },
                 },
               },
