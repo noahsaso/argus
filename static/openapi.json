@@ -140,6 +140,9 @@
           "404": {
             "description": "contract not found"
           },
+          "500": {
+            "description": "internal recovery pipeline failure"
+          },
           "502": {
             "description": "RPC connection or query failed"
           }

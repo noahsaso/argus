@@ -64,6 +64,35 @@ describe('recoverContractState', () => {
     })
   })
 
+  it('preserves invalid UTF-8 raw values as base64', async () => {
+    const fetchPage = vi.fn().mockResolvedValueOnce({
+      models: [{ key: Uint8Array.from([1]), value: Uint8Array.from([0xff]) }],
+      nextKey: undefined,
+    })
+    const saveEvents = vi.fn(async (events) => events)
+
+    await recoverContractState({
+      address: 'juno1contract',
+      codeId: 7,
+      blockHeight: '123',
+      blockTimeUnixMs: '456000',
+      pageLimit: 1000,
+      fetchPage,
+      ensureContract: vi.fn(),
+      saveEvents,
+      transformEvents: vi.fn(async () => []) as any,
+      updateState: vi.fn(),
+    })
+
+    expect(saveEvents).toHaveBeenCalledWith([
+      expect.objectContaining({
+        key: '1',
+        value: '/w==',
+        valueJson: null,
+      }),
+    ])
+  })
+
   it('fetches pages until nextKey is empty before saving and transforming', async () => {
     const fetchPage = vi
       .fn()

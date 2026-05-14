@@ -1,3 +1,4 @@
+import { fromUtf8 } from '@cosmjs/encoding'
 import { Sequelize } from 'sequelize'
 
 import { Block, Contract, State, WasmStateEvent } from '@/db'
@@ -32,7 +33,7 @@ type RecoverContractStateDeps = {
 
 const bytesToUtf8 = (value: Uint8Array): string => {
   try {
-    return Buffer.from(value).toString('utf8')
+    return fromUtf8(value)
   } catch {
     return Buffer.from(value).toString('base64')
   }

@@ -226,6 +226,7 @@ const contractStateDumpDoc: [string, OpenAPIV3_1.PathItemObject] = [
         },
         '400': { description: 'invalid address, rpc, or pageLimit' },
         '404': { description: 'contract not found' },
+        '500': { description: 'internal recovery pipeline failure' },
         '502': { description: 'RPC connection or query failed' },
       },
     },
