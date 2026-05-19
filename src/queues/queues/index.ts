@@ -1,3 +1,4 @@
+export { ContractStateRecoveryQueue } from './contract-state-recovery'
 export { ExportQueue } from './export'
 export { ExportBackgroundQueue } from './export-background'
 export { ExtractQueue } from './extract'

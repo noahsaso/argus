@@ -5,7 +5,8 @@ import { LRUCache } from 'lru-cache'
 import { Sequelize } from 'sequelize'
 
 import { AccountWebhook, Block, Contract, State, WasmStateEvent } from '@/db'
-import { WasmCodeTrackersQueue } from '@/queues/queues'
+import { CONTRACT_STATE_RECOVERY_DELAY_MS } from '@/queues/queues/contract-state-recovery'
+import { ContractStateRecoveryQueue, WasmCodeTrackersQueue } from '@/queues/queues'
 import { WasmCodeService } from '@/services'
 import { transformParsedStateEvents } from '@/transformers'
 import { Handler, HandlerMaker, WasmExportData } from '@/types'
@@ -13,6 +14,25 @@ import { dbKeyForKeys, getContractInfo, retry } from '@/utils'
 
 const STORE_NAME = 'wasm'
 const DEFAULT_CONTRACT_BYTE_LENGTH = 32
+
+type DelayedContractStateRecoveryEvent = {
+  address: string
+  blockHeight: string
+}
+
+export const scheduleDelayedContractStateRecoveries = async (
+  contractEvents: DelayedContractStateRecoveryEvent[],
+  addDelayed: typeof ContractStateRecoveryQueue.addDelayed =
+    ContractStateRecoveryQueue.addDelayed
+) => {
+  await Promise.all(
+    contractEvents.map(({ address, blockHeight }) =>
+      addDelayed({ address, detectedBlockHeight: blockHeight })
+    )
+  )
+}
+
+export { CONTRACT_STATE_RECOVERY_DELAY_MS }
 
 // Only save specific state events for contracts matching these code IDs keys.
 const CONTRACT_STATE_EVENT_KEY_ALLOWLIST: Partial<
@@ -254,6 +274,8 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
       event.type === 'contract' ? event.data : []
     )
     if (contractEvents.length > 0) {
+      await scheduleDelayedContractStateRecoveries(contractEvents)
+
       await Contract.bulkCreate(
         contractEvents.map(
           ({
