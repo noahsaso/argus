@@ -5,8 +5,11 @@ import { LRUCache } from 'lru-cache'
 import { Sequelize } from 'sequelize'
 
 import { AccountWebhook, Block, Contract, State, WasmStateEvent } from '@/db'
+import {
+  ContractStateRecoveryQueue,
+  WasmCodeTrackersQueue,
+} from '@/queues/queues'
 import { CONTRACT_STATE_RECOVERY_DELAY_MS } from '@/queues/queues/contract-state-recovery'
-import { ContractStateRecoveryQueue, WasmCodeTrackersQueue } from '@/queues/queues'
 import { WasmCodeService } from '@/services'
 import { transformParsedStateEvents } from '@/transformers'
 import { Handler, HandlerMaker, WasmExportData } from '@/types'
@@ -22,8 +25,7 @@ type DelayedContractStateRecoveryEvent = {
 
 export const scheduleDelayedContractStateRecoveries = async (
   contractEvents: DelayedContractStateRecoveryEvent[],
-  addDelayed: typeof ContractStateRecoveryQueue.addDelayed =
-    ContractStateRecoveryQueue.addDelayed
+  addDelayed: typeof ContractStateRecoveryQueue.addDelayed = ContractStateRecoveryQueue.addDelayed
 ) => {
   await Promise.all(
     contractEvents.map(({ address, blockHeight }) =>

@@ -45,7 +45,10 @@ export class ContractStateRecoveryQueue extends BaseQueue<ContractStateRecoveryQ
 
   async process(job: Job<ContractStateRecoveryQueuePayload>): Promise<void> {
     const { address, rpc = 'remote' } = job.data
-    const rpcUrl = rpc === 'remote' ? this.options.config.remoteRpc : this.options.config.localRpc
+    const rpcUrl =
+      rpc === 'remote'
+        ? this.options.config.remoteRpc
+        : this.options.config.localRpc
     if (!rpcUrl) {
       throw new Error(`${rpc} RPC is not configured`)
     }
