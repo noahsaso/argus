@@ -14,6 +14,8 @@ export type ContractStateRecovery = {
   transformations: number
 }
 
+type LatestStateEvent = Pick<WasmStateEvent, 'value' | 'valueJson' | 'delete'>
+
 type RecoverContractStateDeps = {
   ensureContract?: (args: {
     address: string
@@ -21,6 +23,7 @@ type RecoverContractStateDeps = {
     blockHeight: string
     blockTimeUnixMs: string
   }) => Promise<void>
+  getLatestEvent?: (event: ParsedWasmStateEvent) => Promise<LatestStateEvent | null>
   saveEvents?: (
     events: ParsedWasmStateEvent[]
   ) => Promise<{ contract?: Contract }[]>
@@ -39,6 +42,17 @@ const bytesToUtf8 = (value: Uint8Array): string => {
   }
 }
 
+const isJsonEqual = (a: unknown, b: unknown): boolean =>
+  JSON.stringify(a) === JSON.stringify(b)
+
+const isUnchangedLiveState = (
+  recoveredEvent: ParsedWasmStateEvent,
+  latestEvent: LatestStateEvent
+): boolean =>
+  !latestEvent.delete &&
+  latestEvent.value === recoveredEvent.value &&
+  isJsonEqual(latestEvent.valueJson, recoveredEvent.valueJson)
+
 export const recoverContractState = async ({
   address,
   codeId,
@@ -47,6 +61,7 @@ export const recoverContractState = async ({
   pageLimit,
   fetchPage,
   ensureContract = defaultEnsureContract,
+  getLatestEvent = defaultGetLatestEvent,
   saveEvents = defaultSaveEvents,
   transformEvents = transformParsedStateEvents,
   updateState = defaultUpdateState,
@@ -95,9 +110,21 @@ export const recoverContractState = async ({
     return { count: 0, events: 0, transformations: 0 }
   }
 
+  const eventsToSave: ParsedWasmStateEvent[] = []
+  for (const event of events) {
+    const latestEvent = await getLatestEvent(event)
+    if (!latestEvent || !isUnchangedLiveState(event, latestEvent)) {
+      eventsToSave.push(event)
+    }
+  }
+
+  if (!eventsToSave.length) {
+    return { count: events.length, events: 0, transformations: 0 }
+  }
+
   await ensureContract({ address, codeId, blockHeight, blockTimeUnixMs })
-  const savedEvents = await saveEvents(events)
-  const parsedEvents = events.filter((event, index) => {
+  const savedEvents = await saveEvents(eventsToSave)
+  const parsedEvents = eventsToSave.filter((event, index) => {
     const savedEvent = savedEvents[index]
     return savedEvent?.contract !== undefined || event.codeId > 0
   })
@@ -166,6 +193,19 @@ export const defaultEnsureContract = async ({
     }
   )
 }
+
+export const defaultGetLatestEvent = async ({
+  contractAddress,
+  key,
+}: ParsedWasmStateEvent): Promise<LatestStateEvent | null> =>
+  await WasmStateEvent.findOne({
+    where: {
+      contractAddress,
+      key,
+    },
+    order: [['blockHeight', 'DESC']],
+    attributes: ['value', 'valueJson', 'delete'],
+  })
 
 export const defaultSaveEvents = async (events: ParsedWasmStateEvent[]) => {
   const savedEvents = await WasmStateEvent.bulkCreate(events, {
