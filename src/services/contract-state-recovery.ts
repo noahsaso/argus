@@ -23,7 +23,9 @@ type RecoverContractStateDeps = {
     blockHeight: string
     blockTimeUnixMs: string
   }) => Promise<void>
-  getLatestEvent?: (event: ParsedWasmStateEvent) => Promise<LatestStateEvent | null>
+  getLatestEvent?: (
+    event: ParsedWasmStateEvent
+  ) => Promise<LatestStateEvent | null>
   saveEvents?: (
     events: ParsedWasmStateEvent[]
   ) => Promise<{ contract?: Contract }[]>
