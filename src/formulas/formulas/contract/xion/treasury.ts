@@ -63,6 +63,25 @@ const TreasuryStorageKeys = {
   PARAMS: 'params',
 }
 
+// A real treasury must have `admin` set: the contract's instantiate
+// (contracts/contracts/treasury/src/contract.rs:18-22) rejects `None` admin.
+// If admin is absent, the contract is either not a treasury or was never
+// indexed — throw so callers fall back to a direct chain query instead of
+// caching an empty placeholder.
+//
+// So this check is here purely to figure out if the indexer is returning a real
+// existing treasury, or just placeholder data for a non-existent one.
+const assertTreasuryIndexed = async (
+  env: Parameters<ContractFormula['compute']>[0]
+): Promise<void> => {
+  const adminValue = (
+    await env.get<Addr>(env.contractAddress, TreasuryStorageKeys.ADMIN)
+  )?.valueJson
+  if (adminValue === null || adminValue === undefined) {
+    throw new Error('treasury not found')
+  }
+}
+
 export const grantConfigs: ContractFormula<Record<string, GrantConfig>> = {
   docs: {
     description: "Get the treasury's grant configs by msg type url",
@@ -70,6 +89,8 @@ export const grantConfigs: ContractFormula<Record<string, GrantConfig>> = {
   },
   compute: async (env) => {
     const { contractAddress, getMap } = env
+
+    await assertTreasuryIndexed(env)
 
     return (
       (await getMap<string, GrantConfig>(
@@ -90,6 +111,8 @@ export const feeConfig: ContractFormula<FeeConfig | null> = {
   compute: async (env) => {
     const { contractAddress, get } = env
 
+    await assertTreasuryIndexed(env)
+
     return (
       (await get<FeeConfig>(contractAddress, TreasuryStorageKeys.FEE_CONFIG))
         ?.valueJson ?? null
@@ -105,10 +128,15 @@ export const admin: ContractFormula<Addr | null> = {
   compute: async (env) => {
     const { contractAddress, get } = env
 
-    return (
+    const adminValue =
       (await get<Addr>(contractAddress, TreasuryStorageKeys.ADMIN))
         ?.valueJson ?? null
-    )
+
+    if (adminValue === null || adminValue === undefined) {
+      throw new Error('treasury not found')
+    }
+
+    return adminValue
   },
 }
 
@@ -128,6 +156,8 @@ export const params: ContractFormula<Record<string, Params>> = {
   },
   compute: async (env) => {
     const { contractAddress, get } = env
+
+    await assertTreasuryIndexed(env)
 
     return (
       (await get<Params>(contractAddress, TreasuryStorageKeys.PARAMS))
