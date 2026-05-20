@@ -40,7 +40,20 @@ type ContractStateDeps = {
 const getQueryString = (value: unknown): string | undefined =>
   typeof value === 'string' ? value : undefined
 
-export const createGetContractState =
+const isAuthorized = (authorization: string | undefined, password: string) => {
+  const [type, credentials] = authorization?.split(' ') ?? []
+  if (type !== 'Basic' || !credentials) {
+    return false
+  }
+
+  const [name, pass] = Buffer.from(credentials, 'base64').toString().split(':')
+  return name === 'exporter' && pass === password
+}
+
+const isRpcError = (message: string): boolean =>
+  /rpc|query|network|timeout|connection|fetch|request/i.test(message)
+
+export const createRecoverContractState =
   ({
     loadConfig,
     connect,
@@ -55,6 +68,18 @@ export const createGetContractState =
   async (ctx) => {
     const config = loadConfig()
     const address = ctx.params.address
+
+    if (
+      !isAuthorized(
+        ctx.header.authorization,
+        config.exporterDashboardPassword || 'exporter'
+      )
+    ) {
+      ctx.status = 401
+      ctx.set('WWW-Authenticate', 'Basic realm="contract-state-recovery"')
+      ctx.body = { error: 'authentication required' }
+      return
+    }
 
     try {
       const decoded = fromBech32(address)
@@ -121,7 +146,7 @@ export const createGetContractState =
         })
       } catch (err) {
         const message = err instanceof Error ? err.message : `${err}`
-        ctx.status = 500
+        ctx.status = isRpcError(message) ? 502 : 500
         ctx.body = { error: message }
         return
       }
@@ -144,7 +169,7 @@ export const createGetContractState =
     }
   }
 
-export const getContractState = createGetContractState({
+export const recoverContractStateHandler = createRecoverContractState({
   loadConfig: () => ConfigManager.load(),
   connect: CosmWasmClient.connect,
   recover: recoverContractState,

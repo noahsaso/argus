@@ -16,16 +16,16 @@ export type FetchPageArgs = {
 }
 export type FetchPageResult = { models: RawModel[]; nextKey?: Uint8Array }
 
-export const fetchContractStatePage =
-  (client: CosmWasmClient) =>
-  async ({
+export const fetchContractStatePage = (client: CosmWasmClient) => {
+  const rpcClient = createProtobufRpcClient(
+    new QueryClient(client['forceGetCometClient']())
+  )
+
+  return async ({
     address,
     pageLimit,
     nextKey,
   }: FetchPageArgs): Promise<FetchPageResult> => {
-    const rpcClient = createProtobufRpcClient(
-      new QueryClient(client['forceGetCometClient']())
-    )
     const responseBytes = await rpcClient.request(
       'cosmwasm.wasm.v1.Query',
       'AllContractState',
@@ -47,6 +47,7 @@ export const fetchContractStatePage =
       nextKey: response.pagination?.nextKey,
     }
   }
+}
 
 export const dumpContractState = async ({
   address,

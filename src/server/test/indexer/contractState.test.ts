@@ -5,7 +5,7 @@ import request from 'supertest'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ConfigManager } from '@/config'
-import { createGetContractState } from '@/server/routes/indexer/contractState'
+import { createRecoverContractState } from '@/server/routes/indexer/contractState'
 
 const config = {
   ...ConfigManager.load(),
@@ -22,13 +22,19 @@ const recover = vi.fn()
 const fetchPage = vi.fn()
 const getContractInfo = vi.fn()
 const disconnect = vi.fn()
+const auth = Buffer.from('exporter:exporter').toString('base64')
+
+const recoverRequest = (app: Koa, address = validAddress, query = '') =>
+  request(app.callback())
+    .post(`/contract/${address}/state/recover${query}`)
+    .set('Authorization', `Basic ${auth}`)
 
 const makeApp = () => {
   const app = new Koa()
   const router = new Router()
   router.post(
     '/contract/:address/state/recover',
-    createGetContractState({
+    createRecoverContractState({
       loadConfig,
       connect,
       recover,
@@ -60,20 +66,23 @@ describe('POST /contract/:address/state/recover', () => {
     fetchPage.mockReturnValue(vi.fn())
   })
 
-  it('recovers live state through the events pipeline from remote RPC by default', async () => {
+  it('requires basic auth', async () => {
     await request(makeApp().callback())
       .post(`/contract/${validAddress}/state/recover`)
-      .expect(200)
-      .expect({
-        chainId: 'juno-1',
-        contractAddress: validAddress,
-        rpc: 'remote',
-        blockHeight: '123',
-        blockTimeUnixMs: '456000',
-        count: 1,
-        events: 1,
-        transformations: 1,
-      })
+      .expect(401)
+  })
+
+  it('recovers live state through the events pipeline from remote RPC by default', async () => {
+    await recoverRequest(makeApp()).expect(200).expect({
+      chainId: 'juno-1',
+      contractAddress: validAddress,
+      rpc: 'remote',
+      blockHeight: '123',
+      blockTimeUnixMs: '456000',
+      count: 1,
+      events: 1,
+      transformations: 1,
+    })
 
     expect(connect).toHaveBeenCalledWith(config.remoteRpc)
     expect(recover).toHaveBeenCalledWith({
@@ -90,17 +99,13 @@ describe('POST /contract/:address/state/recover', () => {
   it('disconnects the client when the state recovery fails', async () => {
     recover.mockRejectedValueOnce(new Error('database down'))
 
-    await request(makeApp().callback())
-      .post(`/contract/${validAddress}/state/recover`)
-      .expect(500)
+    await recoverRequest(makeApp()).expect(500)
 
     expect(disconnect).toHaveBeenCalledTimes(1)
   })
 
   it('rejects a wrong address prefix', async () => {
-    await request(makeApp().callback())
-      .post(`/contract/${wrongPrefixAddress}/state/recover`)
-      .expect(400)
+    await recoverRequest(makeApp(), wrongPrefixAddress).expect(400)
   })
 
   it('rejects local RPC when localRpc is not configured', async () => {
@@ -109,24 +114,18 @@ describe('POST /contract/:address/state/recover', () => {
       localRpc: undefined,
     })
 
-    await request(makeApp().callback())
-      .post(`/contract/${validAddress}/state/recover?rpc=local`)
-      .expect(400)
+    await recoverRequest(makeApp(), validAddress, '?rpc=local').expect(400)
   })
 
   it('maps internal recovery failures to 500', async () => {
     recover.mockRejectedValueOnce(new Error('database down'))
 
-    await request(makeApp().callback())
-      .post(`/contract/${validAddress}/state/recover`)
-      .expect(500)
+    await recoverRequest(makeApp()).expect(500)
   })
 
   it('maps RPC query failures to 502', async () => {
     getContractInfo.mockRejectedValueOnce(new Error('rpc down'))
 
-    await request(makeApp().callback())
-      .post(`/contract/${validAddress}/state/recover`)
-      .expect(502)
+    await recoverRequest(makeApp()).expect(502)
   })
 })

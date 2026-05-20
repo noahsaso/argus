@@ -27,11 +27,21 @@ export const scheduleDelayedContractStateRecoveries = async (
   contractEvents: DelayedContractStateRecoveryEvent[],
   addDelayed: typeof ContractStateRecoveryQueue.addDelayed = ContractStateRecoveryQueue.addDelayed
 ) => {
-  await Promise.all(
+  const results = await Promise.allSettled(
     contractEvents.map(({ address, blockHeight }) =>
       addDelayed({ address, detectedBlockHeight: blockHeight })
     )
   )
+
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      const { address, blockHeight } = contractEvents[index]
+      console.error(
+        `failed to enqueue contract state recovery for ${address} at ${blockHeight}:`,
+        result.reason
+      )
+    }
+  })
 }
 
 export { CONTRACT_STATE_RECOVERY_DELAY_MS }

@@ -1,5 +1,5 @@
 import { fromUtf8 } from '@cosmjs/encoding'
-import { Sequelize } from 'sequelize'
+import { Op, Sequelize } from 'sequelize'
 
 import { Block, Contract, State, WasmStateEvent } from '@/db'
 import { transformParsedStateEvents } from '@/transformers'
@@ -26,6 +26,9 @@ type RecoverContractStateDeps = {
   getLatestEvent?: (
     event: ParsedWasmStateEvent
   ) => Promise<LatestStateEvent | null>
+  getLatestEvents?: (
+    events: ParsedWasmStateEvent[]
+  ) => Promise<Map<string, LatestStateEvent>>
   saveEvents?: (
     events: ParsedWasmStateEvent[]
   ) => Promise<{ contract?: Contract }[]>
@@ -64,6 +67,7 @@ export const recoverContractState = async ({
   fetchPage,
   ensureContract = defaultEnsureContract,
   getLatestEvent = defaultGetLatestEvent,
+  getLatestEvents,
   saveEvents = defaultSaveEvents,
   transformEvents = transformParsedStateEvents,
   updateState = defaultUpdateState,
@@ -112,9 +116,18 @@ export const recoverContractState = async ({
     return { count: 0, events: 0, transformations: 0 }
   }
 
+  let latestEvents: Map<string, LatestStateEvent> | undefined
+  if (getLatestEvents) {
+    latestEvents = await getLatestEvents(events)
+  } else if (getLatestEvent === defaultGetLatestEvent) {
+    latestEvents = await defaultGetLatestEvents(events)
+  }
+
   const eventsToSave: ParsedWasmStateEvent[] = []
   for (const event of events) {
-    const latestEvent = await getLatestEvent(event)
+    const latestEvent = latestEvents
+      ? latestEvents.get(stateEventKey(event))
+      : await getLatestEvent(event)
     if (!latestEvent || !isUnchangedLiveState(event, latestEvent)) {
       eventsToSave.push(event)
     }
@@ -196,6 +209,12 @@ export const defaultEnsureContract = async ({
   )
 }
 
+const stateEventKey = ({
+  contractAddress,
+  key,
+}: Pick<ParsedWasmStateEvent, 'contractAddress' | 'key'>) =>
+  `${contractAddress}:${key}`
+
 export const defaultGetLatestEvent = async ({
   contractAddress,
   key,
@@ -208,6 +227,31 @@ export const defaultGetLatestEvent = async ({
     order: [['blockHeight', 'DESC']],
     attributes: ['value', 'valueJson', 'delete'],
   })
+
+export const defaultGetLatestEvents = async (
+  events: ParsedWasmStateEvent[]
+): Promise<Map<string, LatestStateEvent>> => {
+  const addresses = [...new Set(events.map((event) => event.contractAddress))]
+  const keys = [...new Set(events.map((event) => event.key))]
+  const latestEvents = await WasmStateEvent.findAll({
+    where: {
+      contractAddress: { [Op.in]: addresses },
+      key: { [Op.in]: keys },
+    },
+    order: [['blockHeight', 'DESC']],
+    attributes: ['contractAddress', 'key', 'value', 'valueJson', 'delete'],
+  })
+
+  const latestEventMap = new Map<string, LatestStateEvent>()
+  latestEvents.forEach((event) => {
+    const key = stateEventKey(event)
+    if (!latestEventMap.has(key)) {
+      latestEventMap.set(key, event)
+    }
+  })
+
+  return latestEventMap
+}
 
 export const defaultSaveEvents = async (events: ParsedWasmStateEvent[]) => {
   const savedEvents = await WasmStateEvent.bulkCreate(events, {

@@ -2,7 +2,7 @@ import Router from '@koa/router'
 
 import { loadAggregator } from './aggregator'
 import { loadComputer } from './computer'
-import { getContractState } from './contractState'
+import { recoverContractStateHandler } from './contractState'
 import { getStatus } from './getStatus'
 import { up } from './up'
 
@@ -20,7 +20,10 @@ export const setUpIndexerRouter = async (root: Router) => {
   indexerRouter.get('/a/(.+)', aggregator)
 
   // Recover live CosmWasm contract storage through the events pipeline.
-  indexerRouter.post('/contract/:address/state/recover', getContractState)
+  indexerRouter.post(
+    '/contract/:address/state/recover',
+    recoverContractStateHandler
+  )
 
   // Formula computer. This must be the last route since it's a catch-all.
   const computer = await loadComputer()
