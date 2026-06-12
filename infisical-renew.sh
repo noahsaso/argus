@@ -2,10 +2,11 @@
 
 echo "🔄 Renewing token at $(date)..."
 
-# get the token from the .env file
+# Get the token from the .env file.
 INFISICAL_TOKEN=$(grep '^INFISICAL_TOKEN=' .env | cut -d '=' -f 2)
 
-NEW_TOKEN=$(npx @infisical/cli token renew $INFISICAL_TOKEN | grep '^ey')
+# Infisical CLI >=0.43 renews identity tokens with `token renew`.
+NEW_TOKEN=$(npx @infisical/cli token renew "$INFISICAL_TOKEN" | grep '^ey')
 
 if [ -z "$NEW_TOKEN" ]; then
   echo "❌ Failed to renew token at $(date)"

@@ -41,7 +41,7 @@
     "pre-compute": "node dist/scripts/preCompute.js",
     "revalidate": "node dist/scripts/revalidate.js",
     "flood": "node dist/scripts/flood.js",
-    "renew-infisical-token": "npx @infisical/cli renew --token $INFISICAL_TOKEN --projectId $INFISICAL_PROJECT_ID --env $INFISICAL_ENVIRONMENT",
+    "renew-infisical-token": "sh infisical-renew.sh",
     "serve": "node dist/server/serve.js",
     "serve:dev": "docker compose -f compose.dev.yml up",
     "serve:dev:nodocker": "nodemon --watch dist --signal SIGTERM --exec \"node dist/server/serve.js\"",
