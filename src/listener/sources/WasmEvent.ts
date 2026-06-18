@@ -17,9 +17,14 @@ export type WasmEventDataSourceConfig = {
    */
   value: string | string[]
   /**
-   * Other attributes to ensure are present.
+   * The contract address or addresses to match. If not provided, all contract
+   * addresses are matched.
    */
-  otherAttributes?: string[]
+  contractAddress?: string | string[]
+  /**
+   * Other attributes to ensure are present, optionally matching values.
+   */
+  otherAttributes?: (string | { key: string; value: string | string[] })[]
 }
 
 export type WasmEventData = {
@@ -108,52 +113,86 @@ export class WasmEventDataSource extends DataSource<
   }
 
   match({ events }: ExtractableTxInput): WasmEventData[] {
-    return events.flatMap(({ type, attributes }) =>
-      type === 'wasm' &&
-      attributes.some(
-        ({ key, value }) => key === '_contract_address' && value.length > 0
-      ) &&
-      (!this.config.otherAttributes ||
-        this.config.otherAttributes.every((otherKey) =>
-          attributes.some(({ key }) => key === otherKey)
-        ))
-        ? attributes.flatMap(({ key, value }) =>
-            this._equalsOrContains(this.config.key, key) &&
-            this._equalsOrContains(this.config.value, value)
-              ? {
-                  address: attributes.find(
-                    ({ key }) => key === '_contract_address'
-                  )!.value,
-                  key,
-                  value,
-                  attributes: attributes.reduce(
-                    (acc, { key, value }) => ({
-                      ...acc,
-                      [key]: [...(acc[key] || []), value],
-                    }),
-                    {} as Record<string, string[]>
-                  ),
-                  _attributes: [...attributes],
-                }
-              : []
+    return events.flatMap(({ type, attributes }) => {
+      if (type !== 'wasm') {
+        return []
+      }
+
+      // Cache contract address lookup.
+      const contractAddress = attributes.find(
+        ({ key }) => key === '_contract_address'
+      )?.value
+      if (!contractAddress) {
+        return []
+      }
+
+      // Check contract address filter.
+      if (
+        this.config.contractAddress &&
+        !this._equalsOrContains(this.config.contractAddress, contractAddress)
+      ) {
+        return []
+      }
+
+      // Check other attributes.
+      if (
+        this.config.otherAttributes &&
+        !this.config.otherAttributes.every((otherKey) =>
+          attributes.some(({ key, value }) =>
+            typeof otherKey === 'string'
+              ? key === otherKey
+              : key === otherKey.key &&
+                this._equalsOrContains(otherKey.value, value)
           )
-        : []
-    )
+        )
+      ) {
+        return []
+      }
+
+      // Match key/value pairs.
+      return attributes.flatMap(({ key, value }) =>
+        this._equalsOrContains(this.config.key, key) &&
+        this._equalsOrContains(this.config.value, value)
+          ? {
+              address: contractAddress,
+              key,
+              value,
+              attributes: attributes.reduce(
+                (acc, { key, value }) => ({
+                  ...acc,
+                  [key]: [...(acc[key] || []), value],
+                }),
+                {} as Record<string, string[]>
+              ),
+              _attributes: [...attributes],
+            }
+          : []
+      )
+    })
   }
 
   isOurData(data: WasmEventData): boolean {
     return (
       this._equalsOrContains(this.config.key, data.key) &&
       this._equalsOrContains(this.config.value, data.value) &&
+      // Contract address filter.
+      (!this.config.contractAddress ||
+        this._equalsOrContains(this.config.contractAddress, data.address)) &&
       // Other attributes.
       (!this.config.otherAttributes ||
-        this.config.otherAttributes.every(
-          (otherKey) =>
-            otherKey in data.attributes &&
-            Array.isArray(data.attributes[otherKey]) &&
-            data.attributes[otherKey]!.length > 0 &&
-            data._attributes.some(({ key }) => key === otherKey)
-        ))
+        this.config.otherAttributes.every((otherKey) => {
+          const key = typeof otherKey === 'string' ? otherKey : otherKey.key
+          const values = data.attributes[key]
+          return (
+            values &&
+            Array.isArray(values) &&
+            values.length > 0 &&
+            (typeof otherKey === 'string' ||
+              values.some((value) =>
+                this._equalsOrContains(otherKey.value, value)
+              ))
+          )
+        }))
     )
   }
 }
