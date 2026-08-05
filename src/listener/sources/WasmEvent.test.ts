@@ -127,6 +127,46 @@ describe('WasmEventDataSource', () => {
     })
   })
 
+  it('matches a wasmd v0.61 wasm event', () => {
+    dataSource = new WasmEventDataSource({
+      key: 'action',
+      value: 'propose',
+    })
+    const address =
+      'juno1jar50ltryvzp6axanam3v6gwsxakp2edmrz0n4r7y7h3hcwarp3sm6ccsp'
+
+    const result = dataSource.match(
+      createMockExtractorInput([
+        {
+          type: 'wasm',
+          attributes: [
+            { key: '_contract_address', value: address },
+            { key: 'action', value: 'propose' },
+            { key: 'proposal_id', value: '42' },
+          ],
+        },
+      ])
+    )
+
+    expect(result).toEqual([
+      {
+        address,
+        key: 'action',
+        value: 'propose',
+        attributes: {
+          _contract_address: [address],
+          action: ['propose'],
+          proposal_id: ['42'],
+        },
+        _attributes: [
+          { key: '_contract_address', value: address },
+          { key: 'action', value: 'propose' },
+          { key: 'proposal_id', value: '42' },
+        ],
+      },
+    ])
+  })
+
   describe('array configurations', () => {
     it('should match with array of keys', () => {
       const config: WasmEventDataSourceConfig = {
