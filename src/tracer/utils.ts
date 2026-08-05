@@ -2,10 +2,10 @@ import * as fs from 'fs'
 
 type FifoJsonTracerOptions = {
   file: string
-  onData: (data: unknown) => void
+  onData: (data: unknown) => unknown | Promise<unknown>
   // If provided, this callback will be called when a JSON object cannot be
   // parsed from the line.
-  onError?: (line: string, error: unknown) => void
+  onError?: (line: string, error: unknown) => unknown | Promise<unknown>
 }
 
 type FifoJsonTracer = {
@@ -18,8 +18,8 @@ type FifoJsonTracer = {
 // Trace a FIFO (see `mkfifo`) that transmits JSON objects on each line, and
 // execute an asynchronous callback synchronously (i.e. don't read from the FIFO
 // while executing the async callback) with the parsed JSON object. If the
-// callback throws an error, the FIFO will be closed and the error will be
-// thrown. If a line cannot be parsed as a JSON object, the `onError` callback
+// callback throws or rejects, the FIFO will be closed and the lifetime
+// promise will reject. If a line cannot be parsed as a JSON object, the `onError` callback
 // will be called if provided. If the `onError` callback is not provided, the
 // line will be ignored.
 //
@@ -121,44 +121,46 @@ export const setUpFifoJsonTracer = ({
         return
       }
 
-      const lines = chunk.split('\n')
-      if (buffer) {
-        lines[0] = buffer + lines[0]
-        buffer = ''
-      }
-      if (lines[lines.length - 1]) {
-        buffer = lines.pop()!
-      }
+      // Pause before awaiting callbacks so later chunks cannot be read or
+      // processed until every complete line in this chunk finishes.
+      stream.pause()
 
-      for (const line of lines) {
-        if (!line) {
-          continue
+      void (async () => {
+        const lines = chunk.split('\n')
+        if (buffer) {
+          lines[0] = buffer + lines[0]
+          buffer = ''
+        }
+        if (lines[lines.length - 1]) {
+          buffer = lines.pop()!
         }
 
-        let data: unknown
-        try {
-          data = JSON.parse(line)
-        } catch (error) {
-          try {
-            onError?.(line, error)
-          } catch (callbackError) {
-            shuttingDown = true
-            stream.destroy()
-            reject(callbackError)
-            return
+        for (const line of lines) {
+          if (!line) {
+            continue
           }
-          continue
-        }
 
-        try {
-          onData(data)
-        } catch (error) {
+          let data: unknown
+          try {
+            data = JSON.parse(line)
+          } catch (error) {
+            await onError?.(line, error)
+            continue
+          }
+
+          await onData(data)
+        }
+      })()
+        .then(() => {
+          if (!shuttingDown && !settled && !stream.destroyed) {
+            stream.resume()
+          }
+        })
+        .catch((error) => {
           shuttingDown = true
           stream.destroy()
           reject(error)
-          return
-        }
-      }
+        })
     })
 
     stream.on('error', (error) => {

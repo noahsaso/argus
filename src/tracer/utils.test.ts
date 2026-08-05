@@ -63,6 +63,57 @@ describe('setUpFifoJsonTracer', () => {
     await expect(tracer.promise).resolves.toBeUndefined()
   })
 
+  it('awaits async callbacks before processing the next line', async () => {
+    directory = await mkdtemp(join(tmpdir(), 'argus-fifo-'))
+    const fifo = join(directory, 'trace.fifo')
+    await execFileAsync('mkfifo', [fifo])
+    const seen: unknown[] = []
+    let releaseFirst: () => void = () => {}
+    const firstCanFinish = new Promise<void>((resolve) => {
+      releaseFirst = resolve
+    })
+    const tracer = setUpFifoJsonTracer({
+      file: fifo,
+      onData: async (data) => {
+        seen.push(data)
+        if (seen.length === 1) {
+          await firstCanFinish
+        }
+      },
+    })
+    close = tracer.close
+
+    await writeFile(fifo, '{"line":1}\n{"line":2}\n')
+    await waitFor(() => expect(seen).toEqual([{ line: 1 }]))
+    await new Promise((resolve) => setTimeout(resolve, 25))
+    expect(seen).toEqual([{ line: 1 }])
+
+    releaseFirst()
+    await waitFor(() => expect(seen).toEqual([{ line: 1 }, { line: 2 }]))
+  })
+
+  it('stops processing after an async callback rejects', async () => {
+    directory = await mkdtemp(join(tmpdir(), 'argus-fifo-'))
+    const fifo = join(directory, 'trace.fifo')
+    await execFileAsync('mkfifo', [fifo])
+    const seen: unknown[] = []
+    const error = new Error('async callback failed')
+    const tracer = setUpFifoJsonTracer({
+      file: fifo,
+      onData: async (data) => {
+        seen.push(data)
+        throw error
+      },
+    })
+    close = tracer.close
+
+    const rejection = expect(tracer.promise).rejects.toBe(error)
+    await writeFile(fifo, '{"line":1}\n{"line":2}\n')
+
+    await rejection
+    expect(seen).toEqual([{ line: 1 }])
+  })
+
   it('stops processing a chunk after an onData callback fails', async () => {
     directory = await mkdtemp(join(tmpdir(), 'argus-fifo-'))
     const fifo = join(directory, 'trace.fifo')
