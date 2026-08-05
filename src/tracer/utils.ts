@@ -2,15 +2,14 @@ import * as fs from 'fs'
 
 type FifoJsonTracerOptions = {
   file: string
-  onData: (data: unknown) => void
+  onData: (data: unknown) => unknown | Promise<unknown>
   // If provided, this callback will be called when a JSON object cannot be
   // parsed from the line.
-  onError?: (line: string, error: unknown) => void
+  onError?: (line: string, error: unknown) => unknown | Promise<unknown>
 }
 
 type FifoJsonTracer = {
-  // Promise that resolves when the FIFO is closed or rejects if the FIFO
-  // errors.
+  // Promise that resolves when explicitly closed or rejects if the FIFO errors.
   promise: Promise<void>
   // Close the FIFO and resolve the promise.
   close: () => void
@@ -19,8 +18,8 @@ type FifoJsonTracer = {
 // Trace a FIFO (see `mkfifo`) that transmits JSON objects on each line, and
 // execute an asynchronous callback synchronously (i.e. don't read from the FIFO
 // while executing the async callback) with the parsed JSON object. If the
-// callback throws an error, the FIFO will be closed and the error will be
-// thrown. If a line cannot be parsed as a JSON object, the `onError` callback
+// callback throws or rejects, the FIFO will be closed and the lifetime
+// promise will reject. If a line cannot be parsed as a JSON object, the `onError` callback
 // will be called if provided. If the `onError` callback is not provided, the
 // line will be ignored.
 //
@@ -61,128 +60,151 @@ export const setUpFifoJsonTracer = ({
   onData,
   onError,
 }: FifoJsonTracerOptions): FifoJsonTracer => {
-  const fifoRs = fs.createReadStream(file, {
-    // Parse chunks as UTF-8 strings.
-    encoding: 'utf-8',
+  let activeStream: fs.ReadStream | undefined
+  let shuttingDown = false
+  let settled = false
+  let resolvePromise: () => void = () => {}
+  let rejectPromise: (error: unknown) => void = () => {}
+
+  const promise = new Promise<void>((resolve, reject) => {
+    resolvePromise = resolve
+    rejectPromise = reject
   })
 
-  // In the case a chunk ends in the middle of a JSON object and not after a
-  // newline, buffer the chunk and continue reading until we have a valid JSON
-  // object.
-  let buffer = ''
-
-  const dataListener = (chunk: string | Buffer) => {
-    // Type-check chunk. It should be a string due to `encoding` set above.
-    if (!chunk || typeof chunk !== 'string') {
-      return
-    }
-
-    // All complete lines that should be JSON objects end with a newline, so
-    // the last item in this array will be an empty string if the last line
-    // is complete. The last line may not be complete if the data being sent
-    // exceeds the chunk buffer size. If this is the case, use the buffer
-    // across chunks to build the incomplete line.
-    const lines = chunk.split('\n')
-
-    if (lines.length === 0) {
-      return
-    }
-
-    // If the previous chunk left an incomplete line in the buffer, prepend
-    // it to the first line of this chunk.
-    if (buffer) {
-      lines[0] = buffer + lines[0]
-      buffer = ''
-    }
-
-    // If the last line is not empty, it is incomplete, so buffer it for the
-    // next chunk.
-    if (lines[lines.length - 1]) {
-      buffer = lines.pop()!
-    }
-
-    for (const line of lines) {
-      // Ignore empty line.
-      if (!line) {
-        continue
-      }
-
-      let data: unknown | undefined
-      try {
-        data = JSON.parse(line)
-      } catch (error) {
-        // If we cannot parse the buffer as a JSON object, call the error
-        // callback if provided.
-        onError?.(line, error)
-        continue
-      }
-
-      // Execute callback with parsed JSON.
-      onData(data)
+  const resolve = () => {
+    if (!settled) {
+      settled = true
+      resolvePromise()
     }
   }
 
-  let opened = false
+  const reject = (error: unknown) => {
+    if (!settled) {
+      settled = true
+      rejectPromise(error)
+    }
+  }
 
-  // Wait for FIFO to error or end.
-  let resolveDelayed: () => void = () => {}
-  const promise = new Promise<void>((_resolve, reject) => {
-    let done = false
-    const resolve = () => {
-      if (!done) {
-        done = true
-        _resolve()
+  const openReaderSession = () => {
+    if (shuttingDown || settled) {
+      return
+    }
+
+    // A partial line belongs to the writer session that produced it and must
+    // not be combined with data from a replacement writer.
+    let buffer = ''
+    let sessionComplete = false
+    const stream = fs.createReadStream(file, { encoding: 'utf-8' })
+    activeStream = stream
+
+    const reconnect = () => {
+      if (sessionComplete) {
+        return
+      }
+      sessionComplete = true
+      if (activeStream === stream) {
+        activeStream = undefined
+      }
+      if (shuttingDown) {
+        resolve()
+      } else if (!settled) {
+        setImmediate(openReaderSession)
       }
     }
-    resolveDelayed = () => setTimeout(resolve, 5_000)
 
-    fifoRs.on('error', (error) => {
-      fifoRs.off('end', resolve)
-      fifoRs.off('close', resolveDelayed)
-      // Reject once the FIFO ends.
-      fifoRs.on('end', () => {
-        if (!done) {
-          done = true
-          reject(error)
+    stream.on('open', () => {
+      console.log(`[${new Date().toISOString()}] FIFO opened.`)
+    })
+
+    stream.on('data', (chunk: string | Buffer) => {
+      if (!chunk || typeof chunk !== 'string') {
+        return
+      }
+
+      // Pause before awaiting callbacks so later chunks cannot be read or
+      // processed until every complete line in this chunk finishes.
+      stream.pause()
+
+      void (async () => {
+        const lines = chunk.split('\n')
+        if (buffer) {
+          lines[0] = buffer + lines[0]
+          buffer = ''
         }
-      })
-      // If closed and promise not done after 2 seconds, reject.
-      fifoRs.on('close', () => {
-        setTimeout(() => {
-          if (!done) {
-            done = true
-            reject(error)
+        if (lines[lines.length - 1]) {
+          buffer = lines.pop()!
+        }
+
+        for (const line of lines) {
+          if (!line) {
+            continue
           }
-        }, 2000)
-      })
-      // Close the FIFO if it is not already closed, so it ends.
-      if (!fifoRs.closed) {
-        fifoRs.destroy()
+
+          let data: unknown
+          try {
+            data = JSON.parse(line)
+          } catch (error) {
+            await onError?.(line, error)
+            continue
+          }
+
+          await onData(data)
+        }
+      })()
+        .then(() => {
+          if (!shuttingDown && !settled && !stream.destroyed) {
+            stream.resume()
+          }
+        })
+        .catch((error) => {
+          shuttingDown = true
+          stream.destroy()
+          reject(error)
+        })
+    })
+
+    stream.on('error', (error) => {
+      sessionComplete = true
+      if (activeStream === stream) {
+        activeStream = undefined
+      }
+      stream.destroy()
+      if (shuttingDown) {
+        resolve()
+      } else {
+        shuttingDown = true
+        reject(error)
       }
     })
+    stream.on('end', reconnect)
+    stream.on('close', reconnect)
+  }
 
-    fifoRs.on('open', () => {
-      console.log(`[${new Date().toISOString()}] FIFO opened.`)
-      opened = true
-    })
-
-    // Once data ends, resolve.
-    fifoRs.on('end', resolve)
-
-    // If closed and promise not done after 5 seconds, resolve.
-    fifoRs.on('close', resolveDelayed)
-  })
-
-  // Start reading from the FIFO.
-  fifoRs.on('data', dataListener)
+  openReaderSession()
 
   return {
     promise,
     close: () => {
-      fifoRs.destroy()
-      // If the FIFO was not opened, resolve the promise in 5 seconds.
-      if (!opened) {
-        resolveDelayed()
+      if (shuttingDown) {
+        return
+      }
+      shuttingDown = true
+      const stream = activeStream
+      if (!stream) {
+        resolve()
+      } else if (stream.pending) {
+        // A read-only FIFO open blocks until a writer connects. Open a
+        // temporary writer to release that pending open before destroying
+        // the stream, so shutdown does not leave a libuv worker blocked
+        // indefinitely. The matching pending reader makes this open complete.
+        fs.open(file, fs.constants.O_WRONLY, (error, fd) => {
+          if (fd !== undefined) {
+            fs.close(fd, () => {})
+          }
+          stream.destroy(error ?? undefined)
+        })
+      } else {
+        stream.destroy()
       }
     },
   }
