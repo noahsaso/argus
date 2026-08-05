@@ -23,11 +23,11 @@ describe('isIndexerCaughtUp', () => {
   })
 
   it('preserves the strict five-block boundary', () => {
-    expect(
-      isIndexerCaughtUp({ remoteHeight: 100, exportedHeight: 95 })
-    ).toBe(false)
-    expect(
-      isIndexerCaughtUp({ remoteHeight: 100, exportedHeight: 96 })
-    ).toBe(true)
+    expect(isIndexerCaughtUp({ remoteHeight: 100, exportedHeight: 95 })).toBe(
+      false
+    )
+    expect(isIndexerCaughtUp({ remoteHeight: 100, exportedHeight: 96 })).toBe(
+      true
+    )
   })
 })
