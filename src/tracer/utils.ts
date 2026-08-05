@@ -105,7 +105,9 @@ export const setUpFifoJsonTracer = ({
       if (activeStream === stream) {
         activeStream = undefined
       }
-      if (!shuttingDown && !settled) {
+      if (shuttingDown) {
+        resolve()
+      } else if (!settled) {
         setImmediate(openReaderSession)
       }
     }
@@ -143,6 +145,7 @@ export const setUpFifoJsonTracer = ({
             shuttingDown = true
             stream.destroy()
             reject(callbackError)
+            return
           }
           continue
         }
@@ -153,18 +156,23 @@ export const setUpFifoJsonTracer = ({
           shuttingDown = true
           stream.destroy()
           reject(error)
+          return
         }
       }
     })
 
     stream.on('error', (error) => {
       sessionComplete = true
-      shuttingDown = true
       if (activeStream === stream) {
         activeStream = undefined
       }
       stream.destroy()
-      reject(error)
+      if (shuttingDown) {
+        resolve()
+      } else {
+        shuttingDown = true
+        reject(error)
+      }
     })
     stream.on('end', reconnect)
     stream.on('close', reconnect)
@@ -179,9 +187,23 @@ export const setUpFifoJsonTracer = ({
         return
       }
       shuttingDown = true
-      activeStream?.destroy()
-      activeStream = undefined
-      resolve()
+      const stream = activeStream
+      if (!stream) {
+        resolve()
+      } else if (stream.pending) {
+        // A read-only FIFO open blocks until a writer connects. Open a
+        // temporary writer to release that pending open before destroying
+        // the stream, so shutdown does not leave a libuv worker blocked
+        // indefinitely. The matching pending reader makes this open complete.
+        fs.open(file, fs.constants.O_WRONLY, (error, fd) => {
+          if (fd !== undefined) {
+            fs.close(fd, () => {})
+          }
+          stream.destroy(error ?? undefined)
+        })
+      } else {
+        stream.destroy()
+      }
     },
   }
 }
