@@ -18,10 +18,7 @@ describe('parseWasmStoreKey', () => {
 
   it('parses a Juno v30 contract info key', () => {
     expect(
-      parseWasmStoreKey(
-        'ApdHR/1jIwQddN2fdxZpDoG7YKst2MT51H4nrxvh3Rhj',
-        'juno'
-      )
+      parseWasmStoreKey('ApdHR/1jIwQddN2fdxZpDoG7YKst2MT51H4nrxvh3Rhj', 'juno')
     ).toEqual({
       prefix: 0x02,
       contractAddress:

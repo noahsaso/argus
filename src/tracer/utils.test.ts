@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { promisify } from 'util'
+
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { setUpFifoJsonTracer } from './utils'
