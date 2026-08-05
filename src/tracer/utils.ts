@@ -133,16 +133,26 @@ export const setUpFifoJsonTracer = ({
           continue
         }
 
+        let data: unknown
         try {
-          onData(JSON.parse(line))
+          data = JSON.parse(line)
         } catch (error) {
-          if (error instanceof SyntaxError) {
+          try {
             onError?.(line, error)
-          } else {
+          } catch (callbackError) {
             shuttingDown = true
             stream.destroy()
-            reject(error)
+            reject(callbackError)
           }
+          continue
+        }
+
+        try {
+          onData(data)
+        } catch (error) {
+          shuttingDown = true
+          stream.destroy()
+          reject(error)
         }
       }
     })
