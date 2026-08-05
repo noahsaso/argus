@@ -12,6 +12,17 @@ type UpBlock = {
   timestamp: string
 }
 
+type IndexerHeights = {
+  remoteHeight: number
+  exportedHeight: number
+  localHeight?: number
+}
+
+export const isIndexerCaughtUp = ({
+  remoteHeight,
+  exportedHeight,
+}: IndexerHeights) => exportedHeight > remoteHeight - 5
+
 type UpResponse =
   | {
       version: string
@@ -150,13 +161,11 @@ export const up: Router.Middleware<
     timestamp: state.latestBlockDate.toISOString(),
   }
 
-  // If local chain is within 5 blocks of actual chain, consider it caught up.
-  // If no local RPC, use the exported block instead.
-  const caughtUp =
-    (localBlock && 'height' in localBlock
-      ? localBlock.height
-      : exportedBlock.height) >
-    remoteBlock.height - 5
+  // A healthy local RPC does not prove that the exporter consumed its traces.
+  const caughtUp = isIndexerCaughtUp({
+    remoteHeight: remoteBlock.height,
+    exportedHeight: exportedBlock.height,
+  })
 
   ctx.status = caughtUp ? 200 : 412
   ctx.body = {
