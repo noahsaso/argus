@@ -20,6 +20,13 @@ type UpResponse =
       localBlock: UpBlock | { error: string } | null
       exportedBlock: UpBlock
       caughtUp: boolean
+      // Whether a local RPC is configured for the indexer to trace.
+      localRpcConfigured: boolean
+      // True when a configured component (currently just the local RPC) is
+      // unreachable or erroring, in which case `caughtUp` cannot be trusted.
+      degraded: boolean
+      // Human-readable reasons for the degraded state, empty when healthy.
+      degradationReasons: string[]
       timing: {
         state: number
         localChainBlock: number | null
@@ -150,13 +157,32 @@ export const up: Router.Middleware<
     timestamp: state.latestBlockDate.toISOString(),
   }
 
+  const localRpcConfigured = hasLocalRpc
+
+  // The configured local RPC is the node the indexer traces, and its trace
+  // pipelines cannot progress while it is down. The exported block is not a
+  // safe fallback in that case: the remote-connected websocket listener keeps
+  // advancing it to the remote chain tip even while the local node is down,
+  // which previously made this endpoint report healthy during a local node
+  // outage. Flag the indexer as degraded and never caught up instead.
+  const degradationReasons: string[] = []
+  if (localRpcConfigured && localBlock && 'error' in localBlock) {
+    degradationReasons.push(
+      `Local RPC (${config.localRpc}) unreachable or erroring: ${localBlock.error}`
+    )
+  }
+  const degraded = degradationReasons.length > 0
+
   // If local chain is within 5 blocks of actual chain, consider it caught up.
-  // If no local RPC, use the exported block instead.
+  // If no local RPC is configured, use the exported block instead (legacy
+  // behavior for deployments without a local node). If the local RPC is
+  // configured but degraded, never consider the indexer caught up.
   const caughtUp =
+    !degraded &&
     (localBlock && 'height' in localBlock
       ? localBlock.height
       : exportedBlock.height) >
-    remoteBlock.height - 5
+      remoteBlock.height - 5
 
   ctx.status = caughtUp ? 200 : 412
   ctx.body = {
@@ -166,6 +192,9 @@ export const up: Router.Middleware<
     localBlock,
     exportedBlock,
     caughtUp,
+    localRpcConfigured,
+    degraded,
+    degradationReasons,
     timing: {
       state: stateDuration,
       localChainBlock:
