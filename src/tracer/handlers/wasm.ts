@@ -17,6 +17,28 @@ import { dbKeyForKeys, getContractInfo, retry } from '@/utils'
 
 const STORE_NAME = 'wasm'
 const DEFAULT_CONTRACT_BYTE_LENGTH = 32
+const CONTRACT_KEY_PREFIX = 0x02
+const CONTRACT_STORE_PREFIX = 0x03
+
+export const parseWasmStoreKey = (key: string, bech32Prefix: string) => {
+  const keyData = fromBase64(key)
+  const prefix = keyData[0]
+  if (prefix !== CONTRACT_STORE_PREFIX && prefix !== CONTRACT_KEY_PREFIX) {
+    return
+  }
+  if (keyData.length < 1 + DEFAULT_CONTRACT_BYTE_LENGTH) {
+    return
+  }
+
+  return {
+    prefix,
+    contractAddress: toBech32(
+      bech32Prefix,
+      keyData.slice(1, 1 + DEFAULT_CONTRACT_BYTE_LENGTH)
+    ),
+    stateKey: keyData.slice(1 + DEFAULT_CONTRACT_BYTE_LENGTH).join(','),
+  }
+}
 
 type DelayedContractStateRecoveryEvent = {
   address: string
@@ -89,9 +111,6 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
       'Chain ID needed for wasm export, failed to load from RPC or State model in DB.'
     )
   }
-
-  const CONTRACT_KEY_PREFIX = 0x02
-  const CONTRACT_STORE_PREFIX = 0x03
 
   // Get the contract state event allowlist.
   const stateEventAllowlist = CONTRACT_STATE_EVENT_KEY_ALLOWLIST[chainId]?.map(
@@ -166,42 +185,19 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
     //
     //     ContractKeyPrefix || contractAddressBytes
     //
-    const keyData = fromBase64(trace.key)
-    if (
-      keyData[0] !== CONTRACT_STORE_PREFIX &&
-      keyData[0] !== CONTRACT_KEY_PREFIX
-    ) {
+    const parsedKey = parseWasmStoreKey(trace.key, bech32Prefix)
+    if (!parsedKey) {
       return
     }
 
-    const contractByteLength = DEFAULT_CONTRACT_BYTE_LENGTH
-    // Start of contract address in the key, taking into account the prefix.
-    const contractAddressOffset = 1
-
-    // Ignore keys that are too short to be a wasm key.
-    if (keyData.length < contractAddressOffset + contractByteLength) {
-      return
-    }
-
-    const contractAddress = toBech32(
-      bech32Prefix,
-      keyData.slice(
-        contractAddressOffset,
-        contractAddressOffset + contractByteLength
-      )
-    )
-    // Convert key to comma-separated list of bytes. See explanation in `Event`
-    // model for more information.
-    const key = keyData
-      .slice(contractAddressOffset + contractByteLength)
-      .join(',')
+    const { contractAddress, prefix, stateKey: key } = parsedKey
 
     // Get code ID and block timestamp from chain.
     const blockHeight = BigInt(trace.metadata.blockHeight).toString()
     const blockTimeUnixMs = BigInt(trace.blockTimeUnixMs).toString()
 
     // If contract key, save contract info.
-    if (trace.operation === 'write' && keyData[0] === CONTRACT_KEY_PREFIX) {
+    if (trace.operation === 'write' && prefix === CONTRACT_KEY_PREFIX) {
       // Parse as protobuf to get code ID.
       const protobufContractInfo = fromBase64(trace.value)
       let contractInfo
