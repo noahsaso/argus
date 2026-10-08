@@ -94,6 +94,43 @@ GET /api/indexer/aggregate/generic/simpleNumeric/sumFormulaOverRange?formulaType
 
 The response will be the aggregated value (e.g., a JSON number for the sum).
 
+### Issuing API keys
+
+Operators issue indexer API keys with the `create-key` script, which only
+touches the accounts database. It finds or creates the account, then creates the
+key and a `manual` credit in a single transaction.
+
+In production (secrets injected by Infisical):
+
+```bash
+cd ~/indexer && npm run with-infisical -- npm run create-key -- --account <id> --name <name>
+```
+
+Options:
+
+- `-a, --account <publicKey>` (required): account public key or identifier.
+  Created if it does not exist.
+- `-n, --name <name>` (required when creating): key name, trimmed, max 255
+  characters, unique per account. Fails if the account already has a key with
+  this name.
+- `-d, --description <text>`: optional description, max 255 characters.
+- `--credits <amount>`: `-1` for unlimited (default) or a positive integer for a
+  finite number of credits.
+- `--reset <keyId>`: rotate the secret of an existing key on `--account`
+  instead of creating a new key.
+- `-c, --config <path>`: config file, falling back to `config.json`.
+
+The plaintext API key is printed once to stdout along with the key ID, name,
+account, and credits. Only its SHA-512 hash is stored, so it cannot be
+recovered later; use `--reset` to issue a replacement.
+
+When rotating with `--reset`, the old key stops matching in the database
+immediately. The indexer also caches API key lookups in Redis
+(`accountKeyIdForApiKey:<key>`) for up to 7 days, so the script scans for and
+deletes cached entries that point at the rotated key ID. If Redis is not
+configured or reachable from where the script runs, it says so, and the old key
+may keep working on the indexer for up to 7 days.
+
 ## Accounts
 
 The accounts API lets you manage accounts that can access the indexer API, as

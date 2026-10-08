@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'crypto'
 
+import type { Redis } from 'ioredis'
 import { Op, Sequelize } from 'sequelize'
 import {
   AllowNull,
@@ -81,6 +82,60 @@ export class AccountKey extends Model {
         hashedKey,
       },
     })
+  }
+
+  /**
+   * Replace this key's hash with a newly generated key, invalidating the old
+   * plaintext key in the database. Returns the new plaintext key, which is not
+   * stored anywhere.
+   *
+   * Note: the indexer caches API key -> key ID lookups in Redis for up to 7
+   * days. Use `clearCachedApiKeyLookups` to stop the old key from working
+   * immediately.
+   */
+  public async rotate(): Promise<string> {
+    const { key, hash } = AccountKey.generateKeyAndHash()
+    await this.update({
+      hashedKey: hash,
+    })
+    return key
+  }
+
+  /**
+   * Delete the Redis cache entries (`accountKeyIdForApiKey:<apiKey>`) that map
+   * any API key to this key's ID. Since only key hashes are stored, the old
+   * plaintext key is unknown, so this scans all cached lookups and removes the
+   * ones pointing at this key. Returns the number of entries deleted.
+   */
+  public async clearCachedApiKeyLookups(redis: Redis): Promise<number> {
+    // SCAN's MATCH pattern and returned keys are not affected by ioredis's
+    // keyPrefix option, but GET/DEL are, so add/strip the prefix manually.
+    const keyPrefix = redis.options.keyPrefix || ''
+    const id = String(this.id)
+
+    let deleted = 0
+    let cursor = '0'
+    do {
+      const [nextCursor, keys] = await redis.scan(
+        cursor,
+        'MATCH',
+        `${keyPrefix}accountKeyIdForApiKey:*`,
+        'COUNT',
+        1000
+      )
+      cursor = nextCursor
+
+      const unprefixedKeys = keys.map((key) => key.slice(keyPrefix.length))
+      if (unprefixedKeys.length) {
+        const values = await redis.mget(unprefixedKeys)
+        const toDelete = unprefixedKeys.filter((_, i) => values[i] === id)
+        if (toDelete.length) {
+          deleted += await redis.del(...toDelete)
+        }
+      }
+    } while (cursor !== '0')
+
+    return deleted
   }
 
   public get isTest(): boolean {
