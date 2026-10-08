@@ -53,6 +53,7 @@
     "serve:prod:accounts": "npm run build && pm2 reload ecosystem.config.js --only server_accounts",
     "search:update": "node dist/scripts/searchUpdate.js",
     "console": "node dist/scripts/console.js",
+    "create-key": "node dist/scripts/createKey.js",
     "dumpContracts": "node dist/scripts/dumpContracts.js",
     "autodoc": "node dist/scripts/autodoc.js",
     "docker:build": "docker buildx build --platform linux/amd64 -t argus ."
