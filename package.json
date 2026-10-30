@@ -8,6 +8,7 @@
     "lint": "eslint .",
     "format": "eslint . --fix",
     "test": "NODE_ENV=test node --nolazy --inspect=0.0.0.0:9227 ./node_modules/vitest/vitest.mjs --no-file-parallelism",
+    "test:websocket": "node --test tests/chain-websocket-listener.cjs && vitest run --config vitest.websocket.config.mts",
     "docker:test": "docker compose -f compose.test.yml up --exit-code-from test",
     "docker:test:dump": "docker compose -f compose.dump-test.yml up --exit-code-from test",
     "docker:test:computer": "docker compose -f compose.test.yml -f compose.test-computer.yml up --exit-code-from test",

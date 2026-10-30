@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import WS from 'vitest-websocket-mock'
 
 import {
@@ -9,10 +9,28 @@ import {
   TxMessage,
 } from './ChainWebSocketListener'
 
-const newListener = (eventType: EventType | EventType[]) =>
-  new ChainWebSocketListener(eventType, {
+// Keep this suite independent of the application/database/queue test setup.
+vi.mock('@/db', () => ({
+  State: { getSingleton: async () => ({ chainId: 'test' }) },
+}))
+vi.mock('@/utils', () => import('../utils/objectMatchesStructure'))
+vi.mock('ws', () => import('mock-socket'))
+
+const listeners = new Set<ChainWebSocketListener>()
+const newListener = (eventType: EventType | EventType[]) => {
+  const listener = new ChainWebSocketListener(eventType, {
     rpc: 'http://localhost:26657',
   })
+  listeners.add(listener)
+  return listener
+}
+
+afterEach(() => {
+  listeners.forEach((listener) => listener.disconnect())
+  listeners.clear()
+  WS.clean()
+  vi.restoreAllMocks()
+})
 
 describe('ChainWebSocketListener', () => {
   let onConnectionStateChange: ReturnType<typeof vi.fn>
@@ -20,6 +38,8 @@ describe('ChainWebSocketListener', () => {
   let mockServer: WS
 
   beforeEach(() => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.spyOn(console, 'log').mockImplementation(() => {})
     // close sockets
     WS.clean()
     mockServer = new WS('ws://localhost:26657/websocket')
