@@ -582,3 +582,47 @@ test('a duplicate readiness callback cannot publish a second socket within one a
   await connection
   h.clean()
 })
+
+test('manual disconnect during CONNECTING emits once, settles the attempt and permits a fresh connection', async () => {
+  const h = harness()
+  const pending = h.listener.connect({ skipWait: true })
+  await flush()
+  const old = h.sockets[0]
+  const staleClose = old.onclose
+  const staleError = old.onerror
+  h.listener.disconnect()
+  h.listener.disconnect()
+  await pending
+  await h.tick(60000)
+  assert.equal(
+    h.events.map(({ state }) => state).join(','),
+    'connecting,disconnected'
+  )
+  assert.equal(h.events[1].isReconnection, false)
+  assert.equal(h.listener.connected, false)
+  assert.equal(h.listener.connecting, false)
+  assert.equal(h.timers.size, 0)
+  assert.equal(old.closed, 1)
+  assert.equal(h.sockets.length, 1)
+
+  const fresh = h.listener.connect({ skipWait: true })
+  await flush()
+  staleClose({ code: 1006, reason: 'late cancellation close' })
+  await staleError({ error: new Error('late cancellation error') })
+  h.sockets[1].open()
+  await fresh
+  assert.equal(
+    h.events.map(({ state }) => state).join(','),
+    'connecting,disconnected,connecting,connected'
+  )
+  assert.equal(h.listener.connected, true)
+  assert.equal(h.sockets[1].sent.length, 1)
+  h.listener.disconnect()
+  h.listener.disconnect()
+  assert.equal(
+    h.events.map(({ state }) => state).join(','),
+    'connecting,disconnected,connecting,connected,disconnected'
+  )
+  assert.equal(h.events[4].isReconnection, false)
+  h.clean()
+})

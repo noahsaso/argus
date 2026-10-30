@@ -649,6 +649,8 @@ export class ChainWebSocketListener {
    * Disconnect from the WebSocket and stop reconnection attempts.
    */
   disconnect() {
+    // Attempt cancellation may clear/close the socket before notification.
+    const socket = this.webSocket
     this._shouldReconnect = false
     this._generation++
     this._connecting = false
@@ -656,10 +658,11 @@ export class ChainWebSocketListener {
     this._cancelRetry?.()
     this._cancelAttempt?.()
 
-    if (!this.webSocket) return
-    const socket = this.webSocket
-    this.webSocket = null
-    this._closeSocket(socket)
+    if (!socket) return
+    if (this.webSocket === socket) {
+      this.webSocket = null
+      this._closeSocket(socket)
+    }
 
     // Emit disconnected state for manual disconnection
     this._emitConnectionEvent({

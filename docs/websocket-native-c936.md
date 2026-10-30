@@ -12,7 +12,10 @@ connection generation and socket identity guard every socket callback. Subscript
 use the captured OPEN socket, and synchronous send failures reject the attempt
 with cleanup instead of escaping the event handler. Connected state is reported
 only after subscriptions have been sent successfully. Disconnect also stops an
-in-progress connection or backoff and allows an immediate new `connect()`.
+in-progress connection or backoff and allows an immediate new `connect()`. Manual
+disconnection of a CONNECTING or OPEN socket emits exactly one non-reconnecting
+`disconnected` event; repeated disconnects remain no-ops. Cancelling a handshake
+does not emit an obsolete connection error.
 
 `wait-port` 1.0.4 has no cancellation API, so its use in this class was replaced
 with cancellable Node TCP probes. Probe timeout and polling remain one second,
@@ -26,7 +29,7 @@ sockets terminate. Transport error listeners remain only until transport close.
 
 ## Isolated validation
 
-Run `npm run test:websocket`. It runs 18 deterministic lifecycle tests plus the
+Run `npm run test:websocket`. It runs 19 deterministic lifecycle tests plus the
 26 existing subscription/message/reconnection tests, without the application test
 setup or database, queue, FIFO, service updater or real network connections.
 
@@ -42,7 +45,7 @@ Before the repair, the first nine regression cases failed. The exact c936
 preimage separately fails the three core regression checks: three sockets instead
 of one, the stale-open CONNECTING send exception, and an escaping send exception.
 The repaired source and the unchanged listener section of the native built tracer
-each pass all 18 lifecycle tests on the exact native Node binary version/hash.
+each pass all 19 lifecycle tests on the exact native Node binary version/hash.
 Full-project TypeScript checks, tsup builds and focused ESLint checks pass.
 The database-dependent application suite was not run.
 
@@ -89,14 +92,14 @@ No application postbuild/autodoc, migration or runtime entrypoint was invoked.
 | --- | --- |
 | Native source archive | `224f97e6fa4a33793aa7ab2a48354405e23cbb8eee94186684d4d48c07901505` |
 | Listener preimage | `ad211c53a0617c99a43854ca7cb9dd1c160683b8caf3e33dc2716697c837e337` |
-| Listener postimage | `c93f873aa13968a0f7b92cb50d7caea80a39503f0e6ade1f9c683ea231ca2027` |
-| Listener-only Git patch | `6f623179159ae48ea901f84d2e3bb970392aa805b419550894e055b126b766fc` |
+| Listener postimage | `059eedef2c87137b797de32850cc16459b3f3dc93df633ff56981407cedd55e0` |
+| Listener-only Git patch | `77347b57827d851bc5dedcddb2675a9da09aa81ca45c98218347b4b11f81904f` |
 | Native package lock | `665d1cd4911389f8b2f270ab15f6295a07649b034bf77fd054beeac34b12ca45` |
 | Native tracer caller source | `66e02dc2b14b5f03bdcce7fa0ed1bc343d28785b5eb4e88327fda24919188263` |
 | Native BlockTimeFetcher source | `be9d5bebf2c4b3415b11a8ba0cd5cd66d92aa8f29b42fe4b87130973e858e8c4` |
 | Node 18.17.1 executable | `cd6c76067e2b28fb05f3e61f95c3078d21aa74ff28a4a5d813287d65bcebe6a4` |
-| Derived native `dist/scripts/tracer.js` | `2fddb65c87ca364512dfca7ebb940c846bdb57950ae00e8e75f693776cd2d807` |
-| Built listener section | `b70f9ea3cc82b9f8ed9f99ee5034b74666951d59bd88150620fe3f0ceddab970` |
+| Derived native `dist/scripts/tracer.js` | `0156cb63ec408b445ffe1015c1f9b824a30a467899c614ef59dd4020968dc9a2` |
+| Built listener section | `75b3b8fa387ecb51b4e5a0504daeef24ee2810c676e48a8c3c0dcda5aa91e6cf` |
 
 This is a **local derived compatibility artifact**, not an official Burnt release,
 a standalone bundle with embedded dependencies, a deployed artifact, or execution
