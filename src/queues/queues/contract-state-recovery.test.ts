@@ -29,4 +29,25 @@ describe('ContractStateRecoveryQueue', () => {
       }
     )
   })
+
+  it('skips jobs for contracts excluded by config without touching RPC', async () => {
+    const queue = new ContractStateRecoveryQueue({
+      config: {
+        remoteRpc: '',
+        excludedContractAddresses: ['juno1contract'],
+      },
+    } as any)
+    const log = vi.fn()
+
+    // An empty remoteRpc would throw if processing continued past the check.
+    await expect(
+      queue.process({
+        data: { address: 'juno1contract', detectedBlockHeight: '123' },
+        log,
+      } as any)
+    ).resolves.toBeUndefined()
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining('excluded by excludedContractAddresses')
+    )
+  })
 })

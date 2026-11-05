@@ -54,6 +54,16 @@ export type Config = {
    */
   onlyExportKnownCodeIds?: boolean
 
+  /**
+   * Contract addresses to exclude from indexing entirely. The wasm tracer
+   * drops their state and contract-info events before processing, so they
+   * produce no WasmStateEvents, Contract rows, code ID lookups,
+   * transformations, webhooks or queued jobs. Listener extractors and contract
+   * state recovery also skip them. Matching is by exact address, not code ID.
+   * Absent or empty leaves behavior unchanged. Requires a restart to apply.
+   */
+  excludedContractAddresses?: string[]
+
   // If present, sets up Sentry error reporting.
   sentryDsn?: string
   // Payment info.

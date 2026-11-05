@@ -6,6 +6,7 @@ import {
   getRecoveryContractInfo,
   recoverContractState,
 } from '@/services/contract-state-recovery'
+import { isContractAddressExcluded } from '@/utils'
 
 import { BaseQueue } from '../base'
 import { closeBullQueue, getBullQueue, getBullQueueEvents } from '../connection'
@@ -45,6 +46,15 @@ export class ContractStateRecoveryQueue extends BaseQueue<ContractStateRecoveryQ
 
   async process(job: Job<ContractStateRecoveryQueuePayload>): Promise<void> {
     const { address, rpc = 'remote' } = job.data
+
+    // Jobs queued before the contract was excluded must not write its state.
+    if (isContractAddressExcluded(this.options.config, address)) {
+      await job.log(
+        `skipped ${address}: excluded by excludedContractAddresses config`
+      )
+      return
+    }
+
     const rpcUrl =
       rpc === 'remote'
         ? this.options.config.remoteRpc
