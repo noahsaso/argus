@@ -50,7 +50,8 @@ For an excluded contract:
 - The wasm tracer handler drops its state and contract-info trace events in
   `match`, before processing. They create no `WasmStateEvents` or `Contracts`
   rows, trigger no code ID lookups, transformations or webhooks, and enqueue no
-  contract state recovery or wasm code tracker jobs.
+  contract state recovery or wasm code tracker jobs. Export jobs queued before
+  the contract was excluded are filtered the same way when they are processed.
 - Listener extractors skip `wasm/event` and `wasm/instantiate-or-migrate` data
   whose contract address is excluded, so no extractions are created for it.
 - Contract state recovery jobs for it are skipped, and the

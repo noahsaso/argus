@@ -289,6 +289,23 @@ export const wasm: HandlerMaker<WasmExportData> = async ({
   }
 
   const process: Handler<WasmExportData>['process'] = async (events) => {
+    // Export jobs queued (or retried) before a contract was excluded were
+    // matched without the exclusion and are not matched again, so drop
+    // excluded contracts here too, before anything is persisted or queued.
+    if (excludedContractAddresses.size > 0) {
+      events = events.filter(
+        (event) =>
+          !excludedContractAddresses.has(
+            event.type === 'state'
+              ? event.data.contractAddress
+              : event.data.address
+          )
+      )
+      if (!events.length) {
+        return []
+      }
+    }
+
     // Save blocks from events.
     await Block.createMany(
       [...new Set(events.map((e) => e.data.blockHeight))].map((height) => ({
