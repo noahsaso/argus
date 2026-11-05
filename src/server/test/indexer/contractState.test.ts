@@ -104,6 +104,18 @@ describe('POST /contract/:address/state/recover', () => {
     expect(disconnect).toHaveBeenCalledTimes(1)
   })
 
+  it('refuses to recover a contract excluded by config', async () => {
+    loadConfig.mockReturnValue({
+      ...config,
+      excludedContractAddresses: [validAddress],
+    })
+
+    await recoverRequest(makeApp()).expect(403)
+
+    expect(connect).not.toHaveBeenCalled()
+    expect(recover).not.toHaveBeenCalled()
+  })
+
   it('rejects a wrong address prefix', async () => {
     await recoverRequest(makeApp(), wrongPrefixAddress).expect(400)
   })
