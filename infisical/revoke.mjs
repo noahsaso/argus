@@ -75,10 +75,17 @@ const main = async () => {
   log(`Revoked access token ${oldId} (HTTP ${revoke.status}).`)
 
   // Confirm Infisical now rejects the old token.
+  // Only an authentication rejection proves it; a 5xx or 429 does not.
   const check = await renewToken(apiUrl, oldToken)
   if (check.ok) {
     throw new Error(
       `Access token ${oldId} can still be renewed after revocation.`
+    )
+  }
+  if (![401, 403, 404].includes(check.status)) {
+    throw new Error(
+      `Revoked access token ${oldId}, but could not verify the rejection: ` +
+        describeFailure('Token renew', check, [oldToken])
     )
   }
   log(

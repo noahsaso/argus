@@ -132,6 +132,23 @@ describe('helpers', () => {
     assert.equal(setEnvValue('A=1', 'T', 'new'), 'A=1\nT=new')
   })
 
+  test('parseEnv uses the last occurrence and strips inline comments', () => {
+    assert.deepEqual(
+      parseEnv('T=first\nA=1 # note\nB="x # y" # note\nT=last\n'),
+      { T: 'last', A: '1', B: 'x # y' }
+    )
+  })
+
+  test('setEnvValue collapses duplicate lines into one', () => {
+    const updated = setEnvValue(
+      'T=old1\nX=1\nexport T=old2\nY=2\nT=old3\n',
+      'T',
+      'new'
+    )
+    assert.equal(updated, 'T=new\nX=1\nY=2\n')
+    assert.equal(parseEnv(updated).T, 'new')
+  })
+
   test('writeFileAtomic creates mode 600 and leaves no temp file', () => {
     const file = path.join(dir, '.env')
     fs.writeFileSync(file, 'A=1\n', { mode: 0o644 })
@@ -200,6 +217,44 @@ describe('renew.mjs', () => {
 
     assert.notEqual(result.code, 0)
     assert.match(result.stderr, /HTTP 401/)
+    assert.equal(fs.readFileSync(env, 'utf8'), lines.join('\n') + '\n')
+    assertNoSecrets(result)
+  })
+
+  test('renews when .env has duplicate INFISICAL_TOKEN lines', async () => {
+    handlers['/api/v1/auth/token/renew'] = () => [
+      200,
+      { accessToken: RENEWED_TOKEN, expiresIn: 60 },
+    ]
+    const env = writeEnv('.env', [
+      `INFISICAL_TOKEN=${NEW_TOKEN}`,
+      ...baseEnv,
+      `INFISICAL_TOKEN=${OLD_TOKEN}`,
+    ])
+
+    const result = await run('renew.mjs')
+
+    assert.equal(result.code, 0, result.stderr)
+    // The last line is the one dotenv loads, so it is the one renewed.
+    assert.deepEqual(requests[0].body, { accessToken: OLD_TOKEN })
+    const contents = fs.readFileSync(env, 'utf8')
+    assert.equal(contents.match(/^INFISICAL_TOKEN=/gm).length, 1)
+    assert.equal(parseEnv(contents).INFISICAL_TOKEN, RENEWED_TOKEN)
+    assertNoSecrets(result)
+  })
+
+  test('refuses to store a malformed token', async () => {
+    handlers['/api/v1/auth/token/renew'] = () => [
+      200,
+      { accessToken: `${RENEWED_TOKEN}#x`, expiresIn: 60 },
+    ]
+    const lines = [...baseEnv, `INFISICAL_TOKEN=${OLD_TOKEN}`]
+    const env = writeEnv('.env', lines)
+
+    const result = await run('renew.mjs')
+
+    assert.notEqual(result.code, 0)
+    assert.match(result.stderr, /malformed token/)
     assert.equal(fs.readFileSync(env, 'utf8'), lines.join('\n') + '\n')
     assertNoSecrets(result)
   })
@@ -310,6 +365,28 @@ describe('login.mjs', () => {
     assertNoSecrets(result)
   })
 
+  test('--revoke-previous with duplicate token lines revokes the loaded one', async () => {
+    handlers['/api/v1/auth/universal-auth/login'] = () => [
+      200,
+      { accessToken: NEW_TOKEN, expiresIn: 60 },
+    ]
+    handlers['/api/v1/auth/token/revoke'] = () => [200, {}]
+    const env = writeEnv('.env', [
+      `INFISICAL_TOKEN=${RENEWED_TOKEN}`,
+      ...baseEnv,
+      `INFISICAL_TOKEN=${OLD_TOKEN}`,
+    ])
+
+    const result = await run('login.mjs', ['--revoke-previous'])
+
+    assert.equal(result.code, 0, result.stderr)
+    assert.deepEqual(requests[1].body, { accessToken: OLD_TOKEN })
+    const contents = fs.readFileSync(env, 'utf8')
+    assert.equal(contents.match(/^INFISICAL_TOKEN=/gm).length, 1)
+    assert.equal(parseEnv(contents).INFISICAL_TOKEN, NEW_TOKEN)
+    assertNoSecrets(result)
+  })
+
   test('login failure keeps .env and does not echo the client secret', async () => {
     handlers['/api/v1/auth/universal-auth/login'] = () => [
       401,
@@ -364,6 +441,19 @@ describe('revoke.mjs', () => {
 
     assert.notEqual(result.code, 0)
     assert.match(result.stderr, /can still be renewed/)
+    assertNoSecrets(result)
+  })
+
+  test('fails if the rejection cannot be verified (5xx)', async () => {
+    handlers['/api/v1/auth/token/revoke'] = () => [200, {}]
+    handlers['/api/v1/auth/token/renew'] = () => [503, { message: 'down' }]
+    writeEnv('.env', [...baseEnv, `INFISICAL_TOKEN=${NEW_TOKEN}`])
+    writeEnv('.env.backup', [...baseEnv, `INFISICAL_TOKEN=${OLD_TOKEN}`])
+
+    const result = await run('revoke.mjs', ['.env.backup'])
+
+    assert.notEqual(result.code, 0)
+    assert.match(result.stderr, /could not verify the rejection.*HTTP 503/)
     assertNoSecrets(result)
   })
 

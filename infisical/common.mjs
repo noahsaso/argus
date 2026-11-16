@@ -22,8 +22,10 @@ export const TOKEN_KEY = 'INFISICAL_TOKEN'
 const JWT_PATTERN = /ey[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g
 
 /**
- * Parse the contents of a .env file into an object. Supports `KEY=value`,
- * optional `export ` prefixes, comments, and single or double quoted values.
+ * Parse the contents of a .env file into an object, following dotenv's rules
+ * for the cases that matter here: `KEY=value`, optional `export ` prefixes,
+ * full-line comments, single or double quoted values, inline `#` comments
+ * after unquoted values, and the LAST occurrence of a key winning.
  */
 export const parseEnv = (contents) => {
   const env = {}
@@ -37,12 +39,12 @@ export const parseEnv = (contents) => {
       continue
     }
     let value = match[2].trim()
-    if (
-      value.length >= 2 &&
-      (value[0] === '"' || value[0] === "'") &&
-      value[value.length - 1] === value[0]
-    ) {
-      value = value.slice(1, -1)
+    const quote = value[0]
+    if ((quote === '"' || quote === "'") && value.indexOf(quote, 1) > 0) {
+      value = value.slice(1, value.indexOf(quote, 1))
+    } else {
+      // Unquoted values end at the first `#`, as in dotenv.
+      value = value.split('#')[0].trim()
     }
     env[match[1]] = value
   }
@@ -54,20 +56,26 @@ export const readEnvFile = (envPath) =>
   parseEnv(fs.readFileSync(envPath, 'utf8'))
 
 /**
- * Return `contents` with the line for `key` set to `value`, keeping every
- * other line (and its order) unchanged. Appends the key if it is missing.
+ * Return `contents` with `key` set to `value`. The first line for `key` is
+ * replaced and any later duplicate lines for it are removed, so exactly one
+ * line remains (dotenv uses the last occurrence, so leaving a stale duplicate
+ * would silently override the new value). Every other line is kept in order.
+ * Appends the key if it is missing.
  */
 export const setEnvValue = (contents, key, value) => {
-  const lines = contents.split('\n')
   const pattern = new RegExp(`^\\s*(?:export\\s+)?${key}\\s*=`)
   let found = false
-  const updated = lines.map((line) => {
-    if (!found && pattern.test(line)) {
-      found = true
-      return `${key}=${value}`
+  const updated = []
+  for (const line of contents.split('\n')) {
+    if (pattern.test(line)) {
+      if (!found) {
+        updated.push(`${key}=${value}`)
+        found = true
+      }
+      continue
     }
-    return line
-  })
+    updated.push(line)
+  }
   if (!found) {
     if (updated.length > 0 && updated[updated.length - 1] === '') {
       updated.splice(updated.length - 1, 0, `${key}=${value}`)
@@ -120,11 +128,22 @@ export const writeFileAtomic = (filePath, contents) => {
 
 /** Atomically replace INFISICAL_TOKEN in the .env file at `envPath`. */
 export const writeTokenToEnvFile = (envPath, token) => {
-  if (!token || /\s/.test(token)) {
+  // Access tokens are JWTs: base64url segments separated by dots.
+  if (!token || !/^[A-Za-z0-9._-]+$/.test(token)) {
     throw new Error('Refusing to write an empty or malformed token.')
   }
-  const contents = fs.readFileSync(envPath, 'utf8')
-  writeFileAtomic(envPath, setEnvValue(contents, TOKEN_KEY, token))
+  const updated = setEnvValue(
+    fs.readFileSync(envPath, 'utf8'),
+    TOKEN_KEY,
+    token
+  )
+  // Make sure the value that dotenv will load is the one just written.
+  if (parseEnv(updated)[TOKEN_KEY] !== token) {
+    throw new Error(
+      `Refusing to write ${envPath}: ${TOKEN_KEY} would not read back as the new token.`
+    )
+  }
+  writeFileAtomic(envPath, updated)
 }
 
 /**
