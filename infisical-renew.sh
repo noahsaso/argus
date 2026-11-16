@@ -1,19 +1,6 @@
 #!/bin/sh
-
-echo "🔄 Renewing token at $(date)..."
-
-# Get the token from the .env file.
-INFISICAL_TOKEN=$(grep '^INFISICAL_TOKEN=' .env | cut -d '=' -f 2)
-
-# Infisical CLI >=0.43 renews identity tokens with `token renew`.
-NEW_TOKEN=$(npx @infisical/cli token renew "$INFISICAL_TOKEN" | grep '^ey')
-
-if [ -z "$NEW_TOKEN" ]; then
-  echo "❌ Failed to renew token at $(date)"
-  exit 1
-fi
-
-# replace the token in the .env file
-sed -i "s/^INFISICAL_TOKEN=.*/INFISICAL_TOKEN=$NEW_TOKEN/" .env
-
-echo "✅ Renewed token successfully at $(date)"
+# Renew the Infisical access token in .env (run daily by the PM2
+# renew-infisical-token app). The Node script sends the token in an HTTPS
+# request body and rewrites .env atomically with mode 600, so the token never
+# appears on a command line or in the logs.
+exec node infisical/renew.mjs "$@"

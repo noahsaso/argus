@@ -107,12 +107,25 @@ the `KEY_NAME` environment variable, erroring if the variable is not set.
 Environment variables/secrets are managed via
 [Infisical](https://infisical.com) and used when deploying production servers.
 
+Never pass an Infisical token or client secret as a command line argument
+(for example `--token` or `--client-secret`): command lines are visible to
+every local user in `ps` and `/proc/<pid>/cmdline`, and end up in shell
+history. The Infisical CLI reads the token from the `INFISICAL_TOKEN`
+environment variable, which `npm run with-infisical` exports from `.env`, and
+the scripts below read and write secrets only through `.env` (mode 600) and
+HTTPS request bodies. They print access token IDs and expiry times, never
+tokens.
+
 ```bash
 # Log in via web browser (set INFISICAL_TOKEN in .env)
 npx @infisical/cli login
 
-# Log in via Infisical Universal Auth and save the token to .env
-echo "INFISICAL_TOKEN=$(npx @infisical/cli login --method universal-auth --client-id <client-id> --client-secret <client-secret> --plain)" >> .env
+# Log in via Infisical Universal Auth: put the machine identity's credentials
+# in .env with an editor (not with echo, which would put them in shell history)
+#   INFISICAL_CLIENT_ID=...
+#   INFISICAL_CLIENT_SECRET=...
+# then create an access token and save it to .env as INFISICAL_TOKEN
+npm run infisical:login
 # Save the project ID to .env
 echo "INFISICAL_PROJECT_ID=$(cat .infisical.json | jq -r '.workspaceId')" >> .env
 # Save the environment to .env
@@ -129,6 +142,29 @@ npm run with-infisical -- npm run serve
 # aren't defined until the script is run
 npm run with-infisical -- bash -c 'echo $INFISICAL_ENVIRONMENT'
 ```
+
+The access token in `.env` is renewed daily by the `renew-infisical-token` PM2
+app (`npm run infisical:renew`), which rewrites `.env` atomically. Set
+`INFISICAL_API_URL` (including the `/api` suffix) in `.env` or the environment
+to use a self-hosted or regional Infisical instance; the default is
+`https://app.infisical.com/api`.
+
+To rotate the access token:
+
+```bash
+# Keep a copy of the current .env so the old token can be revoked later
+cp -p .env .env.pre-rotation
+# Create a new access token and store it in .env
+npm run infisical:login
+# Restart the processes that use the token, then revoke the old token. This
+# refuses to revoke the token currently in .env and checks that Infisical
+# rejects the old token afterwards.
+npm run infisical:revoke -- .env.pre-rotation
+rm .env.pre-rotation
+```
+
+When nothing else still needs the old token,
+`npm run infisical:login -- --revoke-previous` does both steps at once.
 
 ## Usage
 
