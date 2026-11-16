@@ -246,6 +246,25 @@ describe('renew.mjs', () => {
     assertNoSecrets(result)
   })
 
+  test('keeps a token rotated while the renewal was in flight', async () => {
+    const rotated = [...baseEnv, `INFISICAL_TOKEN=${NEW_TOKEN}`]
+    let env
+    handlers['/api/v1/auth/token/renew'] = () => {
+      // A login or rotation stores a new token before the renewal returns.
+      fs.writeFileSync(env, rotated.join('\n') + '\n', { mode: 0o600 })
+      return [200, { accessToken: RENEWED_TOKEN, expiresIn: 60 }]
+    }
+    env = writeEnv('.env', [...baseEnv, `INFISICAL_TOKEN=${OLD_TOKEN}`])
+
+    const result = await run('renew.mjs')
+
+    assert.equal(result.code, 0, result.stderr)
+    assert.deepEqual(requests[0].body, { accessToken: OLD_TOKEN })
+    assert.equal(fs.readFileSync(env, 'utf8'), rotated.join('\n') + '\n')
+    assert.match(result.stdout, /Discarded the renewed token/)
+    assertNoSecrets(result)
+  })
+
   test('refuses to store a malformed token', async () => {
     handlers['/api/v1/auth/token/renew'] = () => [
       200,
