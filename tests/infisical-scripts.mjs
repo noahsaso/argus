@@ -8,7 +8,7 @@ import fs from 'node:fs'
 import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
-import { after, before, beforeEach, describe, test } from 'node:test'
+import { after, beforeEach, describe, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import {
@@ -47,29 +47,32 @@ const SECRETS = [OLD_TOKEN, RENEWED_TOKEN, NEW_TOKEN, CLIENT_SECRET]
 
 // Fake Infisical API. `handlers[route]` returns [status, body] for a parsed
 // request body; every request is recorded.
-let server
-let apiUrl
+//
+// The server is started with top-level await rather than in a before() hook:
+// on Node 18.17.1 (the deployed runtime) a top-level before() hook does not
+// run before tests nested in describe() blocks, so the scripts would fall
+// back to the real Infisical API.
 let requests
 let handlers
 
-before(async () => {
-  server = http.createServer((req, res) => {
-    let raw = ''
-    req.on('data', (chunk) => (raw += chunk))
-    req.on('end', () => {
-      const body = raw ? JSON.parse(raw) : undefined
-      requests.push({ method: req.method, url: req.url, body })
-      const handler = handlers[req.url]
-      const [status, response] = handler
-        ? handler(body)
-        : [404, { message: 'not found' }]
-      res.writeHead(status, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify(response))
-    })
+const server = http.createServer((req, res) => {
+  let raw = ''
+  req.on('data', (chunk) => (raw += chunk))
+  req.on('end', () => {
+    const body = raw ? JSON.parse(raw) : undefined
+    requests.push({ method: req.method, url: req.url, body })
+    const handler = handlers[req.url]
+    const [status, response] = handler
+      ? handler(body)
+      : [404, { message: 'not found' }]
+    res.writeHead(status, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(response))
   })
-  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
-  apiUrl = `http://127.0.0.1:${server.address().port}/api`
 })
+await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+// Do not keep the test process alive if the after() hook does not run.
+server.unref()
+const apiUrl = `http://127.0.0.1:${server.address().port}/api`
 
 after(() => new Promise((resolve) => server.close(resolve)))
 
