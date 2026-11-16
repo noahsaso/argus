@@ -126,17 +126,35 @@ export const writeFileAtomic = (filePath, contents) => {
   }
 }
 
-/** Atomically replace INFISICAL_TOKEN in the .env file at `envPath`. */
-export const writeTokenToEnvFile = (envPath, token) => {
+/** Thrown by writeTokenToEnvFile when the token no longer matches. */
+export class TokenChangedError extends Error {}
+
+/**
+ * Atomically replace INFISICAL_TOKEN in the .env file at `envPath`. With
+ * `expectedCurrent`, only replace it if the file still holds that token.
+ */
+export const writeTokenToEnvFile = (
+  envPath,
+  token,
+  { expectedCurrent } = {}
+) => {
   // Access tokens are JWTs: base64url segments separated by dots.
   if (!token || !/^[A-Za-z0-9._-]+$/.test(token)) {
     throw new Error('Refusing to write an empty or malformed token.')
   }
-  const updated = setEnvValue(
-    fs.readFileSync(envPath, 'utf8'),
-    TOKEN_KEY,
-    token
-  )
+  const current = fs.readFileSync(envPath, 'utf8')
+  // Compare-and-swap: when the caller derived the new token from a token it
+  // read earlier (renewal), only replace that token. If something else (a
+  // login or rotation) replaced it in the meantime, keep the newer token.
+  if (
+    expectedCurrent !== undefined &&
+    parseEnv(current)[TOKEN_KEY] !== expectedCurrent
+  ) {
+    throw new TokenChangedError(
+      `${TOKEN_KEY} in ${envPath} changed while the request was in flight; leaving it unchanged.`
+    )
+  }
+  const updated = setEnvValue(current, TOKEN_KEY, token)
   // Make sure the value that dotenv will load is the one just written.
   if (parseEnv(updated)[TOKEN_KEY] !== token) {
     throw new Error(

@@ -7,10 +7,13 @@
 // the renewed token back into the .env file atomically with mode 600. The
 // token never appears on a command line or in the output; only the HTTP
 // status, the access token ID and the new expiry are logged. Exits non-zero
-// on failure, leaving the .env file unchanged.
+// on failure, leaving the .env file unchanged. If the token in the .env file
+// was replaced while the renewal was in flight (for example by
+// infisical:login), the renewed token is discarded and the newer token kept.
 
 import {
   TOKEN_KEY,
+  TokenChangedError,
   accessTokenId,
   describeFailure,
   expiryFromNow,
@@ -52,7 +55,17 @@ const main = async () => {
     )
   }
 
-  writeTokenToEnvFile(envFile, result.body.accessToken)
+  try {
+    writeTokenToEnvFile(envFile, result.body.accessToken, {
+      expectedCurrent: token,
+    })
+  } catch (err) {
+    if (!(err instanceof TokenChangedError)) {
+      throw err
+    }
+    log(`Discarded the renewed token: ${err.message}`)
+    return
+  }
   log(
     `Renewed access token ${accessTokenId(result.body.accessToken)} ` +
       `(HTTP ${result.status}), expires ${expiryFromNow(
