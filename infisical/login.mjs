@@ -7,7 +7,9 @@
 // (INFISICAL_CLIENT_ID and INFISICAL_CLIENT_SECRET, or the Infisical CLI names
 // INFISICAL_UNIVERSAL_AUTH_CLIENT_ID and INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET),
 // logs in over HTTPS and writes the new token into the .env file as
-// INFISICAL_TOKEN, atomically with mode 600.
+// INFISICAL_TOKEN, atomically with mode 600, while holding the token lock file
+// (<env>.lock) that renew.mjs also uses, so a renewal running at the same time
+// cannot overwrite the new token.
 //
 // With --revoke-previous, the token that was in the .env file before the login
 // is revoked afterwards (use only when nothing still needs the old token).

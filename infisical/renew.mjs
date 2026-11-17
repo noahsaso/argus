@@ -7,9 +7,11 @@
 // the renewed token back into the .env file atomically with mode 600. The
 // token never appears on a command line or in the output; only the HTTP
 // status, the access token ID and the new expiry are logged. Exits non-zero
-// on failure, leaving the .env file unchanged. If the token in the .env file
-// was replaced while the renewal was in flight (for example by
-// infisical:login), the renewed token is discarded and the newer token kept.
+// on failure, leaving the .env file unchanged. The .env file is read,
+// compared and replaced while holding the token lock file (<env>.lock) that
+// login.mjs also uses. If the token in the .env file was replaced while the
+// renewal was in flight (for example by infisical:login), the renewed token
+// is discarded and the newer token kept.
 
 import {
   TOKEN_KEY,
