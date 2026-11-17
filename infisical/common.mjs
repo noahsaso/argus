@@ -9,7 +9,9 @@
 //   message that includes external text passes through `redact` first.
 // - The .env file is rewritten atomically: a new file is created with mode
 //   600, fsynced and renamed over the old one, so a crash never leaves a
-//   truncated .env and the token is never readable by other users.
+//   truncated .env and the token is never readable by other users. Writers
+//   of the token hold a lock file next to .env (see withEnvLock), so a
+//   renewal and a login running at the same time cannot overwrite each other.
 //
 // Plain Node (18 or newer, for global fetch). No dependencies.
 
@@ -129,39 +131,210 @@ export const writeFileAtomic = (filePath, contents) => {
 /** Thrown by writeTokenToEnvFile when the token no longer matches. */
 export class TokenChangedError extends Error {}
 
+// Cross-process lock for the token in a .env file. Every writer of
+// INFISICAL_TOKEN (renew.mjs and login.mjs, through writeTokenToEnvFile) holds
+// it around the read, compare and rename, so a writer can never replace a
+// token that another writer stored after this one read the file.
+//
+// The lock is a file next to the .env file (`<env>.lock`), created atomically
+// with mode 600. It contains only the owner's process ID, never a token or
+// secret. A lock whose owner process is gone (or an empty or unreadable lock
+// older than LOCK_GRACE_MS, left by a crash just after creating it) is stale
+// and is removed automatically. Stale locks are only removed while holding a
+// short-lived second lock (`<env>.lock.break`) and after checking again that
+// the lock file is still the same stale file, so two processes that both find
+// a stale lock cannot delete a lock that a third process has just taken.
+
+/** How long a writer waits for a live lock before giving up. */
+export const LOCK_TIMEOUT_MS = 10000
+const LOCK_RETRY_MS = 50
+const LOCK_GRACE_MS = 2000
+
+/** Path of the lock file that protects the token in `envPath`. */
+export const lockPathFor = (envPath) => `${path.resolve(envPath)}.lock`
+
+const sleepSync = (ms) =>
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+
+const isProcessAlive = (pid) => {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (err) {
+    // EPERM: the process exists but belongs to another user.
+    return err.code === 'EPERM'
+  }
+}
+
 /**
- * Atomically replace INFISICAL_TOKEN in the .env file at `envPath`. With
+ * Create `filePath` exclusively with mode 600, containing this process ID.
+ * Returns false if it already exists.
+ */
+const tryCreateLockFile = (filePath) => {
+  let fd
+  try {
+    fd = fs.openSync(filePath, 'wx', 0o600)
+  } catch (err) {
+    if (err.code === 'EEXIST') {
+      return false
+    }
+    throw err
+  }
+  try {
+    fs.writeSync(fd, `${process.pid}\n`)
+    fs.fsyncSync(fd)
+  } finally {
+    fs.closeSync(fd)
+  }
+  return true
+}
+
+/**
+ * Inspect an existing lock file. Returns undefined if it does not exist,
+ * otherwise `{ ino, pid, stale }`. A lock holding this process's own ID is
+ * stale too: this process never waits for a lock it holds, so such a file
+ * was left by an earlier process whose ID has been reused.
+ */
+const inspectLockFile = (filePath) => {
+  let stat
+  let contents
+  try {
+    stat = fs.statSync(filePath)
+    contents = fs.readFileSync(filePath, 'utf8')
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      return undefined
+    }
+    throw err
+  }
+  const pid = /^\d+\n?$/.test(contents) ? Number(contents) : undefined
+  const stale =
+    pid === undefined || pid <= 0
+      ? Date.now() - stat.mtimeMs > LOCK_GRACE_MS
+      : pid === process.pid || !isProcessAlive(pid)
+  return { ino: stat.ino, pid, stale }
+}
+
+/** Remove the file at `filePath`, ignoring a file that is already gone. */
+const removeIfPresent = (filePath) => {
+  try {
+    fs.unlinkSync(filePath)
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
+      throw err
+    }
+  }
+}
+
+/**
+ * Remove the stale lock `lockPath` if it is still the same file (inode)
+ * that was found stale. Only done while holding the break lock, so no other
+ * process can replace and then lose a lock in between. Returns false if
+ * another process is breaking the lock at the same time.
+ */
+const breakStaleLock = (lockPath, staleIno) => {
+  const breakPath = `${lockPath}.break`
+  if (!tryCreateLockFile(breakPath)) {
+    // Another process is breaking the lock right now; clean up a break lock
+    // left by a crash, then let the caller retry.
+    if (inspectLockFile(breakPath)?.stale) {
+      removeIfPresent(breakPath)
+    }
+    return false
+  }
+  try {
+    const current = inspectLockFile(lockPath)
+    if (current && current.ino === staleIno && current.stale) {
+      removeIfPresent(lockPath)
+    }
+  } finally {
+    removeIfPresent(breakPath)
+  }
+  return true
+}
+
+/**
+ * Run `fn` while holding the token lock for `envPath`. Waits up to
+ * `timeoutMs` for a live lock, removes stale locks, and always releases the
+ * lock afterwards, also when `fn` throws.
+ */
+export const withEnvLock = (
+  envPath,
+  fn,
+  { timeoutMs = LOCK_TIMEOUT_MS } = {}
+) => {
+  const lockPath = lockPathFor(envPath)
+  const deadline = Date.now() + timeoutMs
+  while (!tryCreateLockFile(lockPath)) {
+    const owner = inspectLockFile(lockPath)
+    if (!owner) {
+      continue
+    }
+    if (owner.stale && breakStaleLock(lockPath, owner.ino)) {
+      continue
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `Timed out after ${timeoutMs} ms waiting for lock ${lockPath} ` +
+          `held by process ${
+            owner.pid ?? 'unknown'
+          }; the token was not changed.`
+      )
+    }
+    sleepSync(LOCK_RETRY_MS)
+  }
+  try {
+    return fn()
+  } finally {
+    // Release only our own lock (a lock is never broken while its owner is
+    // alive, so this is always ours unless it was removed by hand).
+    if (inspectLockFile(lockPath)?.pid === process.pid) {
+      removeIfPresent(lockPath)
+    }
+  }
+}
+
+/**
+ * Atomically replace INFISICAL_TOKEN in the .env file at `envPath`, holding
+ * the token lock (see withEnvLock) from the read until after the rename. With
  * `expectedCurrent`, only replace it if the file still holds that token.
  */
 export const writeTokenToEnvFile = (
   envPath,
   token,
-  { expectedCurrent } = {}
+  { expectedCurrent, lockTimeoutMs } = {}
 ) => {
   // Access tokens are JWTs: base64url segments separated by dots.
   if (!token || !/^[A-Za-z0-9._-]+$/.test(token)) {
     throw new Error('Refusing to write an empty or malformed token.')
   }
-  const current = fs.readFileSync(envPath, 'utf8')
-  // Compare-and-swap: when the caller derived the new token from a token it
-  // read earlier (renewal), only replace that token. If something else (a
-  // login or rotation) replaced it in the meantime, keep the newer token.
-  if (
-    expectedCurrent !== undefined &&
-    parseEnv(current)[TOKEN_KEY] !== expectedCurrent
-  ) {
-    throw new TokenChangedError(
-      `${TOKEN_KEY} in ${envPath} changed while the request was in flight; leaving it unchanged.`
-    )
-  }
-  const updated = setEnvValue(current, TOKEN_KEY, token)
-  // Make sure the value that dotenv will load is the one just written.
-  if (parseEnv(updated)[TOKEN_KEY] !== token) {
-    throw new Error(
-      `Refusing to write ${envPath}: ${TOKEN_KEY} would not read back as the new token.`
-    )
-  }
-  writeFileAtomic(envPath, updated)
+  withEnvLock(
+    envPath,
+    () => {
+      const current = fs.readFileSync(envPath, 'utf8')
+      // Compare-and-swap: when the caller derived the new token from a token
+      // it read earlier (renewal), only replace that token. If something else
+      // (a login or rotation) replaced it in the meantime, keep the newer
+      // token.
+      if (
+        expectedCurrent !== undefined &&
+        parseEnv(current)[TOKEN_KEY] !== expectedCurrent
+      ) {
+        throw new TokenChangedError(
+          `${TOKEN_KEY} in ${envPath} changed while the request was in flight; leaving it unchanged.`
+        )
+      }
+      const updated = setEnvValue(current, TOKEN_KEY, token)
+      // Make sure the value that dotenv will load is the one just written.
+      if (parseEnv(updated)[TOKEN_KEY] !== token) {
+        throw new Error(
+          `Refusing to write ${envPath}: ${TOKEN_KEY} would not read back as the new token.`
+        )
+      }
+      writeFileAtomic(envPath, updated)
+    },
+    { timeoutMs: lockTimeoutMs }
+  )
 }
 
 /**

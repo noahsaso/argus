@@ -3,7 +3,7 @@
 // access, database or Infisical account is needed:
 //   node --test tests/infisical-scripts.mjs
 import assert from 'node:assert/strict'
-import { execFile } from 'node:child_process'
+import { execFile, spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import http from 'node:http'
 import os from 'node:os'
@@ -13,10 +13,13 @@ import { fileURLToPath } from 'node:url'
 
 import {
   accessTokenId,
+  lockPathFor,
   parseEnv,
   redact,
   setEnvValue,
+  withEnvLock,
   writeFileAtomic,
+  writeTokenToEnvFile,
 } from '../infisical/common.mjs'
 
 const repoRoot = path.resolve(
@@ -309,6 +312,242 @@ describe('renew.mjs', () => {
     )
     assert.equal(result.code, 0, result.stderr)
     assert.match(fs.readFileSync(env, 'utf8'), new RegExp(RENEWED_TOKEN))
+    assertNoSecrets(result)
+  })
+})
+
+describe('token lock', () => {
+  const lockFile = () => lockPathFor(path.join(dir, '.env'))
+
+  // A process ID that is certainly not running any more.
+  const deadPid = () => spawnSync(process.execPath, ['-e', '']).pid
+
+  // Start a process that holds the token lock, reads .env (the "check"),
+  // waits `holdMs`, then replaces the token with `token` (the "rename"), the
+  // way a renewal paused between its check and its rename would. Resolves
+  // once the lock is held; `done` resolves with the exit code.
+  const startHolder = async (token, holdMs) => {
+    const ready = path.join(dir, 'holder-ready')
+    const source = `
+      import fs from 'node:fs'
+      import { TOKEN_KEY, setEnvValue, withEnvLock, writeFileAtomic } from ${JSON.stringify(
+        new URL('../infisical/common.mjs', import.meta.url).href
+      )}
+      const envPath = process.env.HOLDER_ENV
+      withEnvLock(envPath, () => {
+        const current = fs.readFileSync(envPath, 'utf8')
+        fs.writeFileSync(process.env.HOLDER_READY, 'ready')
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(process.env.HOLDER_MS))
+        writeFileAtomic(envPath, setEnvValue(current, TOKEN_KEY, process.env.HOLDER_TOKEN))
+      })
+    `
+    const holderScript = path.join(dir, 'holder.mjs')
+    fs.writeFileSync(holderScript, source)
+    // The token travels in the environment, not on the command line.
+    const child = spawn(process.execPath, [holderScript], {
+      env: {
+        ...process.env,
+        HOLDER_ENV: path.join(dir, '.env'),
+        HOLDER_READY: ready,
+        HOLDER_MS: String(holdMs),
+        HOLDER_TOKEN: token,
+      },
+      stdio: 'inherit',
+    })
+    const done = new Promise((resolve) => child.on('exit', resolve))
+    while (!fs.existsSync(ready)) {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    return { done }
+  }
+
+  test('login waits for a writer that is between its check and rename', async () => {
+    handlers['/api/v1/auth/universal-auth/login'] = () => [
+      200,
+      { accessToken: NEW_TOKEN, expiresIn: 60 },
+    ]
+    const env = writeEnv('.env', [...baseEnv, `INFISICAL_TOKEN=${OLD_TOKEN}`])
+    // A renewal has checked .env (still OLD) and is about to store RENEWED.
+    const holder = await startHolder(RENEWED_TOKEN, 700)
+
+    const result = await run('login.mjs')
+
+    assert.equal(await holder.done, 0)
+    assert.equal(result.code, 0, result.stderr)
+    // Without the lock, the holder's later rename would replace NEW.
+    assert.equal(
+      parseEnv(fs.readFileSync(env, 'utf8')).INFISICAL_TOKEN,
+      NEW_TOKEN
+    )
+    assert.equal(modeOf(env), 0o600)
+    assert.ok(!fs.existsSync(lockFile()))
+    assertNoSecrets(result)
+  })
+
+  test('renewal discards its result after waiting for a login', async () => {
+    handlers['/api/v1/auth/token/renew'] = () => [
+      200,
+      { accessToken: RENEWED_TOKEN, expiresIn: 60 },
+    ]
+    const env = writeEnv('.env', [...baseEnv, `INFISICAL_TOKEN=${OLD_TOKEN}`])
+    // A login holds the lock and stores NEW while the renewal is running.
+    const holder = await startHolder(NEW_TOKEN, 700)
+
+    const result = await run('renew.mjs')
+
+    assert.equal(await holder.done, 0)
+    assert.equal(result.code, 0, result.stderr)
+    assert.match(result.stdout, /Discarded the renewed token/)
+    assert.equal(
+      parseEnv(fs.readFileSync(env, 'utf8')).INFISICAL_TOKEN,
+      NEW_TOKEN
+    )
+    assert.ok(!fs.existsSync(lockFile()))
+    assertNoSecrets(result)
+  })
+
+  test('a lock held by a live process times out without changing .env', async () => {
+    const lines = [...baseEnv, `INFISICAL_TOKEN=${OLD_TOKEN}`]
+    const env = writeEnv('.env', lines)
+    const sleeper = spawn(process.execPath, [
+      '-e',
+      'setTimeout(() => {}, 30000)',
+    ])
+    try {
+      fs.writeFileSync(lockFile(), `${sleeper.pid}\n`, { mode: 0o600 })
+      assert.throws(
+        () =>
+          writeTokenToEnvFile(env, RENEWED_TOKEN, {
+            expectedCurrent: OLD_TOKEN,
+            lockTimeoutMs: 300,
+          }),
+        (err) => {
+          assert.match(err.message, /Timed out after 300 ms waiting for lock/)
+          assert.ok(err.message.includes(lockFile()))
+          assert.ok(err.message.includes(`held by process ${sleeper.pid}`))
+          assert.ok(!SECRETS.some((secret) => err.message.includes(secret)))
+          return true
+        }
+      )
+      assert.equal(fs.readFileSync(env, 'utf8'), lines.join('\n') + '\n')
+      // The live owner's lock is never removed.
+      assert.equal(fs.readFileSync(lockFile(), 'utf8'), `${sleeper.pid}\n`)
+    } finally {
+      sleeper.kill()
+    }
+  })
+
+  test('recovers from a stale lock whose process is gone', async () => {
+    handlers['/api/v1/auth/token/renew'] = () => [
+      200,
+      { accessToken: RENEWED_TOKEN, expiresIn: 60 },
+    ]
+    const env = writeEnv('.env', [...baseEnv, `INFISICAL_TOKEN=${OLD_TOKEN}`])
+    fs.writeFileSync(lockFile(), `${deadPid()}\n`, { mode: 0o600 })
+
+    const result = await run('renew.mjs')
+
+    assert.equal(result.code, 0, result.stderr)
+    assert.equal(
+      parseEnv(fs.readFileSync(env, 'utf8')).INFISICAL_TOKEN,
+      RENEWED_TOKEN
+    )
+    assert.deepEqual(fs.readdirSync(dir).sort(), ['.env'])
+    assertNoSecrets(result)
+  })
+
+  test('concurrent writers never overlap, even when breaking a stale lock', async () => {
+    const counter = path.join(dir, '.env')
+    fs.writeFileSync(counter, '0', { mode: 0o600 })
+    // Every writer starts by finding the same stale lock.
+    fs.writeFileSync(lockFile(), `${deadPid()}\n`, { mode: 0o600 })
+    const source = `
+      import fs from 'node:fs'
+      import { withEnvLock } from ${JSON.stringify(
+        new URL('../infisical/common.mjs', import.meta.url).href
+      )}
+      const file = process.env.COUNTER
+      for (let i = 0; i < 5; i++) {
+        withEnvLock(file, () => {
+          const value = Number(fs.readFileSync(file, 'utf8'))
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10)
+          fs.writeFileSync(file, String(value + 1))
+        })
+      }
+    `
+    const worker = path.join(dir, 'worker.mjs')
+    fs.writeFileSync(worker, source)
+    const codes = await Promise.all(
+      Array.from(
+        { length: 6 },
+        () =>
+          new Promise((resolve) =>
+            spawn(process.execPath, [worker], {
+              env: { ...process.env, COUNTER: counter },
+              stdio: 'inherit',
+            }).on('exit', resolve)
+          )
+      )
+    )
+    assert.deepEqual(codes, [0, 0, 0, 0, 0, 0])
+    // A lost update would mean two writers held the lock at once.
+    assert.equal(fs.readFileSync(counter, 'utf8'), '30')
+    assert.ok(!fs.existsSync(lockFile()))
+    assert.ok(!fs.existsSync(`${lockFile()}.break`))
+  })
+
+  test('an empty lock is stale only after the grace period', () => {
+    const env = writeEnv('.env', [...baseEnv, `INFISICAL_TOKEN=${OLD_TOKEN}`])
+    // A fresh empty lock may belong to a process that is just creating it.
+    fs.writeFileSync(lockFile(), '', { mode: 0o600 })
+    assert.throws(
+      () => writeTokenToEnvFile(env, NEW_TOKEN, { lockTimeoutMs: 200 }),
+      /held by process unknown/
+    )
+    // An old one was left by a crash and is removed.
+    const old = new Date(Date.now() - 60000)
+    fs.utimesSync(lockFile(), old, old)
+    writeTokenToEnvFile(env, NEW_TOKEN, { lockTimeoutMs: 200 })
+    assert.equal(
+      parseEnv(fs.readFileSync(env, 'utf8')).INFISICAL_TOKEN,
+      NEW_TOKEN
+    )
+    assert.deepEqual(fs.readdirSync(dir), ['.env'])
+  })
+
+  test('the lock holds only the owner process ID, with mode 600', () => {
+    const env = writeEnv('.env', [...baseEnv, `INFISICAL_TOKEN=${OLD_TOKEN}`])
+    withEnvLock(env, () => {
+      assert.equal(fs.readFileSync(lockFile(), 'utf8'), `${process.pid}\n`)
+      assert.equal(modeOf(lockFile()), 0o600)
+    })
+    assert.ok(!fs.existsSync(lockFile()))
+  })
+
+  test('the lock is released after a failed write', async () => {
+    const env = writeEnv('.env', [...baseEnv, `INFISICAL_TOKEN=${OLD_TOKEN}`])
+    assert.throws(
+      () =>
+        withEnvLock(env, () => {
+          throw new Error('write failed')
+        }),
+      /write failed/
+    )
+    assert.ok(!fs.existsSync(lockFile()))
+
+    // It is also released when the stored token changed, and nothing is left
+    // behind when a renewal receives a malformed token.
+    assert.throws(() =>
+      writeTokenToEnvFile(env, NEW_TOKEN, { expectedCurrent: RENEWED_TOKEN })
+    )
+    assert.ok(!fs.existsSync(lockFile()))
+    handlers['/api/v1/auth/token/renew'] = () => [
+      200,
+      { accessToken: `${RENEWED_TOKEN}#x`, expiresIn: 60 },
+    ]
+    const result = await run('renew.mjs')
+    assert.notEqual(result.code, 0)
+    assert.ok(!fs.existsSync(lockFile()))
     assertNoSecrets(result)
   })
 })

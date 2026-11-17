@@ -144,7 +144,12 @@ npm run with-infisical -- bash -c 'echo $INFISICAL_ENVIRONMENT'
 ```
 
 The access token in `.env` is renewed daily by the `renew-infisical-token` PM2
-app (`npm run infisical:renew`), which rewrites `.env` atomically. Set
+app (`npm run infisical:renew`), which rewrites `.env` atomically. The renewal
+and `npm run infisical:login` both hold a lock file next to `.env`
+(`.env.lock`, which contains only a process ID) while they replace the token,
+so a rotation that overlaps the daily renewal is never overwritten: the
+renewal keeps the newer token and discards its own result. A lock left behind
+by a process that died is removed automatically. Set
 `INFISICAL_API_URL` (including the `/api` suffix) in `.env` or the environment
 to use a self-hosted or regional Infisical instance; the default is
 `https://app.infisical.com/api`.
