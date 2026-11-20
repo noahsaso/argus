@@ -547,6 +547,11 @@ export class BlockIterator {
     let lastWarnedAt: number | null = null
 
     while (true) {
+      // Don't start another attempt once the iterator has been stopped.
+      if (this.stopRequested) {
+        throw new FetchAbandonedError()
+      }
+
       try {
         // Retry non-transient errors 30 times, 1 second apart, as before.
         // Transient errors bail out to the backoff loop below.
@@ -554,16 +559,29 @@ export class BlockIterator {
           30,
           async (_, bail) => {
             try {
-              const client = (await this.autoCosmWasmClient.getValidClient())[
-                'forceGetCometClient'
-              ]()
-              const [{ block }, { results }] = await Promise.all([
-                client.block(height),
-                client.blockResults(height),
-              ])
-              return { ...block, results }
+              if (this.stopRequested) {
+                throw new FetchAbandonedError()
+              }
+
+              // Stop waiting as soon as the iterator is stopped, since
+              // getting a valid client may itself be retrying a connection.
+              return await this.abandonOnStop(
+                (async () => {
+                  const client = (
+                    await this.autoCosmWasmClient.getValidClient()
+                  )['forceGetCometClient']()
+                  const [{ block }, { results }] = await Promise.all([
+                    client.block(height),
+                    client.blockResults(height),
+                  ])
+                  return { ...block, results }
+                })()
+              )
             } catch (err) {
-              if (classifyRpcError(err) !== RpcErrorKind.Other) {
+              if (
+                err instanceof FetchAbandonedError ||
+                classifyRpcError(err) !== RpcErrorKind.Other
+              ) {
                 bail(err instanceof Error ? err : new Error(String(err)))
               }
               throw err
@@ -572,6 +590,10 @@ export class BlockIterator {
           1_000
         )
       } catch (error) {
+        if (error instanceof FetchAbandonedError) {
+          throw error
+        }
+
         const kind = classifyRpcError(error)
         if (kind === RpcErrorKind.Other) {
           throw error
@@ -694,6 +716,20 @@ export class BlockIterator {
     }
 
     return null
+  }
+
+  /**
+   * Resolve with `promise`, or reject with `FetchAbandonedError` as soon as
+   * `stopFetching` is called. The result of `promise` is then ignored.
+   */
+  private async abandonOnStop<T>(promise: Promise<T>): Promise<T> {
+    promise.catch(() => {})
+    return Promise.race([
+      promise,
+      this.stopRequest.then(() => {
+        throw new FetchAbandonedError()
+      }),
+    ])
   }
 
   /**
