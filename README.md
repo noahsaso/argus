@@ -52,6 +52,35 @@ database.
 Extractors typically save data to [`Extraction`](./src/db/models/Extraction.ts)
 models and can associate data with any address/name for queries.
 
+#### Resuming and RPC errors
+
+The listener records the last block it fully processed (every transaction
+matched against the extractors and queued) in
+`State.listenerLatestBlockHeight`, and on start it resumes from the next block.
+It does not resume from `State.latestBlockHeight`, because the tracer and the
+extract queue also advance that height, so after a crash it can be past blocks
+the listener never processed. Until the listener has recorded a height (the
+first start after the `20261120160000-add-listener-latest-block-height-to-state`
+migration), it starts from `State.latestBlockHeight` as before. Run the data
+migration before starting a listener, tracer or server built from this version,
+because the `State` model now reads the new column.
+
+Resuming is at least once: if the listener crashes part way through a block,
+the whole block is processed again on restart, and transactions queued before
+the crash are queued again. Extractions are upserted on
+`(address, name, blockHeight)`, so the stored data does not change, but
+extraction side effects such as webhooks can run twice for that block.
+
+Transient RPC errors while fetching a block (`could not find results for
+height`, HTTP 5xx, timeouts and connection resets) are retried with exponential
+backoff, from 1 second up to 30 seconds between attempts. After a block has been
+retrying for 1 minute, the listener logs a warning and sends a Sentry warning,
+repeated every 5 minutes. After 30 minutes it gives up and halts, so the process
+restarts and resumes from the same block. Other errors are retried 30 times, 1
+second apart, as before. Connecting to the RPC at startup, or reconnecting
+after a failed connection check, also retries transient errors with backoff for
+up to 10 minutes.
+
 ## Setup
 
 1. Create `config.json` from example `config.json.example`.

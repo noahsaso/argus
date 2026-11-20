@@ -4,7 +4,15 @@ import { BlockHeader, Event, fromTendermintEvent } from '@cosmjs/stargate'
 import { Tx } from '@dao-dao/types/protobuf/codegen/cosmos/tx/v1beta1/tx'
 import { Any } from '@dao-dao/types/protobuf/codegen/google/protobuf/any'
 
-import { AutoCosmWasmClient, batch, retry } from '@/utils'
+import {
+  AutoCosmWasmClient,
+  BackoffOptions,
+  RpcErrorKind,
+  batch,
+  classifyRpcError,
+  getBackoffDelayMs,
+  retry,
+} from '@/utils'
 
 import { ChainWebSocketListener } from './ChainWebSocketListener'
 
@@ -54,8 +62,78 @@ export class BlockIteratorError extends Error {
 }
 
 /**
+ * Raised as the cause of a block error when a block kept failing with
+ * transient RPC errors for longer than the allowed retry duration.
+ */
+export class TransientRetryExhaustedError extends Error {
+  constructor(
+    public readonly blockHeight: number,
+    public readonly elapsedMs: number,
+    public readonly attempts: number,
+    public readonly cause: unknown
+  ) {
+    super(
+      `Block ${blockHeight} still failing with transient RPC errors after ${Math.round(
+        elapsedMs / 1_000
+      )}s and ${attempts} attempts: ${
+        cause instanceof Error ? cause.message : String(cause)
+      }`
+    )
+    this.name = 'TransientRetryExhaustedError'
+  }
+}
+
+/**
+ * Passed to `onRetryWarning` when fetching a block has been failing with
+ * transient errors for longer than `transientRetry.warnAfterMs`.
+ */
+export type BlockRetryWarning = {
+  blockHeight: number
+  /**
+   * How long this block has been retrying.
+   */
+  elapsedMs: number
+  /**
+   * Number of failed attempts that hit a transient error.
+   */
+  attempts: number
+  /**
+   * The most recent error.
+   */
+  error: unknown
+}
+
+export type TransientRetryOptions = BackoffOptions & {
+  /**
+   * Warn once a block has been retrying for this long. Default 1 minute.
+   */
+  warnAfterMs?: number
+  /**
+   * Repeat the warning at most this often while the block keeps retrying.
+   * Default 5 minutes.
+   */
+  warnIntervalMs?: number
+  /**
+   * Give up and raise a block error once a block has been retrying for this
+   * long, so a permanently unavailable height is not a silent stall. Default
+   * 30 minutes.
+   */
+  maxDurationMs?: number
+}
+
+/**
+ * Thrown internally when a fetch is abandoned because the iterator stopped.
+ */
+class FetchAbandonedError extends Error {}
+
+/**
  * Iterate over blocks and their transactions with parallel fetching and
  * sequential processing.
+ *
+ * Transient RPC errors while fetching a block (results not stored yet, HTTP
+ * 5xx, timeouts and connection resets) are retried with exponential backoff
+ * until `transientRetry.maxDurationMs`. Other errors are retried 30 times, 1
+ * second apart, before becoming a block error.
  */
 export class BlockIterator {
   /**
@@ -140,6 +218,22 @@ export class BlockIterator {
    */
   private latestBlockHeightInterval: NodeJS.Timeout | null = null
 
+  /**
+   * How to retry transient RPC errors while fetching a block.
+   */
+  public readonly transientRetry: Required<TransientRetryOptions>
+
+  /**
+   * Lowest height whose fetch was abandoned because the iterator stopped. The
+   * processor stops before this height since it will never be buffered.
+   */
+  private abandonedHeight: number | null = null
+
+  /**
+   * Callback for long transient retries, set by `iterate`.
+   */
+  private onRetryWarning?: (warning: BlockRetryWarning) => void | Promise<void>
+
   constructor({
     rpcUrl,
     autoCosmWasmClient,
@@ -147,6 +241,13 @@ export class BlockIterator {
     endHeight,
     bufferSize = 50,
     throwErrors: { block = true, tx = true } = {},
+    transientRetry: {
+      initialDelayMs = 1_000,
+      maxDelayMs = 30_000,
+      warnAfterMs = 60_000,
+      warnIntervalMs = 5 * 60_000,
+      maxDurationMs = 30 * 60_000,
+    } = {},
   }: {
     rpcUrl: string
     autoCosmWasmClient: AutoCosmWasmClient
@@ -157,6 +258,7 @@ export class BlockIterator {
       block?: boolean
       tx?: boolean
     }
+    transientRetry?: TransientRetryOptions
   }) {
     this.rpcUrl = rpcUrl
     this.autoCosmWasmClient = autoCosmWasmClient
@@ -164,6 +266,13 @@ export class BlockIterator {
     this.endHeight = endHeight
     this.bufferSize = bufferSize
     this.throwErrors = { block, tx }
+    this.transientRetry = {
+      initialDelayMs,
+      maxDelayMs,
+      warnAfterMs,
+      warnIntervalMs,
+      maxDurationMs,
+    }
   }
 
   get startHeight() {
@@ -172,24 +281,42 @@ export class BlockIterator {
 
   /**
    * Start the iterator.
+   *
+   * `onBlockProcessed` is called after `onBlock` and `onTx` have finished for
+   * every transaction in a block, so it marks the block as fully processed.
+   *
+   * `onRetryWarning` is called when a block has been retrying transient errors
+   * for longer than `transientRetry.warnAfterMs`, and again every
+   * `transientRetry.warnIntervalMs` while it keeps failing.
    */
   async iterate({
     onBlock,
     onTx,
+    onBlockProcessed,
     onError,
+    onRetryWarning,
   }: {
     onBlock?: (block: BlockHeader) => void | Promise<void>
     onTx?: (tx: TxData, block: BlockHeader) => void | Promise<void>
+    onBlockProcessed?: (block: BlockHeader) => void | Promise<void>
     onError?: (error: BlockIteratorError) => void | Promise<void>
+    onRetryWarning?: (warning: BlockRetryWarning) => void | Promise<void>
   }) {
     if (!onBlock && !onTx) {
       throw new Error('No callbacks provided')
     }
 
-    const client = await this.autoCosmWasmClient.getValidClient()
-    let { earliestBlockHeight = 0 } = (
-      await client['forceGetCometClient']().status()
-    ).syncInfo
+    this.onRetryWarning = onRetryWarning
+    this.abandonedHeight = null
+
+    // Retry transient RPC errors at startup (such as a 502 from the RPC proxy)
+    // with backoff instead of halting.
+    const { client, status } = await this.retryTransientStartup(async () => {
+      const client = await this.autoCosmWasmClient.getValidClient()
+      const status = await client['forceGetCometClient']().status()
+      return { client, status }
+    })
+    let { earliestBlockHeight = 0 } = status.syncInfo
 
     // Sometimes earliest block height is incorrectly reported as 0 (xion). If
     // so, try to find the earliest block height by forcing an error.
@@ -260,6 +387,16 @@ export class BlockIterator {
 
         // Wait a bit and retry.
         if (!item) {
+          // If the fetch for this height was abandoned because the iterator
+          // stopped, it will never arrive, so stop processing.
+          if (
+            !this.fetching &&
+            this.abandonedHeight !== null &&
+            this.currentHeight >= this.abandonedHeight
+          ) {
+            break
+          }
+
           await new Promise((resolve) => setTimeout(resolve, 10))
           continue
         }
@@ -290,6 +427,8 @@ export class BlockIterator {
               await onTx?.(tx, item.block)
             }
           }
+
+          await onBlockProcessed?.(item.block)
         }
 
         this.currentHeight++
@@ -355,25 +494,168 @@ export class BlockIterator {
   }
 
   /**
+   * Fetch a block and its results, retrying until success, a non-transient
+   * error, the transient retry limit, or the iterator stopping.
+   */
+  private async fetchBlockWithRetries(height: number) {
+    const {
+      initialDelayMs,
+      maxDelayMs,
+      warnAfterMs,
+      warnIntervalMs,
+      maxDurationMs,
+    } = this.transientRetry
+    const startedAt = Date.now()
+    let transientAttempts = 0
+    let lastWarnedAt: number | null = null
+
+    while (true) {
+      try {
+        // Retry non-transient errors 30 times, 1 second apart, as before.
+        // Transient errors bail out to the backoff loop below.
+        return await retry(
+          30,
+          async (_, bail) => {
+            try {
+              const client = (await this.autoCosmWasmClient.getValidClient())[
+                'forceGetCometClient'
+              ]()
+              const [{ block }, { results }] = await Promise.all([
+                client.block(height),
+                client.blockResults(height),
+              ])
+              return { ...block, results }
+            } catch (err) {
+              if (classifyRpcError(err) !== RpcErrorKind.Other) {
+                bail(err instanceof Error ? err : new Error(String(err)))
+              }
+              throw err
+            }
+          },
+          1_000
+        )
+      } catch (error) {
+        const kind = classifyRpcError(error)
+        if (kind === RpcErrorKind.Other) {
+          throw error
+        }
+
+        if (!this.fetching) {
+          throw new FetchAbandonedError()
+        }
+
+        // The block may not have been committed yet. Wait a second and retry
+        // without a limit, as before.
+        if (kind === RpcErrorKind.Pending) {
+          await this.sleepWhileFetching(1_000)
+          continue
+        }
+
+        transientAttempts++
+        const now = Date.now()
+        const elapsedMs = now - startedAt
+
+        if (elapsedMs >= maxDurationMs) {
+          throw new TransientRetryExhaustedError(
+            height,
+            elapsedMs,
+            transientAttempts,
+            error
+          )
+        }
+
+        if (
+          elapsedMs >= warnAfterMs &&
+          (lastWarnedAt === null || now - lastWarnedAt >= warnIntervalMs)
+        ) {
+          lastWarnedAt = now
+          console.warn(
+            `[${new Date().toISOString()}] Block ${height} has been retrying transient RPC errors for ${Math.round(
+              elapsedMs / 1_000
+            )}s (${transientAttempts} attempts): ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          )
+          try {
+            await this.onRetryWarning?.({
+              blockHeight: height,
+              elapsedMs,
+              attempts: transientAttempts,
+              error,
+            })
+          } catch (err) {
+            console.error('Error in onRetryWarning callback:', err)
+          }
+        }
+
+        await this.sleepWhileFetching(
+          Math.min(
+            getBackoffDelayMs(transientAttempts, {
+              initialDelayMs,
+              maxDelayMs,
+            }),
+            maxDurationMs - elapsedMs
+          )
+        )
+      }
+    }
+  }
+
+  /**
+   * Run a startup step, retrying transient RPC errors with backoff until
+   * `transientRetry.maxDurationMs`. Other errors are thrown right away.
+   */
+  private async retryTransientStartup<T>(fn: () => Promise<T>): Promise<T> {
+    const { initialDelayMs, maxDelayMs, warnAfterMs, maxDurationMs } =
+      this.transientRetry
+    const startedAt = Date.now()
+
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await fn()
+      } catch (error) {
+        const elapsedMs = Date.now() - startedAt
+        if (
+          classifyRpcError(error) === RpcErrorKind.Other ||
+          elapsedMs >= maxDurationMs
+        ) {
+          throw error
+        }
+
+        const delayMs = Math.min(
+          getBackoffDelayMs(attempt, { initialDelayMs, maxDelayMs }),
+          maxDurationMs - elapsedMs
+        )
+        const log = elapsedMs >= warnAfterMs ? console.warn : console.log
+        log(
+          `[${new Date().toISOString()}] Block iterator startup failed with a transient RPC error (attempt ${attempt}), retrying in ${delayMs}ms: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        )
+        await new Promise((resolve) => setTimeout(resolve, delayMs))
+      }
+    }
+  }
+
+  /**
+   * Sleep for up to `ms`, waking early if the iterator stops.
+   */
+  private async sleepWhileFetching(ms: number) {
+    const until = Date.now() + ms
+    while (this.fetching && Date.now() < until) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.min(100, until - Date.now()))
+      )
+    }
+  }
+
+  /**
    * Fetch a single block and its transactions.
    */
   private async fetchBlockData(height: number): Promise<void> {
     try {
       // Fetch the block first.
-      const block = await retry(
-        30,
-        async () => {
-          const client = (await this.autoCosmWasmClient.getValidClient())[
-            'forceGetCometClient'
-          ]()
-          const [{ block }, { results }] = await Promise.all([
-            client.block(height),
-            client.blockResults(height),
-          ])
-          return { ...block, results }
-        },
-        1_000
-      )
+      const block = await this.fetchBlockWithRetries(height)
 
       // Fetch transactions in parallel, batched 10 at a time.
       const txs: (TxData | BlockIteratorError)[] = []
@@ -450,17 +732,14 @@ export class BlockIterator {
         height,
       })
     } catch (error) {
-      // If the error is that the height is greater than the current height,
-      // wait a second and retry since the block may not have been committed
-      // yet.
-      if (
-        error instanceof Error &&
-        error.message.includes(
-          'must be less than or equal to the current blockchain height'
-        )
-      ) {
-        await new Promise((resolve) => setTimeout(resolve, 1000))
-        return this.fetchBlockData(height)
+      // The iterator stopped while this block was retrying. Nothing will be
+      // buffered for it, so tell the processor to stop before it.
+      if (error instanceof FetchAbandonedError) {
+        this.abandonedHeight =
+          this.abandonedHeight === null
+            ? height
+            : Math.min(this.abandonedHeight, height)
+        return
       }
 
       // Block-level error - the entire block failed to load
@@ -490,8 +769,13 @@ export class BlockIterator {
       // Start polling the latest block height.
       if (!this.latestBlockHeightInterval) {
         this.latestBlockHeightInterval = setInterval(async () => {
-          const client = await this.autoCosmWasmClient.getValidClient()
-          const height = await client.getHeight().catch(() => null)
+          // Ignore errors (such as the client being disconnected during an RPC
+          // outage); the next interval tries again. An uncaught rejection here
+          // would crash the process.
+          const height = await this.autoCosmWasmClient
+            .getValidClient()
+            .then((client) => client.getHeight())
+            .catch(() => null)
           if (!height) {
             return
           }
