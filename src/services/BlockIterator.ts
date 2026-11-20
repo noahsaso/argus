@@ -193,6 +193,21 @@ export class BlockIterator {
   private fetching: boolean = false
 
   /**
+   * Whether `stopFetching` has been called. Unlike `fetching`, which is false
+   * until the fetcher starts, this also covers startup, so a stop requested
+   * while `iterate` is still retrying startup RPC calls is not lost.
+   */
+  private stopRequested: boolean = false
+
+  /**
+   * Resolves once `stopFetching` is called, to interrupt startup retries.
+   */
+  private resolveStopRequest!: () => void
+  private readonly stopRequest: Promise<void> = new Promise((resolve) => {
+    this.resolveStopRequest = resolve
+  })
+
+  /**
    * Height that the fetcher is currently working on.
    */
   private fetchHeight: number = 0
@@ -310,12 +325,17 @@ export class BlockIterator {
     this.abandonedHeight = null
 
     // Retry transient RPC errors at startup (such as a 502 from the RPC proxy)
-    // with backoff instead of halting.
-    const { client, status } = await this.retryTransientStartup(async () => {
+    // with backoff instead of halting. If the iterator is stopped meanwhile,
+    // return without fetching anything.
+    const startup = await this.retryTransientStartup(async () => {
       const client = await this.autoCosmWasmClient.getValidClient()
       const status = await client['forceGetCometClient']().status()
       return { client, status }
     })
+    if (!startup) {
+      return
+    }
+    const { client, status } = startup
     let { earliestBlockHeight = 0 } = status.syncInfo
 
     // Sometimes earliest block height is incorrectly reported as 0 (xion). If
@@ -373,6 +393,11 @@ export class BlockIterator {
       throw new Error(
         `End height ${this.endHeight} is less than start height ${this.startHeight}`
       )
+    }
+
+    // Don't start fetching if the iterator was stopped during startup.
+    if (this.stopRequested) {
+      return
     }
 
     // Start fetching blocks in parallel.
@@ -434,15 +459,27 @@ export class BlockIterator {
         this.currentHeight++
       }
     } finally {
-      this.stopFetching()
+      this.haltFetching()
     }
   }
 
   /**
    * Stop the fetcher, letting the iterator finish. The `iterate` function will
-   * resolve once buffer is empty and everything has been processed.
+   * resolve once buffer is empty and everything has been processed. If called
+   * while `iterate` is still starting up (for example retrying an RPC outage),
+   * `iterate` resolves without fetching any blocks. A stopped iterator does not
+   * start again.
    */
   stopFetching() {
+    this.stopRequested = true
+    this.resolveStopRequest()
+    this.haltFetching()
+  }
+
+  /**
+   * Stop the fetcher and stop tracking the latest block height.
+   */
+  private haltFetching() {
     this.fetching = false
     this.stopTrackingLatestBlockHeight()
   }
@@ -490,7 +527,7 @@ export class BlockIterator {
     await Promise.allSettled(fetchingBlocks)
 
     // Stop fetching.
-    this.stopFetching()
+    this.haltFetching()
   }
 
   /**
@@ -604,16 +641,36 @@ export class BlockIterator {
   /**
    * Run a startup step, retrying transient RPC errors with backoff until
    * `transientRetry.maxDurationMs`. Other errors are thrown right away.
+   *
+   * Resolves to `null` as soon as the iterator is stopped, without waiting for
+   * an attempt in progress (which may itself be retrying a connection). That
+   * attempt's result is ignored.
    */
-  private async retryTransientStartup<T>(fn: () => Promise<T>): Promise<T> {
+  private async retryTransientStartup<T>(
+    fn: () => Promise<T>
+  ): Promise<T | null> {
     const { initialDelayMs, maxDelayMs, warnAfterMs, maxDurationMs } =
       this.transientRetry
     const startedAt = Date.now()
 
-    for (let attempt = 1; ; attempt++) {
+    for (let attempt = 1; !this.stopRequested; attempt++) {
       try {
-        return await fn()
+        const result = fn()
+        // Ignore the outcome if the stop request wins the race below.
+        result.catch(() => {})
+        const outcome = await Promise.race([
+          result.then((value) => ({ value })),
+          this.stopRequest.then(() => null),
+        ])
+        if (!outcome) {
+          return null
+        }
+        return outcome.value
       } catch (error) {
+        if (this.stopRequested) {
+          return null
+        }
+
         const elapsedMs = Date.now() - startedAt
         if (
           classifyRpcError(error) === RpcErrorKind.Other ||
@@ -632,9 +689,25 @@ export class BlockIterator {
             error instanceof Error ? error.message : String(error)
           }`
         )
-        await new Promise((resolve) => setTimeout(resolve, delayMs))
+        await this.sleepUnlessStopRequested(delayMs)
       }
     }
+
+    return null
+  }
+
+  /**
+   * Sleep for `ms`, waking early if `stopFetching` is called.
+   */
+  private async sleepUnlessStopRequested(ms: number) {
+    let timeout: NodeJS.Timeout | undefined
+    await Promise.race([
+      new Promise((resolve) => {
+        timeout = setTimeout(resolve, ms)
+      }),
+      this.stopRequest,
+    ])
+    clearTimeout(timeout)
   }
 
   /**
