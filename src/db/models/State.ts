@@ -60,6 +60,16 @@ export class State extends Model {
   @Column(DataType.BIGINT)
   declare lastFeegrantBlockHeightExported: string | null
 
+  /**
+   * The last block the listener fully processed (every transaction matched
+   * against the extractors and queued). Only the listener writes it; the
+   * tracer advances `latestBlockHeight` instead. Null until the listener has
+   * processed a block.
+   */
+  @AllowNull
+  @Column(DataType.BIGINT)
+  declare listenerLatestBlockHeight: string | null
+
   get latestBlock(): Block {
     return {
       height: BigInt(this.latestBlockHeight),

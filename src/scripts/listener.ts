@@ -1,4 +1,3 @@
-import { decodeRawProtobufMsg } from '@dao-dao/types/protobuf/utils'
 import * as Sentry from '@sentry/node'
 import { Command } from 'commander'
 import Koa from 'koa'
@@ -6,7 +5,11 @@ import { Sequelize } from 'sequelize'
 
 import { ConfigManager, testRedisConnection } from '@/config'
 import { Block, State, loadDb } from '@/db'
-import { getExtractors } from '@/listener'
+import { dispatchTxToExtractors } from '@/listener/dispatch'
+import {
+  getListenerStartHeight,
+  saveListenerProcessedHeight,
+} from '@/listener/progress'
 import { ExtractQueue } from '@/queues/queues'
 import { setupMeilisearch } from '@/search'
 import {
@@ -14,7 +17,7 @@ import {
   BlockIteratorErrorType,
   WasmCodeService,
 } from '@/services'
-import { DbType, ExtractableTxInput, ExtractorEnv } from '@/types'
+import { DbType } from '@/types'
 import { AutoCosmWasmClient } from '@/utils'
 
 declare global {
@@ -81,12 +84,19 @@ const main = async () => {
   // Initialize state.
   const state = await State.createSingletonIfMissing(config.chainId)
 
+  // Resume after the last block the listener fully processed, not the shared
+  // latest block height that the tracer also advances, so a crash never skips
+  // blocks.
+  const startHeight = getListenerStartHeight(state)
+
   console.log(
     `[${new Date().toISOString()}] State initialized: chainId=${
       state.chainId
     } latestBlockHeight=${state.latestBlockHeight} latestBlockTimeUnixMs=${
       state.latestBlockTimeUnixMs
-    }`
+    } listenerLatestBlockHeight=${
+      state.listenerLatestBlockHeight ?? 'none'
+    } startHeight=${startHeight}`
   )
 
   // Set up meilisearch.
@@ -103,8 +113,15 @@ const main = async () => {
     `[${new Date().toISOString()}] Connecting to ${config.remoteRpc}...`
   )
 
-  // Create CosmWasm client that batches requests.
-  const autoCosmWasmClient = new AutoCosmWasmClient(config.remoteRpc)
+  // Create CosmWasm client that batches requests. Retry transient RPC errors
+  // (such as a 502 from the RPC proxy) with backoff instead of halting.
+  const autoCosmWasmClient = new AutoCosmWasmClient(
+    config.remoteRpc,
+    undefined,
+    {
+      connectRetry: {},
+    }
+  )
   await autoCosmWasmClient.update()
 
   console.log(`[${new Date().toISOString()}] Starting listener...`)
@@ -112,7 +129,7 @@ const main = async () => {
   const blockIterator = new BlockIterator({
     rpcUrl: config.remoteRpc,
     autoCosmWasmClient,
-    startHeight: Number(state.latestBlockHeight),
+    startHeight,
     throwErrors: {
       tx: !config.ignoreListenerTxErrors,
     },
@@ -262,68 +279,28 @@ const main = async () => {
           }),
         ])
       },
-      onTx: async (
-        { hash, code, messages: rawMessages, height, events },
-        { time }
-      ) => {
-        // Ignore unsuccessful TXs.
-        if (code !== 0) {
-          return
-        }
-
-        // Attempt to decode each message, ignoring errors and returning the
-        // original message if it fails.
-        const messages = rawMessages.flatMap((message) => {
-          try {
-            return decodeRawProtobufMsg(message)
-          } catch {
-            return message
+      onTx: (tx, block) => dispatchTxToExtractors(tx, block),
+      // Record the block only after every transaction in it has been queued.
+      onBlockProcessed: ({ height }) =>
+        saveListenerProcessedHeight(Number(height)),
+      onRetryWarning: ({ blockHeight, elapsedMs, attempts, error }) => {
+        Sentry.captureMessage(
+          `Listener block ${blockHeight} retrying transient RPC errors for ${Math.round(
+            elapsedMs / 1_000
+          )}s`,
+          {
+            level: 'warning',
+            tags: {
+              script: 'listener',
+              type: 'retry',
+              blockHeight,
+            },
+            extra: {
+              attempts,
+              error: error instanceof Error ? error.message : String(error),
+            },
           }
-        })
-
-        // Create input for extractors.
-        const input: ExtractableTxInput = {
-          hash,
-          messages,
-          events,
-        }
-
-        // Create extractor environment for queue.
-        const env: Pick<ExtractorEnv, 'txHash' | 'block'> = {
-          txHash: hash,
-          block: {
-            height: BigInt(height).toString(),
-            timeUnixMs: BigInt(Date.parse(time)).toString(),
-            timestamp: new Date(time).toISOString(),
-          },
-        }
-
-        // Set up extractors with environment.
-        const extractors = getExtractors()
-
-        // Match messages with extractors and add to queue.
-        for (const Extractor of extractors) {
-          const data = Extractor.match(input)
-
-          if (data.length > 0) {
-            await ExtractQueue.addBulk(
-              data.map((data) => ({
-                name: `${Extractor.type} (${data.source})`,
-                data: {
-                  extractor: Extractor.type,
-                  data,
-                  env,
-                },
-              }))
-            )
-
-            console.log(
-              `[${new Date().toISOString()}] TX ${hash} at block ${height} sent to "${
-                Extractor.type
-              }" extractor.`
-            )
-          }
-        }
+        )
       },
       onError: (error) => {
         // Don't log/capture TX errors if we're ignoring them.
