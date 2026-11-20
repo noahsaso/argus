@@ -833,6 +833,127 @@ describe('BlockIterator', () => {
       expect(onBlock.mock.calls.map(([block]) => block.height)).toEqual([100])
       expect(onError).not.toHaveBeenCalled()
     })
+
+    it('stops during startup backoff without fetching', async () => {
+      const status = vi
+        .fn()
+        .mockRejectedValue(new Error('Bad status on response: 502'))
+      mockClient.forceGetCometClient = vi.fn(() => ({
+        status,
+        block: mockGetBlock,
+        blockResults: mockGetBlockResults,
+      }))
+      const onBlock = vi.fn()
+
+      // Long backoff, so the stop arrives while the iterator is sleeping.
+      const iterator = createIterator({
+        initialDelayMs: 5_000,
+        maxDelayMs: 5_000,
+      })
+      blockIterator = iterator
+      const iteratePromise = iterator.iterate({ onBlock })
+
+      await vi.waitFor(() => expect(status).toHaveBeenCalledTimes(1))
+      const stoppedAt = Date.now()
+      iterator.stopFetching()
+      await iteratePromise
+
+      // Resolves right away instead of waiting out the backoff.
+      expect(Date.now() - stoppedAt).toBeLessThan(1_000)
+      expect(status).toHaveBeenCalledTimes(1)
+      expect(mockGetBlock).not.toHaveBeenCalled()
+      expect(onBlock).not.toHaveBeenCalled()
+    })
+
+    it('stops while a startup connection is still being retried', async () => {
+      // The client keeps retrying its connection, so this never settles.
+      ;(mockAutoCosmWasmClient.getValidClient as any) = vi.fn(
+        () => new Promise(() => {})
+      )
+      const onBlock = vi.fn()
+
+      const iterator = createIterator()
+      blockIterator = iterator
+      const iteratePromise = iterator.iterate({ onBlock })
+
+      await vi.waitFor(() =>
+        expect(mockAutoCosmWasmClient.getValidClient).toHaveBeenCalledTimes(1)
+      )
+      iterator.stopFetching()
+      await iteratePromise
+
+      expect(mockGetBlock).not.toHaveBeenCalled()
+      expect(onBlock).not.toHaveBeenCalled()
+    })
+
+    it('does not start fetching when the RPC recovers after a stop', async () => {
+      let recover: (value: unknown) => void = () => {}
+      const status = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('Bad status on response: 502'))
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              recover = resolve
+            })
+        )
+      mockClient.forceGetCometClient = vi.fn(() => ({
+        status,
+        block: mockGetBlock,
+        blockResults: mockGetBlockResults,
+      }))
+      const onBlock = vi.fn()
+
+      const iterator = createIterator()
+      blockIterator = iterator
+      const iteratePromise = iterator.iterate({ onBlock })
+
+      // Stop while the second status call is in flight, then let it succeed.
+      await vi.waitFor(() => expect(status).toHaveBeenCalledTimes(2))
+      iterator.stopFetching()
+      recover({ syncInfo: { earliestBlockHeight: 1 } })
+      await iteratePromise
+
+      // Give a fetcher that started anyway time to request blocks.
+      await new Promise((resolve) => setTimeout(resolve, 200))
+
+      expect(mockGetBlock).not.toHaveBeenCalled()
+      expect(mockClient.getHeight).not.toHaveBeenCalled()
+      expect(onBlock).not.toHaveBeenCalled()
+    })
+
+    it('does not start fetching when stopped during the remaining startup steps', async () => {
+      // The earliest height is reported as 0, so startup probes block 1.
+      let probe: (value: unknown) => void = () => {}
+      mockClient.forceGetCometClient = vi.fn(() => ({
+        status: vi
+          .fn()
+          .mockResolvedValue({ syncInfo: { earliestBlockHeight: 0 } }),
+        block: mockGetBlock,
+        blockResults: mockGetBlockResults,
+      }))
+      mockClient.getBlock = vi.fn(
+        () =>
+          new Promise((resolve) => {
+            probe = resolve
+          })
+      )
+      const onBlock = vi.fn()
+
+      const iterator = createIterator()
+      blockIterator = iterator
+      const iteratePromise = iterator.iterate({ onBlock })
+
+      await vi.waitFor(() => expect(mockClient.getBlock).toHaveBeenCalled())
+      iterator.stopFetching()
+      probe({})
+      await iteratePromise
+
+      await new Promise((resolve) => setTimeout(resolve, 200))
+
+      expect(mockGetBlock).not.toHaveBeenCalled()
+      expect(onBlock).not.toHaveBeenCalled()
+    })
   })
 
   describe('onBlockProcessed', () => {

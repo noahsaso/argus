@@ -79,7 +79,8 @@ repeated every 5 minutes. After 30 minutes it gives up and halts, so the process
 restarts and resumes from the same block. Other errors are retried 30 times, 1
 second apart, as before. Connecting to the RPC at startup, or reconnecting
 after a failed connection check, also retries transient errors with backoff for
-up to 10 minutes.
+up to 10 minutes. SIGINT or SIGTERM during these startup retries stops the
+listener without waiting for the RPC to recover.
 
 ## Setup
 
