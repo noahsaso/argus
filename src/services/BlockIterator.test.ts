@@ -834,6 +834,87 @@ describe('BlockIterator', () => {
       expect(onError).not.toHaveBeenCalled()
     })
 
+    it('does not fetch again after a stop during block retry backoff', async () => {
+      mockGetBlockResults.mockImplementation((h: number) =>
+        h === 101
+          ? Promise.reject(new Error('Bad status on response: 502'))
+          : Promise.resolve(createMockBlockResults(h))
+      )
+      const onBlock = vi.fn()
+      const onError = vi.fn()
+
+      // Long backoff, so the stop arrives while block 101 is sleeping.
+      const iterator = createIterator(
+        { initialDelayMs: 5_000, maxDelayMs: 5_000 },
+        105
+      )
+      blockIterator = iterator
+      const iteratePromise = iterator.iterate({ onBlock, onError })
+      await sendBlockPastEndHeight()
+
+      await vi.waitFor(() => {
+        expect(onBlock).toHaveBeenCalledTimes(1)
+        expect(mockGetBlockResults).toHaveBeenCalledWith(101)
+      })
+      const getValidClient = vi.mocked(mockAutoCosmWasmClient.getValidClient)
+      const clientCallsAtStop = getValidClient.mock.calls.length
+      const resultsCallsAtStop = mockGetBlockResults.mock.calls.length
+
+      const stoppedAt = Date.now()
+      iterator.stopFetching()
+      await iteratePromise
+      // Give a stray retry attempt time to run.
+      await new Promise((resolve) => setTimeout(resolve, 200))
+
+      expect(Date.now() - stoppedAt).toBeLessThan(1_000)
+      expect(getValidClient).toHaveBeenCalledTimes(clientCallsAtStop)
+      expect(mockGetBlockResults).toHaveBeenCalledTimes(resultsCallsAtStop)
+      expect(onBlock.mock.calls.map(([block]) => block.height)).toEqual([100])
+      expect(onError).not.toHaveBeenCalled()
+    })
+
+    it('stops while a block fetch is waiting for the client to reconnect', async () => {
+      // After block 101 fails, the client starts reconnecting and every later
+      // getValidClient call waits on it, which never finishes here.
+      let reconnecting = false
+      let callsWhileReconnecting = 0
+      mockGetBlockResults.mockImplementation((h: number) => {
+        if (h === 101) {
+          reconnecting = true
+          return Promise.reject(new Error('Bad status on response: 502'))
+        }
+        return Promise.resolve(createMockBlockResults(h))
+      })
+      ;(mockAutoCosmWasmClient.getValidClient as any) = vi.fn(() => {
+        if (reconnecting) {
+          callsWhileReconnecting++
+          return new Promise(() => {})
+        }
+        return Promise.resolve(mockClient)
+      })
+      const onBlock = vi.fn()
+      const onError = vi.fn()
+
+      const iterator = createIterator({}, 105)
+      blockIterator = iterator
+      const iteratePromise = iterator.iterate({ onBlock, onError })
+      await sendBlockPastEndHeight()
+
+      // Wait until block 101's retry is stuck waiting for the client.
+      await vi.waitFor(() => expect(callsWhileReconnecting).toBeGreaterThan(0))
+
+      iterator.stopFetching()
+      await iteratePromise
+
+      // The fetch waiting on the client gives up instead of staying pending
+      // until the reconnect finishes.
+      await vi.waitFor(() => expect(iterator['abandonedHeight']).toBe(101), {
+        timeout: 1_000,
+      })
+      expect(onBlock.mock.calls.map(([block]) => block.height)).toEqual([100])
+      expect(onError).not.toHaveBeenCalled()
+    })
+
     it('stops during startup backoff without fetching', async () => {
       const status = vi
         .fn()
