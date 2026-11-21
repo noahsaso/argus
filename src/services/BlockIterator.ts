@@ -200,12 +200,12 @@ export class BlockIterator {
   private stopRequested: boolean = false
 
   /**
-   * Resolves once `stopFetching` is called, to interrupt startup retries.
+   * Callbacks to run once `stopFetching` is called, one per operation that is
+   * waiting and should be interrupted (a startup attempt, a block fetch attempt
+   * or a backoff sleep). Each operation removes its callback when it settles,
+   * so completed operations and their results are not kept alive.
    */
-  private resolveStopRequest!: () => void
-  private readonly stopRequest: Promise<void> = new Promise((resolve) => {
-    this.resolveStopRequest = resolve
-  })
+  private readonly stopListeners = new Set<() => void>()
 
   /**
    * Height that the fetcher is currently working on.
@@ -472,7 +472,9 @@ export class BlockIterator {
    */
   stopFetching() {
     this.stopRequested = true
-    this.resolveStopRequest()
+    const listeners = [...this.stopListeners]
+    this.stopListeners.clear()
+    listeners.forEach((listener) => listener())
     this.haltFetching()
   }
 
@@ -677,13 +679,7 @@ export class BlockIterator {
 
     for (let attempt = 1; !this.stopRequested; attempt++) {
       try {
-        const result = fn()
-        // Ignore the outcome if the stop request wins the race below.
-        result.catch(() => {})
-        const outcome = await Promise.race([
-          result.then((value) => ({ value })),
-          this.stopRequest.then(() => null),
-        ])
+        const outcome = await this.raceStopRequest(fn())
         if (!outcome) {
           return null
         }
@@ -723,13 +719,36 @@ export class BlockIterator {
    * `stopFetching` is called. The result of `promise` is then ignored.
    */
   private async abandonOnStop<T>(promise: Promise<T>): Promise<T> {
+    const outcome = await this.raceStopRequest(promise)
+    if (!outcome) {
+      throw new FetchAbandonedError()
+    }
+    return outcome.value
+  }
+
+  /**
+   * Resolve with `{ value }` once `promise` resolves, reject if it rejects, or
+   * resolve with `null` as soon as `stopFetching` is called, whichever happens
+   * first. The stop callback is removed as soon as this settles, so nothing
+   * keeps a reference to `promise` or its result afterwards.
+   */
+  private raceStopRequest<T>(
+    promise: Promise<T>
+  ): Promise<{ value: T } | null> {
+    // Ignore the outcome if the stop request wins.
     promise.catch(() => {})
-    return Promise.race([
-      promise,
-      this.stopRequest.then(() => {
-        throw new FetchAbandonedError()
-      }),
-    ])
+
+    if (this.stopRequested) {
+      return Promise.resolve(null)
+    }
+
+    return new Promise<{ value: T } | null>((resolve, reject) => {
+      const onStop = () => resolve(null)
+      this.stopListeners.add(onStop)
+      promise
+        .then((value) => resolve({ value }), reject)
+        .finally(() => this.stopListeners.delete(onStop))
+    })
   }
 
   /**
@@ -737,12 +756,11 @@ export class BlockIterator {
    */
   private async sleepUnlessStopRequested(ms: number) {
     let timeout: NodeJS.Timeout | undefined
-    await Promise.race([
-      new Promise((resolve) => {
+    await this.raceStopRequest(
+      new Promise<void>((resolve) => {
         timeout = setTimeout(resolve, ms)
-      }),
-      this.stopRequest,
-    ])
+      })
+    )
     clearTimeout(timeout)
   }
 
