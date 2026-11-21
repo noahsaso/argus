@@ -915,6 +915,48 @@ describe('BlockIterator', () => {
       expect(onError).not.toHaveBeenCalled()
     })
 
+    it('does not keep a stop listener for each finished fetch', async () => {
+      // Fail a few attempts so retries register listeners too.
+      failBlockResults(101, 3, new Error('Bad status on response: 502'))
+      const onBlock = vi.fn()
+
+      const iterator = createIterator({}, 110)
+      await runToEnd(iterator, { onBlock })
+
+      expect(onBlock).toHaveBeenCalledTimes(11)
+      expect(iterator['stopListeners'].size).toBe(0)
+    })
+
+    it('removes the stop listener of a fetch once it finishes', async () => {
+      let finish: (value: unknown) => void = () => {}
+      mockGetBlockResults.mockImplementation((h: number) =>
+        h === 101
+          ? new Promise((resolve) => {
+              finish = () => resolve(createMockBlockResults(h))
+            })
+          : Promise.resolve(createMockBlockResults(h))
+      )
+      const onBlock = vi.fn()
+
+      const iterator = createIterator({}, 101)
+      blockIterator = iterator
+      const iteratePromise = iterator.iterate({ onBlock })
+      await sendBlockPastEndHeight()
+
+      // Only the fetch of block 101 is still waiting.
+      await vi.waitFor(() => {
+        expect(onBlock).toHaveBeenCalledTimes(1)
+        expect(mockGetBlockResults).toHaveBeenCalledWith(101)
+      })
+      expect(iterator['stopListeners'].size).toBe(1)
+
+      finish(undefined)
+      await iteratePromise
+
+      expect(onBlock).toHaveBeenCalledTimes(2)
+      expect(iterator['stopListeners'].size).toBe(0)
+    })
+
     it('stops during startup backoff without fetching', async () => {
       const status = vi
         .fn()
