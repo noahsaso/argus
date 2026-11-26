@@ -13,9 +13,7 @@ import { Block as BlockType } from '@/types'
 @Table({
   timestamps: true,
   indexes: [
-    {
-      fields: ['height'],
-    },
+    // `height` is the primary key, so it needs no separate index.
     {
       fields: ['timeUnixMs'],
     },
