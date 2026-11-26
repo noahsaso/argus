@@ -25,6 +25,10 @@ import { Validator } from './Validator'
     // export or re-export. Validators are jailed when a slash occurs, so they
     // won't be slashed multiple times for the same infraction.
     {
+      // Postgres truncates names to 63 characters, so name the index explicitly
+      // with the truncated name. Otherwise sync does not recognize the existing
+      // index and tries to create it again.
+      name: 'staking_slash_events_validator_operator_address_registered_bloc',
       unique: true,
       fields: [
         'validatorOperatorAddress',

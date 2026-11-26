@@ -25,6 +25,10 @@ import { Contract } from './Contract'
   indexes: [
     // Take advantage of TimescaleDB SkipScan.
     {
+      // Postgres truncates names to 63 characters, so name the index explicitly
+      // with the truncated name. Otherwise sync does not recognize the existing
+      // index and tries to create it again.
+      name: 'wasm_state_event_transformations_contract_address_name_block_he',
       unique: true,
       fields: [
         'contractAddress',

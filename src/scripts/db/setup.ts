@@ -1,11 +1,10 @@
-import * as fs from 'fs'
 import path from 'path'
 import * as readline from 'readline'
 
 import { Command } from 'commander'
 
 import { ConfigManager } from '@/config'
-import { loadDb, setup as setupDb } from '@/db'
+import { loadDb, markMigrationsAsRun, setup as setupDb } from '@/db'
 import { DbType } from '@/types'
 
 export const main = async () => {
@@ -46,24 +45,41 @@ export const main = async () => {
     output: process.stdout,
   })
 
+  // The compiled migrations folder for each database, matching the
+  // migrations-path in .sequelizerc that db:migrate:data and
+  // db:migrate:accounts use.
+  const getMigrationsPath = (type: 'data' | 'accounts') =>
+    path.join(process.cwd(), 'dist', 'db', 'migrations', type)
+
+  const markMigrations = async (
+    sequelize: NonNullable<typeof dataSequelize>,
+    type: 'data' | 'accounts',
+    force: boolean
+  ) => {
+    const { inserted } = await markMigrationsAsRun(
+      sequelize,
+      getMigrationsPath(type),
+      { force }
+    )
+    if (inserted.length) {
+      console.log(
+        `Recorded ${inserted.length} ${type} migration(s) as already run.`
+      )
+    }
+  }
+
   const setup = async () => {
     try {
       if (dataSequelize) {
         await setupDb(dataSequelize, destroy, 'data')
-        // Add migrations to data database.
-        const migrations = fs.readdirSync(
-          path.join(process.cwd(), './dist/db/migrations')
-        )
-        for (const migration of migrations) {
-          await dataSequelize.query(
-            `INSERT INTO "SequelizeMeta" ("name") VALUES ('${migration}') ON CONFLICT ("name") DO NOTHING;`
-          )
-        }
+        // Record migrations as run, since the tables match the current models.
+        await markMigrations(dataSequelize, 'data', destroy)
       }
 
       // Do not destroy accounts tables.
       if (accountsSequelize) {
         await setupDb(accountsSequelize, false, 'accounts')
+        await markMigrations(accountsSequelize, 'accounts', false)
       }
 
       console.log(
