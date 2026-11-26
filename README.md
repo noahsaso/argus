@@ -101,12 +101,16 @@ listener without waiting for the RPC to recover.
 4. Setup the database.
 
    ```bash
-   # try migrating to generate the migrations table
-   # this should FAIL, but that is ok
-   npm run db:migrate:data
-
+   # create the tables from the models and record every migration as run
    npm run db:setup
+
+   # later, after pulling changes, apply any new migrations
+   npm run db:migrate:data
    ```
+
+   `npm run db:init` (migrations first, then setup) also works on an empty
+   database. On a database that already has migration history, `db:setup` does
+   not mark pending migrations as run, so run `db:migrate:data` for those.
 
 5. Run the tracer, listener, or server.
 

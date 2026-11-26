@@ -3,6 +3,12 @@ import { DataType } from 'sequelize-typescript'
 
 module.exports = {
   async up(queryInterface: QueryInterface) {
+    // The trigram index below needs pg_trgm. `npm run db:setup` creates it, but
+    // a fresh database that runs migrations first does not have it yet.
+    await queryInterface.sequelize.query(
+      'CREATE EXTENSION IF NOT EXISTS pg_trgm;'
+    )
+
     await queryInterface.createTable('Extractions', {
       address: {
         primaryKey: true,
