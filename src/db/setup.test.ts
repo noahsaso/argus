@@ -6,7 +6,16 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { DbType } from '@/types'
 
 import { loadDb } from './connection'
-import { getMigrationNames, markMigrationsAsRun, setup } from './setup'
+import {
+  ALLOW_SYNC_ON_POPULATED_DB_ENV,
+  PopulatedDatabaseError,
+  assertSyncAllowed,
+  getMigrationNames,
+  getPopulatedTables,
+  isSyncOnPopulatedDbAllowedByEnv,
+  markMigrationsAsRun,
+  setup,
+} from './setup'
 
 const MIGRATIONS_PATH = path.join(
   process.cwd(),
@@ -340,5 +349,156 @@ describe('database setup and migrations', () => {
         []
       )
     })
+  })
+})
+
+describe('refusing to sync a populated database', () => {
+  let dataSequelize: Sequelize
+  let accountsSequelize: Sequelize
+
+  const databases = () => [
+    { name: 'data', sequelize: dataSequelize },
+    { name: 'accounts', sequelize: accountsSequelize },
+  ]
+
+  const insertBlock = () =>
+    dataSequelize.query(
+      'INSERT INTO "Blocks" ("height", "timeUnixMs", "timestamp", "createdAt", "updatedAt") VALUES (1, 1, NOW(), NOW(), NOW());'
+    )
+
+  beforeEach(async () => {
+    dataSequelize = await loadDb({
+      type: DbType.Data,
+    })
+    accountsSequelize = await loadDb({
+      type: DbType.Accounts,
+    })
+
+    // Start every test from an empty database.
+    await emptyDatabase(dataSequelize)
+    await emptyDatabase(accountsSequelize)
+  })
+
+  it('allows syncing a brand-new empty database', async () => {
+    expect(await getPopulatedTables(dataSequelize)).toEqual([])
+    expect(await getPopulatedTables(accountsSequelize)).toEqual([])
+    await expect(
+      assertSyncAllowed(databases(), { action: 'sync tables' })
+    ).resolves.toBeUndefined()
+  })
+
+  it('allows syncing after only the migrations have run, as in db:init', async () => {
+    await runPendingMigrations(dataSequelize)
+
+    // The migrations seed the WASM code keys from config, which does not count
+    // as indexed data.
+    const [{ count }] = await dataSequelize.query<{ count: string }>(
+      'SELECT COUNT(*) AS "count" FROM "WasmCodeKeys";',
+      {
+        type: QueryTypes.SELECT,
+      }
+    )
+    expect(Number(count)).toBeGreaterThan(0)
+
+    expect(await getPopulatedTables(dataSequelize)).toEqual([])
+    await expect(
+      assertSyncAllowed(databases(), { action: 'sync tables' })
+    ).resolves.toBeUndefined()
+
+    await setup(dataSequelize, false, 'data')
+    await setup(accountsSequelize, false, 'accounts')
+
+    // Setup creates the States singleton row, which does not count either, so
+    // running setup again on the otherwise empty tables is allowed too.
+    expect(
+      await dataSequelize.query('SELECT 1 FROM "States";', {
+        type: QueryTypes.SELECT,
+      })
+    ).toHaveLength(1)
+    await expect(
+      assertSyncAllowed(databases(), { action: 'sync tables' })
+    ).resolves.toBeUndefined()
+  })
+
+  it('refuses to sync a data database that holds rows', async () => {
+    await setup(dataSequelize, false, 'data')
+    await insertBlock()
+
+    expect(await getPopulatedTables(dataSequelize)).toEqual(['Blocks'])
+
+    const error = await assertSyncAllowed(databases(), {
+      action: 'sync tables',
+    }).catch((err) => err)
+    expect(error).toBeInstanceOf(PopulatedDatabaseError)
+    expect(error.populated).toEqual([
+      {
+        name: 'data',
+        tables: ['Blocks'],
+      },
+    ])
+    expect(error.message).toContain(
+      'Refusing to sync tables: the data database already holds data (in Blocks).'
+    )
+    expect(error.message).toContain('--allow-populated')
+    expect(error.message).toContain(`${ALLOW_SYNC_ON_POPULATED_DB_ENV}=true`)
+  })
+
+  it('refuses to sync an accounts database that holds rows', async () => {
+    await setup(accountsSequelize, false, 'accounts')
+    await accountsSequelize.query(
+      'INSERT INTO "Accounts" ("publicKey", "nonce", "createdAt", "updatedAt") VALUES (\'test\', 0, NOW(), NOW());'
+    )
+
+    expect(await getPopulatedTables(accountsSequelize)).toEqual(['Accounts'])
+    await expect(
+      assertSyncAllowed(databases(), { action: 'alter tables' })
+    ).rejects.toThrow(
+      'Refusing to alter tables: the accounts database already holds data (in Accounts).'
+    )
+
+    // Only checking the data database passes, since it has no rows.
+    await expect(
+      assertSyncAllowed(
+        [
+          { name: 'data', sequelize: dataSequelize },
+          { name: 'accounts', sequelize: null },
+        ],
+        { action: 'alter tables' }
+      )
+    ).resolves.toBeUndefined()
+  })
+
+  it('allows syncing a populated database when forced', async () => {
+    await setup(dataSequelize, false, 'data')
+    await insertBlock()
+
+    await expect(
+      assertSyncAllowed(databases(), {
+        action: 'sync tables',
+        allowPopulated: true,
+      })
+    ).resolves.toBeUndefined()
+
+    // And the sync itself still works on it.
+    await setup(dataSequelize, false, 'data')
+    expect(await getPopulatedTables(dataSequelize)).toEqual(['Blocks'])
+  })
+
+  it('reads the force environment variable', () => {
+    expect(isSyncOnPopulatedDbAllowedByEnv({})).toBe(false)
+    for (const value of ['true', 'TRUE', '1', ' true ']) {
+      expect(
+        isSyncOnPopulatedDbAllowedByEnv({
+          [ALLOW_SYNC_ON_POPULATED_DB_ENV]: value,
+        })
+      ).toBe(true)
+    }
+    for (const value of ['', 'false', '0', 'yes']) {
+      expect(
+        isSyncOnPopulatedDbAllowedByEnv({
+          [ALLOW_SYNC_ON_POPULATED_DB_ENV]: value,
+        })
+      ).toBe(false)
+    }
   })
 })

@@ -112,6 +112,19 @@ listener without waiting for the RPC to recover.
    database. On a database that already has migration history, `db:setup` does
    not mark pending migrations as run, so run `db:migrate:data` for those.
 
+   `db:setup`, `db:init` and `db:alter` sync the tables to the models, which on
+   an existing database can rebuild intentionally dropped indexes, drop columns
+   and rewrite foreign keys on very large tables. So they refuse to run when a
+   database already holds data: any model table with at least one row, except
+   the WASM code key tables that `db:migrate:data` seeds from config and the
+   `States` row that setup itself creates. A
+   brand-new database (including one where only the migrations have run, as in
+   `db:init`) needs no flag. Upgrade existing databases with
+   `npm run db:migrate:data` and `npm run db:migrate:accounts`, which are not
+   affected. To sync a populated database anyway, pass `--allow-populated` (for
+   example `npm run db:setup -- --allow-populated`) or set
+   `ALLOW_SYNC_ON_POPULATED_DB=true`, which also works for `db:init`.
+
 5. Run the tracer, listener, or server.
 
    ```bash

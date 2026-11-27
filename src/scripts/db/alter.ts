@@ -1,7 +1,13 @@
 import { Command } from 'commander'
 
 import { ConfigManager } from '@/config'
-import { loadDb } from '@/db'
+import {
+  ALLOW_SYNC_ON_POPULATED_DB_ENV,
+  PopulatedDatabaseError,
+  assertSyncAllowed,
+  isSyncOnPopulatedDbAllowedByEnv,
+  loadDb,
+} from '@/db'
 import { DbType } from '@/types'
 
 // Parse arguments.
@@ -11,8 +17,12 @@ program.option(
   'path to config file, falling back to config.json'
 )
 program.option('-t, --type <data|accounts|both>', 'database type', 'both')
+program.option(
+  '--allow-populated',
+  `alter even if a database already holds data (or set ${ALLOW_SYNC_ON_POPULATED_DB_ENV}=true); use db:migrate:data and db:migrate:accounts to upgrade existing databases instead`
+)
 program.parse()
-const { config, type } = program.opts()
+const { config, type, allowPopulated = false } = program.opts()
 
 // Verify type.
 if (type !== 'data' && type !== 'accounts' && type !== 'both') {
@@ -39,6 +49,26 @@ export const main = async () => {
           logging: true,
         })
       : undefined
+
+  // Refuse to alter databases that already hold data, unless explicitly
+  // allowed.
+  try {
+    await assertSyncAllowed(
+      [
+        { name: 'data', sequelize: dataSequelize },
+        { name: 'accounts', sequelize: accountsSequelize },
+      ],
+      {
+        action: 'alter tables',
+        allowPopulated: allowPopulated || isSyncOnPopulatedDbAllowedByEnv(),
+      }
+    )
+  } catch (err) {
+    console.error(err instanceof PopulatedDatabaseError ? err.message : err)
+    await dataSequelize?.close()
+    await accountsSequelize?.close()
+    process.exit(1)
+  }
 
   try {
     // Alter the database to match any changes.
