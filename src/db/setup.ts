@@ -154,62 +154,77 @@ export const isSyncOnPopulatedDbAllowedByEnv = (
   return value === 'true' || value === '1'
 }
 
+// PostgreSQL escapes a double quote inside an identifier by doubling it.
+const quoteIdentifier = (identifier: string) =>
+  `"${identifier.replace(/"/g, '""')}"`
+
 /**
  * List the tables of this connection's models that exist and hold at least one
  * row, ignoring `POPULATED_CHECK_IGNORED_TABLES`.
  *
- * This is cheap on large databases: one catalog query finds which tables
- * exist, then each existing table is read with `LIMIT 1`, which stops at the
- * first row (no counting, and no scan of an empty table beyond its first page).
+ * Discover matching relations in one catalog query, then probe each with
+ * `LIMIT 1` rather than counting its rows.
  */
 export const getPopulatedTables = async (
   sequelize: Sequelize
 ): Promise<string[]> => {
-  const tables = [
-    ...new Set(
-      Object.values(sequelize.models).map((model) => {
-        const tableName = model.getTableName()
-        return typeof tableName === 'string' ? tableName : tableName.tableName
-      })
-    ),
-  ]
-    .filter((table) => !POPULATED_CHECK_IGNORED_TABLES.includes(table))
-    .sort()
+  const queryInterface = sequelize.getQueryInterface()
+  const tables = Object.values(sequelize.models)
+    .map((model) => {
+      const name = model.getTableName()
+      // Sequelize folds the connection's schema into each model at init.
+      // A bare name is emitted unqualified in PostgreSQL DDL, so resolve it
+      // through the search path instead of assuming its first schema has it.
+      const { schema = null, tableName: table } =
+        typeof name === 'string' ? { tableName: name } : name
+      // Sequelize can strip embedded double quotes when generating DDL.
+      // Refuse rather than inspect a different relation than sync would use.
+      if (
+        queryInterface.quoteIdentifier(table) !== quoteIdentifier(table) ||
+        (schema &&
+          queryInterface.quoteIdentifier(schema) !== quoteIdentifier(schema))
+      ) {
+        throw new Error(
+          `Cannot verify the sync target for ${quoteIdentifier(
+            table
+          )}: Sequelize changes the spelling or quoting of its PostgreSQL identifiers.`
+        )
+      }
+      return { schema, table }
+    })
+    .filter(({ table }) => !POPULATED_CHECK_IGNORED_TABLES.includes(table))
 
   if (!tables.length) {
     return []
   }
 
-  const existing = (
-    await sequelize.query<{ table: string }>(
-      `SELECT c.relname AS "table"
-      FROM pg_class c
-      JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE n.nspname = current_schema()
-        AND c.relkind IN ('r', 'p')
-        AND c.relname IN (:tables)
-      ORDER BY c.relname;`,
-      {
-        replacements: {
-          tables,
-        },
-        type: QueryTypes.SELECT,
-      }
-    )
-  ).map(({ table }) => table)
+  const existing = await sequelize.query<{ schema: string; table: string }>(
+    `SELECT DISTINCT n.nspname AS "schema", c.relname AS "table"
+    FROM pg_catalog.pg_class c
+    JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+    JOIN pg_catalog.jsonb_to_recordset(CAST(:tables AS jsonb))
+      AS target("schema" name, "table" name)
+      ON c.relname = target."table"
+      AND (n.nspname = target."schema" OR
+        (target."schema" IS NULL AND pg_catalog.pg_table_is_visible(c.oid)))
+    WHERE c.relkind IN ('r', 'p')
+    ORDER BY "table", "schema";`,
+    {
+      // Sequelize can prepend SET search_path, which cannot be sent as
+      // part of a PostgreSQL prepared statement. Use an escaped replacement.
+      replacements: { tables: JSON.stringify(tables) },
+      type: QueryTypes.SELECT,
+    }
+  )
 
   const populated: string[] = []
-  for (const table of existing) {
-    const rows = await sequelize.query(
-      `SELECT 1 FROM ${sequelize
-        .getQueryInterface()
-        .quoteIdentifier(table)} LIMIT 1;`,
-      {
-        type: QueryTypes.SELECT,
-      }
-    )
+  for (const { schema, table } of existing) {
+    const relation = `${quoteIdentifier(schema)}.${quoteIdentifier(table)}`
+    const rows = await sequelize.query(`SELECT 1 FROM ${relation} LIMIT 1;`, {
+      type: QueryTypes.SELECT,
+    })
     if (rows.length) {
-      populated.push(table)
+      populated.push(schema === 'public' ? table : relation)
     }
   }
 
