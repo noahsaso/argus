@@ -3,7 +3,14 @@ import { DataType } from 'sequelize-typescript'
 
 module.exports = {
   async up(queryInterface: QueryInterface) {
+    // On a fresh database some of these tables do not exist until
+    // `npm run db:setup` creates them from the current models (which already
+    // have the id primary keys and unique indexes), so skip any that are missing.
     const migrateBankStateEvents = async () => {
+      if (!(await queryInterface.tableExists('BankStateEvents'))) {
+        return
+      }
+
       // Remove primary key constraint and add auto-incrementing id column.
       await queryInterface.sequelize.query(
         'ALTER TABLE "BankStateEvents" DROP CONSTRAINT IF EXISTS "BankStateEvents_pkey"'
@@ -36,6 +43,10 @@ module.exports = {
     }
 
     const migrateExtractions = async () => {
+      if (!(await queryInterface.tableExists('Extractions'))) {
+        return
+      }
+
       // Remove primary key constraint and add auto-incrementing id column.
       await queryInterface.sequelize.query(
         'ALTER TABLE "Extractions" DROP CONSTRAINT IF EXISTS "Extractions_pkey"'
@@ -71,6 +82,10 @@ module.exports = {
     }
 
     const migrateFeegrantAllowances = async () => {
+      if (!(await queryInterface.tableExists('FeegrantAllowances'))) {
+        return
+      }
+
       // Remove primary key constraint and add auto-incrementing id column.
       await queryInterface.sequelize.query(
         'ALTER TABLE "FeegrantAllowances" DROP CONSTRAINT IF EXISTS "FeegrantAllowances_pkey"'
@@ -103,6 +118,10 @@ module.exports = {
     }
 
     const migrateGovProposals = async () => {
+      if (!(await queryInterface.tableExists('GovProposals'))) {
+        return
+      }
+
       // Remove primary key constraint and add auto-incrementing id column.
       await queryInterface.sequelize.query(
         'ALTER TABLE "GovProposals" DROP CONSTRAINT IF EXISTS "GovProposals_pkey"'
@@ -134,16 +153,33 @@ module.exports = {
     }
 
     const migrateGovProposalVotes = async () => {
-      // Remove primary key constraint and add auto-incrementing id column.
-      await queryInterface.sequelize.query(
-        'ALTER TABLE "GovProposalVotes" DROP CONSTRAINT IF EXISTS "GovProposalVotes_pkey"'
-      )
-      await queryInterface.addColumn('GovProposalVotes', 'id', {
-        type: DataType.BIGINT,
-        primaryKey: true,
-        autoIncrement: true,
-        allowNull: false,
-      })
+      if (!(await queryInterface.tableExists('GovProposalVotes'))) {
+        return
+      }
+
+      // On a fresh database, the create-gov-proposal-vote migration already
+      // made an auto-incrementing integer id primary key, so widen it to match
+      // the model instead of adding it.
+      const columns = await queryInterface.describeTable('GovProposalVotes')
+      if (columns.id) {
+        await queryInterface.sequelize.query(
+          'ALTER TABLE "GovProposalVotes" ALTER COLUMN "id" TYPE BIGINT'
+        )
+        await queryInterface.sequelize.query(
+          'ALTER SEQUENCE IF EXISTS "GovProposalVotes_id_seq" AS BIGINT'
+        )
+      } else {
+        // Remove primary key constraint and add auto-incrementing id column.
+        await queryInterface.sequelize.query(
+          'ALTER TABLE "GovProposalVotes" DROP CONSTRAINT IF EXISTS "GovProposalVotes_pkey"'
+        )
+        await queryInterface.addColumn('GovProposalVotes', 'id', {
+          type: DataType.BIGINT,
+          primaryKey: true,
+          autoIncrement: true,
+          allowNull: false,
+        })
+      }
 
       // Remove index and re-add as unique index.
       await queryInterface.removeIndex(
@@ -166,6 +202,10 @@ module.exports = {
     }
 
     const migrateWasmStateEvents = async () => {
+      if (!(await queryInterface.tableExists('WasmStateEvents'))) {
+        return
+      }
+
       // Remove primary key constraint and add auto-incrementing id column.
       await queryInterface.sequelize.query(
         'ALTER TABLE "WasmStateEvents" DROP CONSTRAINT IF EXISTS "WasmStateEvents_pkey"'
@@ -201,6 +241,12 @@ module.exports = {
     }
 
     const migrateWasmStateEventTransformations = async () => {
+      if (
+        !(await queryInterface.tableExists('WasmStateEventTransformations'))
+      ) {
+        return
+      }
+
       // Remove primary key constraint and add auto-incrementing id column.
       await queryInterface.sequelize.query(
         'ALTER TABLE "WasmStateEventTransformations" DROP CONSTRAINT IF EXISTS "WasmStateEventTransformations_pkey"'
