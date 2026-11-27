@@ -1,3 +1,4 @@
+const fs = require('fs')
 const path = require('path')
 
 const MIGRATING_DB = process.env.MIGRATING_DB === 'true'
@@ -8,8 +9,26 @@ const base = MIGRATING_DB ? 'dist' : 'src'
 // Which DB's migrations to use: 'data' (default) or 'accounts'.
 const migrationsDb = process.env.MIGRATIONS_DB || 'data'
 
+const migrationsPath = path.resolve(base, 'db', 'migrations', migrationsDb)
+
+// A database may have no migrations at all (upstream has none for accounts),
+// so the build produces no compiled folder for it and sequelize-cli would fail
+// with ENOENT. When there are no source migrations to compile, create the empty
+// compiled folder so migrating is a no-op instead. If source migrations exist
+// but were not compiled, leave the folder missing so the error points at the
+// missing build.
+if (MIGRATING_DB && !fs.existsSync(migrationsPath)) {
+  const sourcePath = path.resolve('src', 'db', 'migrations', migrationsDb)
+  const hasSourceMigrations =
+    fs.existsSync(sourcePath) &&
+    fs.readdirSync(sourcePath).some((file) => file.endsWith('.ts'))
+  if (!hasSourceMigrations) {
+    fs.mkdirSync(migrationsPath, { recursive: true })
+  }
+}
+
 module.exports = {
   config: path.resolve('dist', 'db', 'config.js'),
   'models-path': path.resolve(base, 'db', 'models'),
-  'migrations-path': path.resolve(base, 'db', 'migrations', migrationsDb),
+  'migrations-path': migrationsPath,
 }
