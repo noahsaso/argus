@@ -33,7 +33,11 @@ if (type !== 'data' && type !== 'accounts' && type !== 'both') {
 // Load config from specific config file.
 ConfigManager.load(config)
 
-export const main = async () => {
+/**
+ * Alter the selected databases to match the models. Resolves to the exit code
+ * for the process: 0 on success and 1 on failure.
+ */
+export const main = async (): Promise<number> => {
   // Log when altering.
   const dataSequelize =
     type === 'both' || type === 'data'
@@ -67,9 +71,10 @@ export const main = async () => {
     console.error(err instanceof PopulatedDatabaseError ? err.message : err)
     await dataSequelize?.close()
     await accountsSequelize?.close()
-    process.exit(1)
+    return 1
   }
 
+  let exitCode = 0
   try {
     // Alter the database to match any changes.
     await dataSequelize?.sync({ alter: true })
@@ -78,10 +83,21 @@ export const main = async () => {
     console.log('\nAltered.')
   } catch (err) {
     console.error(err)
+    exitCode = 1
   }
 
   await dataSequelize?.close()
   await accountsSequelize?.close()
+
+  return exitCode
 }
 
+// Exit explicitly once done, like db:setup. Closing the database connections
+// is not enough on its own, because other handles (such as the config file
+// watcher) keep the process alive.
 main()
+  .then((exitCode) => process.exit(exitCode))
+  .catch((err) => {
+    console.error(err)
+    process.exit(1)
+  })
