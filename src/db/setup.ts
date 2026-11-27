@@ -123,3 +123,164 @@ export const markMigrationsAsRun = async (
     inserted,
   }
 }
+
+/**
+ * Tables that setting up a brand-new database fills by itself, so rows in them
+ * do not mean the database holds indexed data: `db:migrate:data` seeds the WASM
+ * code keys and IDs from config, and the model sync creates the `States`
+ * singleton row. Leaving them out keeps `npm run db:init` (migrations, then
+ * setup) and a repeated `db:setup` working on an otherwise empty database.
+ */
+export const POPULATED_CHECK_IGNORED_TABLES = [
+  'States',
+  'WasmCodeKeyIds',
+  'WasmCodeKeys',
+]
+
+/**
+ * The environment variable that lets the model sync scripts (`db:setup`,
+ * `db:init` and `db:alter`) run on a database that already holds data, the same
+ * as passing `--allow-populated`.
+ */
+export const ALLOW_SYNC_ON_POPULATED_DB_ENV = 'ALLOW_SYNC_ON_POPULATED_DB'
+
+/**
+ * Whether the environment allows syncing a populated database.
+ */
+export const isSyncOnPopulatedDbAllowedByEnv = (
+  env: NodeJS.ProcessEnv = process.env
+): boolean => {
+  const value = env[ALLOW_SYNC_ON_POPULATED_DB_ENV]?.trim().toLowerCase()
+  return value === 'true' || value === '1'
+}
+
+/**
+ * List the tables of this connection's models that exist and hold at least one
+ * row, ignoring `POPULATED_CHECK_IGNORED_TABLES`.
+ *
+ * This is cheap on large databases: one catalog query finds which tables
+ * exist, then each existing table is read with `LIMIT 1`, which stops at the
+ * first row (no counting, and no scan of an empty table beyond its first page).
+ */
+export const getPopulatedTables = async (
+  sequelize: Sequelize
+): Promise<string[]> => {
+  const tables = [
+    ...new Set(
+      Object.values(sequelize.models).map((model) => {
+        const tableName = model.getTableName()
+        return typeof tableName === 'string' ? tableName : tableName.tableName
+      })
+    ),
+  ]
+    .filter((table) => !POPULATED_CHECK_IGNORED_TABLES.includes(table))
+    .sort()
+
+  if (!tables.length) {
+    return []
+  }
+
+  const existing = (
+    await sequelize.query<{ table: string }>(
+      `SELECT c.relname AS "table"
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = current_schema()
+        AND c.relkind IN ('r', 'p')
+        AND c.relname IN (:tables)
+      ORDER BY c.relname;`,
+      {
+        replacements: {
+          tables,
+        },
+        type: QueryTypes.SELECT,
+      }
+    )
+  ).map(({ table }) => table)
+
+  const populated: string[] = []
+  for (const table of existing) {
+    const rows = await sequelize.query(
+      `SELECT 1 FROM ${sequelize
+        .getQueryInterface()
+        .quoteIdentifier(table)} LIMIT 1;`,
+      {
+        type: QueryTypes.SELECT,
+      }
+    )
+    if (rows.length) {
+      populated.push(table)
+    }
+  }
+
+  return populated
+}
+
+export class PopulatedDatabaseError extends Error {
+  constructor(
+    public readonly populated: {
+      name: string
+      tables: string[]
+    }[],
+    action: string
+  ) {
+    super(
+      [
+        `Refusing to ${action}: ${populated
+          .map(
+            ({ name, tables }) =>
+              `the ${name} database already holds data (in ${tables.join(
+                ', '
+              )})`
+          )
+          .join('; ')}.`,
+        'Syncing the models on an existing database can rebuild dropped indexes, drop columns or rewrite foreign keys on very large tables.',
+        'Use `npm run db:migrate:data` and `npm run db:migrate:accounts` to upgrade an existing database.',
+        `If you really mean to sync this database, pass --allow-populated or set ${ALLOW_SYNC_ON_POPULATED_DB_ENV}=true.`,
+      ].join('\n')
+    )
+    this.name = 'PopulatedDatabaseError'
+  }
+}
+
+/**
+ * Throw a `PopulatedDatabaseError` if any of these databases already holds
+ * data, unless `allowPopulated` is set. An empty database (including one where
+ * only migrations have run) passes.
+ */
+export const assertSyncAllowed = async (
+  databases: {
+    name: string
+    sequelize: Sequelize | null | undefined
+  }[],
+  {
+    action,
+    allowPopulated = false,
+  }: {
+    action: string
+    allowPopulated?: boolean
+  }
+): Promise<void> => {
+  if (allowPopulated) {
+    return
+  }
+
+  const populated: { name: string; tables: string[] }[] = []
+  for (const { name, sequelize } of databases) {
+    if (!sequelize) {
+      continue
+    }
+
+    const tables = await getPopulatedTables(sequelize)
+    if (tables.length) {
+      populated.push({
+        name,
+        tables,
+      })
+    }
+  }
+
+  if (populated.length) {
+    throw new PopulatedDatabaseError(populated, action)
+  }
+}

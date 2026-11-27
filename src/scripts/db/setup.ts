@@ -4,7 +4,15 @@ import * as readline from 'readline'
 import { Command } from 'commander'
 
 import { ConfigManager } from '@/config'
-import { loadDb, markMigrationsAsRun, setup as setupDb } from '@/db'
+import {
+  ALLOW_SYNC_ON_POPULATED_DB_ENV,
+  PopulatedDatabaseError,
+  assertSyncAllowed,
+  isSyncOnPopulatedDbAllowedByEnv,
+  loadDb,
+  markMigrationsAsRun,
+  setup as setupDb,
+} from '@/db'
 import { DbType } from '@/types'
 
 export const main = async () => {
@@ -17,12 +25,22 @@ export const main = async () => {
   program.option('-f, --force', "don't ask for confirmation")
   program.option('-d, --destroy', 'destroy tables if they already exist')
   program.option(
+    '--allow-populated',
+    `sync even if a database already holds data (or set ${ALLOW_SYNC_ON_POPULATED_DB_ENV}=true); use db:migrate:data and db:migrate:accounts to upgrade existing databases instead`
+  )
+  program.option(
     '-w, --which <which>',
     'which database to setup (data, accounts, or both)',
     'both'
   )
   program.parse()
-  const { config: _config, force, destroy = false, which } = program.opts()
+  const {
+    config: _config,
+    force,
+    destroy = false,
+    which,
+    allowPopulated = false,
+  } = program.opts()
 
   // Load config from specific config file.
   ConfigManager.load(_config)
@@ -39,6 +57,33 @@ export const main = async () => {
           type: DbType.Accounts,
         })
       : null
+
+  const close = async () => {
+    await dataSequelize?.close()
+    await accountsSequelize?.close()
+    process.exit()
+  }
+
+  // Refuse to sync databases that already hold data, unless explicitly
+  // allowed. Fresh databases (including ones where only migrations have run,
+  // as in db:init) pass.
+  try {
+    await assertSyncAllowed(
+      [
+        { name: 'data', sequelize: dataSequelize },
+        { name: 'accounts', sequelize: accountsSequelize },
+      ],
+      {
+        action: destroy ? 'drop and recreate tables' : 'sync tables',
+        allowPopulated: allowPopulated || isSyncOnPopulatedDbAllowedByEnv(),
+      }
+    )
+  } catch (err) {
+    console.error(err instanceof PopulatedDatabaseError ? err.message : err)
+    process.exitCode = 1
+    await close()
+    return
+  }
 
   const rl = readline.createInterface({
     input: process.stdin,
@@ -90,12 +135,6 @@ export const main = async () => {
     } catch (err) {
       console.error(err)
     }
-  }
-
-  const close = async () => {
-    await dataSequelize?.close()
-    await accountsSequelize?.close()
-    process.exit()
   }
 
   if (force) {
