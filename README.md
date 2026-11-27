@@ -108,6 +108,11 @@ listener without waiting for the RPC to recover.
    npm run db:migrate:data
    ```
 
+   If you use the accounts database, apply its migrations with
+   `npm run db:migrate:accounts`. This repository has no accounts migrations
+   yet, so for now that command only connects and reports that there was
+   nothing to run.
+
    `npm run db:init` (migrations first, then setup) also works on an empty
    database. On a database that already has migration history, `db:setup` does
    not mark pending migrations as run, so run `db:migrate:data` for those.
